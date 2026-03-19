@@ -1,0 +1,190 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre           String    @db.VarChar(100)
+  email            String    @unique @db.VarChar(255)
+  celular          String?   @db.VarChar(12)
+  passwordHash     String    @map("password_hash") @db.VarChar(255)
+  fotoUrl          String?   @map("foto_url") @db.VarChar(500)
+  emailVerificado  Boolean   @default(false) @map("email_verificado")
+  otpCode          String?   @map("otp_code") @db.VarChar(6)
+  otpExpires       DateTime? @map("otp_expires")
+  fechaRegistro    DateTime  @default(now()) @map("fecha_registro")
+  activo           Boolean   @default(true)
+  expoPushToken    String?   @map("expo_push_token") @db.VarChar(200)
+
+  // Relations
+  gruposCreados       Grupo[]           @relation("GrupoCreador")
+  grupoMiembros       GrupoMiembro[]
+  gastosRegistrados   Gasto[]           @relation("GastoCreador")
+  gastosPagados       Gasto[]           @relation("GastoPagador")
+  gastoParticipantes  GastoParticipante[]
+  pagosPagador        Pago[]            @relation("PagoPagador")
+  pagosReceptor       Pago[]            @relation("PagoReceptor")
+  recordatoriosEnviados Recordatorio[]  @relation("RecordatorioEnviador")
+  recordatoriosRecibidos Recordatorio[] @relation("RecordatorioReceptor")
+  configRecordatorios ConfigRecordatorio[]
+  refreshTokens       RefreshToken[]
+
+  @@map("usuarios")
+}
+
+model Grupo {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nombre          String    @db.VarChar(100)
+  descripcion     String?   @db.Text
+  tipo            String    @default("amigos") @db.VarChar(20)
+  creadoPor       String    @map("creado_por") @db.Uuid
+  linkInvitacion  String?   @unique @map("link_invitacion") @db.VarChar(50)
+  fechaCreacion   DateTime  @default(now()) @map("fecha_creacion")
+  activo          Boolean   @default(true)
+
+  // Relations
+  creador         Usuario           @relation("GrupoCreador", fields: [creadoPor], references: [id])
+  miembros        GrupoMiembro[]
+  gastos          Gasto[]
+  pagos           Pago[]
+  recordatorios   Recordatorio[]
+  configRecordatorio ConfigRecordatorio[]
+
+  @@map("grupos")
+}
+
+model GrupoMiembro {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  grupoId     String    @map("grupo_id") @db.Uuid
+  usuarioId   String    @map("usuario_id") @db.Uuid
+  rol         String    @default("miembro") @db.VarChar(10)
+  fechaUnion  DateTime  @default(now()) @map("fecha_union")
+  activo      Boolean   @default(true)
+
+  // Relations
+  grupo       Grupo     @relation(fields: [grupoId], references: [id])
+  usuario     Usuario   @relation(fields: [usuarioId], references: [id])
+
+  @@unique([grupoId, usuarioId])
+  @@index([usuarioId])
+  @@map("grupo_miembros")
+}
+
+model Gasto {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  grupoId      String    @map("grupo_id") @db.Uuid
+  descripcion  String    @db.VarChar(200)
+  montoTotal   Int       @map("monto_total") // en centavos
+  pagadoPor    String    @map("pagado_por") @db.Uuid
+  categoria    String    @default("otro") @db.VarChar(30)
+  fecha        DateTime  @default(now())
+  creadoPor    String    @map("creado_por") @db.Uuid
+  fotoUrl      String?   @map("foto_url") @db.VarChar(500)
+  notas        String?   @db.Text
+  activo       Boolean   @default(true)
+
+  // Relations
+  grupo        Grupo               @relation(fields: [grupoId], references: [id])
+  pagador      Usuario             @relation("GastoPagador", fields: [pagadoPor], references: [id])
+  creador      Usuario             @relation("GastoCreador", fields: [creadoPor], references: [id])
+  participantes GastoParticipante[]
+
+  @@index([grupoId])
+  @@map("gastos")
+}
+
+model GastoParticipante {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gastoId         String    @map("gasto_id") @db.Uuid
+  usuarioId       String    @map("usuario_id") @db.Uuid
+  montoAsignado   Int       @map("monto_asignado") // en centavos
+  pagado          Boolean   @default(false)
+  fechaPago       DateTime? @map("fecha_pago")
+
+  // Relations
+  gasto           Gasto     @relation(fields: [gastoId], references: [id])
+  usuario         Usuario   @relation(fields: [usuarioId], references: [id])
+
+  @@unique([gastoId, usuarioId])
+  @@index([gastoId])
+  @@index([usuarioId])
+  @@map("gasto_participantes")
+}
+
+model Pago {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  grupoId         String    @map("grupo_id") @db.Uuid
+  pagadorId       String    @map("pagador_id") @db.Uuid
+  receptorId      String    @map("receptor_id") @db.Uuid
+  monto           Int       // en centavos
+  feejunto        Int?      @map("fee_junto") // en centavos
+  metodo          String?   @db.VarChar(20)
+  culqiChargeId   String?   @map("culqi_charge_id") @db.VarChar(100)
+  estado          String    @default("pendiente") @db.VarChar(20)
+  fechaPago       DateTime  @default(now()) @map("fecha_pago")
+
+  // Relations
+  grupo           Grupo     @relation(fields: [grupoId], references: [id])
+  pagador         Usuario   @relation("PagoPagador", fields: [pagadorId], references: [id])
+  receptor        Usuario   @relation("PagoReceptor", fields: [receptorId], references: [id])
+
+  @@index([pagadorId])
+  @@map("pagos")
+}
+
+model Recordatorio {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  enviadoPor    String    @map("enviado_por") @db.Uuid
+  enviadoA      String    @map("enviado_a") @db.Uuid
+  grupoId       String    @map("grupo_id") @db.Uuid
+  monto         Int?      // en centavos
+  tipo          String    @db.VarChar(20)
+  tono          String    @default("suave") @db.VarChar(20)
+  mensaje       String?   @db.Text
+  leido         Boolean   @default(false)
+  fechaEnvio    DateTime  @default(now()) @map("fecha_envio")
+  fechaLectura  DateTime? @map("fecha_lectura")
+
+  // Relations
+  enviador      Usuario   @relation("RecordatorioEnviador", fields: [enviadoPor], references: [id])
+  receptor      Usuario   @relation("RecordatorioReceptor", fields: [enviadoA], references: [id])
+  grupo         Grupo     @relation(fields: [grupoId], references: [id])
+
+  @@index([enviadoA])
+  @@map("recordatorios")
+}
+
+model ConfigRecordatorio {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  grupoId          String    @map("grupo_id") @db.Uuid
+  configuradoPor   String    @map("configurado_por") @db.Uuid
+  activo           Boolean   @default(true)
+  frecuenciaDias   Int       @default(7) @map("frecuencia_dias")
+  horaEnvio        String    @default("09:00") @map("hora_envio")
+  fechaInicio      DateTime  @default(now()) @map("fecha_inicio")
+
+  // Relations
+  grupo            Grupo     @relation(fields: [grupoId], references: [id])
+  configurador     Usuario   @relation(fields: [configuradoPor], references: [id])
+
+  @@map("config_recordatorios")
+}
+
+model RefreshToken {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuarioId        String    @map("usuario_id") @db.Uuid
+  token            String    @db.VarChar(500)
+  fechaExpiracion  DateTime  @map("fecha_expiracion")
+  revocado         Boolean   @default(false)
+  fechaCreacion    DateTime  @default(now()) @map("fecha_creacion")
+
+  // Relations
+  usuario          Usuario   @relation(fields: [usuarioId], references: [id])
+
+  @@map("refresh_tokens")
+}
