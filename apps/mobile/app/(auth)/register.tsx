@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, StatusBar } from 'react-native';
 import { router } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -12,9 +12,7 @@ import { Input } from '../../src/components/ui/Input';
 const schema = z.object({
   nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
   email: z.string().email('Email inválido'),
-  celular: z
-    .string()
-    .regex(/^9\d{8}$/, 'Formato: 9XXXXXXXX (9 dígitos, empieza en 9)'),
+  celular: z.string().regex(/^9\d{8}$/, 'Formato: 9XXXXXXXX (9 dígitos, empieza en 9)'),
   password: z
     .string()
     .min(8, 'Mínimo 8 caracteres')
@@ -42,22 +40,38 @@ export default function RegisterScreen() {
   };
 
   return (
-    <ScrollView
-      className="flex-1 bg-fondo"
-      contentContainerStyle={{ flexGrow: 1 }}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View className="flex-1 px-6 pt-16 pb-8">
-        {/* Header */}
-        <TouchableOpacity onPress={() => router.back()} className="mb-8">
-          <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
+    <View style={{ flex: 1, backgroundColor: '#534AB7' }}>
+      <StatusBar barStyle="light-content" backgroundColor="#534AB7" />
+
+      {/* Top purple section */}
+      <View style={{ paddingHorizontal: 24, paddingTop: 60, paddingBottom: 28 }}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={{
+            width: 40,
+            height: 40,
+            backgroundColor: 'rgba(255,255,255,0.2)',
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 20,
+          }}
+        >
+          <Ionicons name="arrow-back" size={22} color="white" />
         </TouchableOpacity>
+        <Text style={{ color: 'white', fontSize: 26, fontWeight: 'bold' }}>Crear cuenta</Text>
+        <Text style={{ color: 'rgba(255,255,255,0.7)', marginTop: 4, fontSize: 15 }}>
+          Únete y olvídate del drama
+        </Text>
+      </View>
 
-        <View className="mb-8">
-          <Text className="text-3xl font-bold text-texto">Crear cuenta</Text>
-          <Text className="text-texto-secundario mt-1">Únete a Junto y olvídate del drama</Text>
-        </View>
-
+      {/* White card section */}
+      <ScrollView
+        style={{ flex: 1, backgroundColor: 'white', borderTopLeftRadius: 28, borderTopRightRadius: 28 }}
+        contentContainerStyle={{ padding: 24, paddingBottom: 48 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <Controller
           control={control}
           name="nombre"
@@ -70,7 +84,7 @@ export default function RegisterScreen() {
               value={value}
               error={errors.nombre?.message}
               autoCapitalize="words"
-              leftIcon={<Ionicons name="person-outline" size={20} color="#9CA3AF" />}
+              leftIcon={<Ionicons name="person-outline" size={20} color="#534AB7" />}
             />
           )}
         />
@@ -87,7 +101,7 @@ export default function RegisterScreen() {
               onChangeText={onChange}
               value={value}
               error={errors.email?.message}
-              leftIcon={<Ionicons name="mail-outline" size={20} color="#9CA3AF" />}
+              leftIcon={<Ionicons name="mail-outline" size={20} color="#534AB7" />}
             />
           )}
         />
@@ -104,7 +118,9 @@ export default function RegisterScreen() {
               onChangeText={onChange}
               value={value}
               error={errors.celular?.message}
-              leftIcon={<Text className="text-texto-hint text-base">+51</Text>}
+              leftIcon={
+                <Text style={{ color: '#534AB7', fontWeight: '700', fontSize: 15 }}>+51</Text>
+              }
             />
           )}
         />
@@ -116,12 +132,12 @@ export default function RegisterScreen() {
             <Input
               ref={ref}
               label="Contraseña"
-              placeholder="••••••••"
+              placeholder="Mínimo 8 caracteres + número"
               secureTextEntry
               onChangeText={onChange}
               value={value}
               error={errors.password?.message}
-              leftIcon={<Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" />}
+              leftIcon={<Ionicons name="lock-closed-outline" size={20} color="#534AB7" />}
             />
           )}
         />
@@ -133,13 +149,13 @@ export default function RegisterScreen() {
           className="mt-2"
         />
 
-        <View className="flex-row justify-center mt-6">
-          <Text className="text-texto-secundario">¿Ya tienes cuenta? </Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 24 }}>
+          <Text style={{ color: '#6B7280' }}>¿Ya tienes cuenta? </Text>
           <TouchableOpacity onPress={() => router.push('/(auth)/login')}>
-            <Text className="text-primary font-semibold">Ingresar</Text>
+            <Text style={{ color: '#534AB7', fontWeight: '700' }}>Ingresar</Text>
           </TouchableOpacity>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }

@@ -14,7 +14,7 @@ import { useGrupo, useCrearGasto } from '../../../src/hooks/useGrupos';
 import { useAuthStore } from '../../../src/store/auth.store';
 import { Button } from '../../../src/components/ui/Button';
 import { Input } from '../../../src/components/ui/Input';
-import { solesACentavos } from '@junto/shared';
+import { solesACentavos } from '../../../src/types';
 
 type TipoDivision = 'igual' | 'exacto' | 'porcentaje';
 

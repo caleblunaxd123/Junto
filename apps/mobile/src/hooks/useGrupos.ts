@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import type { Grupo, GrupoConBalance, Saldo, Gasto } from '@junto/shared';
+import type { Grupo, GrupoConBalance, Saldo, Gasto } from '../types';
 
 export function useGrupos() {
   return useQuery<GrupoConBalance[]>({

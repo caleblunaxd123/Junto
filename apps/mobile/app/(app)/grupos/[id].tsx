@@ -17,7 +17,7 @@ import { useAuthStore } from '../../../src/store/auth.store';
 import { Card } from '../../../src/components/ui/Card';
 import { Button } from '../../../src/components/ui/Button';
 import { MontoDisplay } from '../../../src/components/ui/MontoDisplay';
-import type { Gasto, Saldo } from '@junto/shared';
+import type { Gasto, Saldo } from '../../../src/types';
 
 function GastoItem({ gasto }: { gasto: Gasto }) {
   const CATEGORY_ICONS: Record<string, string> = {

@@ -16,7 +16,7 @@ import { useAuthStore } from '../../../src/store/auth.store';
 import { Button } from '../../../src/components/ui/Button';
 import { Input } from '../../../src/components/ui/Input';
 import { MontoDisplay } from '../../../src/components/ui/MontoDisplay';
-import type { Usuario } from '@junto/shared';
+import type { Usuario } from '../../../src/types';
 
 type MetodoPago = 'yape' | 'plin' | 'tarjeta';
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, StatusBar } from 'react-native';
 import { router } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -34,22 +34,37 @@ export default function LoginScreen() {
   };
 
   return (
-    <ScrollView
-      className="flex-1 bg-fondo"
-      contentContainerStyle={{ flexGrow: 1 }}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View className="flex-1 px-6 pt-16 pb-8">
-        {/* Header */}
-        <View className="mb-10">
-          <View className="w-14 h-14 bg-primary rounded-2xl items-center justify-center mb-4">
-            <Text className="text-white text-2xl font-bold">J</Text>
-          </View>
-          <Text className="text-3xl font-bold text-texto">Bienvenido de vuelta</Text>
-          <Text className="text-texto-secundario mt-1">Ingresa a tu cuenta Junto</Text>
-        </View>
+    <View style={{ flex: 1, backgroundColor: '#534AB7' }}>
+      <StatusBar barStyle="light-content" backgroundColor="#534AB7" />
 
-        {/* Form */}
+      {/* Top purple section */}
+      <View style={{ alignItems: 'center', paddingTop: 72, paddingBottom: 36 }}>
+        <View
+          style={{
+            width: 72,
+            height: 72,
+            backgroundColor: 'rgba(255,255,255,0.2)',
+            borderRadius: 22,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 16,
+          }}
+        >
+          <Text style={{ color: 'white', fontSize: 32, fontWeight: 'bold' }}>J</Text>
+        </View>
+        <Text style={{ color: 'white', fontSize: 26, fontWeight: 'bold' }}>Bienvenido de vuelta</Text>
+        <Text style={{ color: 'rgba(255,255,255,0.7)', marginTop: 4, fontSize: 15 }}>
+          Ingresa a tu cuenta Junto
+        </Text>
+      </View>
+
+      {/* White card section */}
+      <ScrollView
+        style={{ flex: 1, backgroundColor: 'white', borderTopLeftRadius: 28, borderTopRightRadius: 28 }}
+        contentContainerStyle={{ padding: 24, paddingBottom: 48 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <Controller
           control={control}
           name="email"
@@ -62,7 +77,7 @@ export default function LoginScreen() {
               onChangeText={onChange}
               value={value}
               error={errors.email?.message}
-              leftIcon={<Ionicons name="mail-outline" size={20} color="#9CA3AF" />}
+              leftIcon={<Ionicons name="mail-outline" size={20} color="#534AB7" />}
             />
           )}
         />
@@ -79,31 +94,27 @@ export default function LoginScreen() {
               onChangeText={onChange}
               value={value}
               error={errors.password?.message}
-              leftIcon={<Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" />}
+              leftIcon={<Ionicons name="lock-closed-outline" size={20} color="#534AB7" />}
             />
           )}
         />
 
         <TouchableOpacity
           onPress={() => router.push('/(auth)/forgot-password')}
-          className="mb-6"
+          style={{ alignSelf: 'flex-end', marginBottom: 24 }}
         >
-          <Text className="text-primary text-right font-medium">¿Olvidaste tu contraseña?</Text>
+          <Text style={{ color: '#534AB7', fontWeight: '600' }}>¿Olvidaste tu contraseña?</Text>
         </TouchableOpacity>
 
-        <Button
-          title="Ingresar"
-          onPress={handleSubmit(onSubmit)}
-          loading={isSubmitting}
-        />
+        <Button title="Ingresar" onPress={handleSubmit(onSubmit)} loading={isSubmitting} />
 
-        <View className="flex-row justify-center mt-6">
-          <Text className="text-texto-secundario">¿No tienes cuenta? </Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 24 }}>
+          <Text style={{ color: '#6B7280' }}>¿No tienes cuenta? </Text>
           <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-            <Text className="text-primary font-semibold">Regístrate</Text>
+            <Text style={{ color: '#534AB7', fontWeight: '700' }}>Regístrate</Text>
           </TouchableOpacity>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+    </View>
   );
 }

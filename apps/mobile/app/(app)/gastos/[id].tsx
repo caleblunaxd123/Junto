@@ -8,7 +8,7 @@ import { api } from '../../../src/lib/api';
 import { useAuthStore } from '../../../src/store/auth.store';
 import { Card } from '../../../src/components/ui/Card';
 import { MontoDisplay } from '../../../src/components/ui/MontoDisplay';
-import type { Gasto } from '@junto/shared';
+import type { Gasto } from '../../../src/types';
 
 export default function GastoDetalleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
 import { api } from '../lib/api';
-import type { Usuario, AuthResponse } from '@junto/shared';
+import type { Usuario, AuthResponse } from '../types';
 
 interface AuthState {
   usuario: Usuario | null;
