@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#534AB7"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.junto.app"
@@ -36,7 +38,8 @@
           "icon": "./assets/notification-icon.png",
           "color": "#534AB7"
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "scheme": "junto",
     "experiments": {

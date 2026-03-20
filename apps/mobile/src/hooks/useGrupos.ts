@@ -28,7 +28,7 @@ export function useSaldosGrupo(grupoId: string) {
 export function useCrearGrupo() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { nombre: string; descripcion?: string; tipo: string }) =>
+    mutationFn: (data: { nombre: string; descripcion?: string; tipo: string; fecha_inicio?: string; fecha_fin?: string }) =>
       api.post<Grupo>('/grupos', data).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['grupos'] }),
   });

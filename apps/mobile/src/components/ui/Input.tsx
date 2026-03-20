@@ -13,14 +13,14 @@ export const Input = forwardRef<TextInput, InputProps>(
     const [focused, setFocused] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
 
-    const borderColor = error ? '#E24B4A' : focused ? '#534AB7' : '#F3F4F6';
+    const borderColor = error ? '#EF4444' : focused ? '#6366F1' : '#F3F4F6';
     const bgColor = error ? '#FFF5F5' : 'white';
     const isPassword = secureTextEntry === true;
 
     return (
-      <View style={{ marginBottom: 16 }}>
+      <View style={{ marginBottom: 20 }}>
         {label && (
-          <Text style={{ color: '#6B7280', fontSize: 13, fontWeight: '600', marginBottom: 8 }}>
+          <Text style={{ color: '#374151', fontSize: 14, fontWeight: '600', marginBottom: 8, marginLeft: 4 }}>
             {label}
           </Text>
         )}
@@ -31,17 +31,17 @@ export const Input = forwardRef<TextInput, InputProps>(
             backgroundColor: bgColor,
             borderRadius: 16,
             paddingHorizontal: 16,
-            paddingVertical: 14,
-            borderWidth: 2,
+            height: 56,
+            borderWidth: 1.5,
             borderColor,
-            shadowColor: '#000',
-            shadowOpacity: focused || error ? 0 : 0.05,
-            shadowRadius: 6,
-            shadowOffset: { width: 0, height: 2 },
-            elevation: focused || error ? 0 : 1,
+            shadowColor: '#6366F1',
+            shadowOpacity: focused ? 0.08 : 0,
+            shadowRadius: 10,
+            shadowOffset: { width: 0, height: 4 },
+            elevation: focused ? 3 : 0,
           }}
         >
-          {leftIcon && <View style={{ marginRight: 10 }}>{leftIcon}</View>}
+          {leftIcon && <View style={{ marginRight: 12, opacity: focused ? 1 : 0.6 }}>{leftIcon}</View>}
           <TextInput
             ref={ref}
             style={styles.textInput}

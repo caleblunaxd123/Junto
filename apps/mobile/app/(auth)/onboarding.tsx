@@ -1,100 +1,133 @@
 import React, { useRef, useState } from 'react';
-import { View, Text, FlatList, Dimensions, TouchableOpacity } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Dimensions,
+  ScrollView,
+  StatusBar,
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { Button } from '../../src/components/ui/Button';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { GradientButton } from '../../src/components/ui/GradientButton';
 
 const { width } = Dimensions.get('window');
 
-const slides = [
+const SLIDES = [
   {
-    id: '1',
-    icon: 'people-outline' as const,
-    title: 'Divide gastos fácilmente',
-    description:
-      'Registra gastos compartidos con amigos, roomies o compañeros de trabajo. Junto calcula automáticamente quién debe cuánto.',
-    bg: '#EEEDFE',
-    iconColor: '#534AB7',
+    id: 1,
+    emoji: '💸',
+    titulo: 'Divide sin drama',
+    subtitulo: 'Registra gastos y Junto calcula automáticamente quién debe cuánto. Sin errores, sin estrés.',
+    colors: ['#6366F1', '#4F46E5'] as const,
   },
   {
-    id: '2',
-    icon: 'notifications-outline' as const,
-    title: 'Cobra sin incomodidad',
-    description:
-      'La app envía recordatorios automáticos por ti. Ya no tienes que tener esa conversación incómoda — Junto lo hace.',
-    bg: '#E8F8F3',
-    iconColor: '#1D9E75',
+    id: 2,
+    emoji: '🔔',
+    titulo: 'Cobra sin roches',
+    subtitulo: 'La app hace el trabajo social incómodo por ti con recordatorios automáticos y elegantes.',
+    colors: ['#8B5CF6', '#6366F1'] as const,
   },
   {
-    id: '3',
-    icon: 'phone-portrait-outline' as const,
-    title: 'Liquida por Yape',
-    description:
-      'Paga tus deudas directamente con Yape o Plin sin salir de la app. Rápido, seguro y sin complicaciones.',
-    bg: '#FFF4E6',
-    iconColor: '#BA7517',
+    id: 3,
+    emoji: '⚡',
+    titulo: 'Paga con Yape',
+    subtitulo: 'Salda tus deudas directo con Yape sin salir de la app. Rápido, seguro y oficial.',
+    colors: ['#10B981', '#059669'] as const,
   },
 ];
 
 export default function OnboardingScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const flatListRef = useRef<FlatList>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
-  const handleNext = () => {
-    if (currentIndex < slides.length - 1) {
-      flatListRef.current?.scrollToIndex({ index: currentIndex + 1 });
+  const slide = SLIDES[currentIndex];
+
+  const goNext = () => {
+    if (currentIndex < SLIDES.length - 1) {
+      const next = currentIndex + 1;
+      scrollRef.current?.scrollTo({ x: next * width, animated: true });
+      setCurrentIndex(next);
     } else {
-      router.replace('/(auth)/login');
+      finishOnboarding();
     }
   };
 
+  const finishOnboarding = async () => {
+    await AsyncStorage.setItem('onboarding_completado', 'true');
+    router.replace('/(auth)/login');
+  };
+
   return (
-    <View className="flex-1 bg-white">
-      <FlatList
-        ref={flatListRef}
-        data={slides}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={(e) => {
-          setCurrentIndex(Math.round(e.nativeEvent.contentOffset.x / width));
-        }}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={{ width }} className="flex-1 items-center justify-center px-8">
-            <View
-              className="w-32 h-32 rounded-3xl items-center justify-center mb-10"
-              style={{ backgroundColor: item.bg }}
-            >
-              <Ionicons name={item.icon} size={64} color={item.iconColor} />
+    <View className="flex-1">
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      <LinearGradient
+        colors={slide.colors}
+        className="flex-1"
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <SafeAreaView className="flex-1" edges={['top', 'bottom']}>
+          <ScrollView
+            ref={scrollRef}
+            horizontal
+            pagingEnabled
+            scrollEnabled={false}
+            showsHorizontalScrollIndicator={false}
+            className="flex-1"
+            contentContainerStyle={{ width: width * SLIDES.length }}
+          >
+            {SLIDES.map((sl) => (
+              <View key={sl.id} style={{ width }} className="items-center justify-center px-10">
+                <View className="bg-white/10 w-48 h-48 rounded-[60px] items-center justify-center border border-white/20 mb-12 shadow-glass">
+                   <Text className="text-8xl">{sl.emoji}</Text>
+                </View>
+                <Text className="text-white text-4xl font-extrabold text-center mb-4 tracking-tighter" style={{ letterSpacing: -1 }}>
+                  {sl.titulo}
+                </Text>
+                <Text className="text-white/70 text-lg text-center leading-7 font-medium">
+                  {sl.subtitulo}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+
+          <View className="px-8 pb-10 items-center">
+            {/* Dots */}
+            <View className="flex-row gap-2 mb-10">
+              {SLIDES.map((_, i) => (
+                <View 
+                  key={i} 
+                  className={`h-2 rounded-full ${
+                    i === currentIndex ? 'w-8 bg-white' : 'w-2 bg-white/30'
+                  }`} 
+                />
+              ))}
             </View>
-            <Text className="text-3xl font-bold text-texto text-center mb-4">{item.title}</Text>
-            <Text className="text-texto-secundario text-lg text-center leading-7">
-              {item.description}
-            </Text>
+
+            <GradientButton 
+              title={currentIndex < SLIDES.length - 1 ? 'Siguiente' : 'Comenzar ahora'}
+              onPress={goNext}
+              className="w-full"
+              colors={['#FFFFFF', '#F3F4F6']}
+              style={{ paddingVertical: 0 }}
+            >
+               {/* Customizing text color for the light button */}
+               <Text style={{ color: slide.colors[0], fontWeight: '800', fontSize: 18 }}>
+                  {currentIndex < SLIDES.length - 1 ? 'Siguiente' : 'Comenzar ahora'}
+               </Text>
+            </GradientButton>
+
+            {currentIndex < SLIDES.length - 1 && (
+              <TouchableOpacity onPress={finishOnboarding} className="mt-6 py-2">
+                <Text className="text-white/60 font-semibold">Saltar introducción</Text>
+              </TouchableOpacity>
+            )}
           </View>
-        )}
-      />
-
-      {/* Dots */}
-      <View className="flex-row justify-center mb-6">
-        {slides.map((_, i) => (
-          <View
-            key={i}
-            className={`h-2 mx-1 rounded-full ${i === currentIndex ? 'w-6 bg-primary' : 'w-2 bg-gray-300'}`}
-          />
-        ))}
-      </View>
-
-      <View className="px-6 pb-12 gap-3">
-        <Button
-          title={currentIndex === slides.length - 1 ? 'Empezar' : 'Siguiente'}
-          onPress={handleNext}
-        />
-        <TouchableOpacity onPress={() => router.replace('/(auth)/login')} className="py-2">
-          <Text className="text-texto-secundario text-center">Ya tengo cuenta</Text>
-        </TouchableOpacity>
-      </View>
+        </SafeAreaView>
+      </LinearGradient>
     </View>
   );
 }

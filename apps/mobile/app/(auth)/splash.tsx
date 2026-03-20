@@ -1,25 +1,46 @@
 import React, { useEffect } from 'react';
-import { View, Text, Image } from 'react-native';
+import { View, Text, StatusBar } from 'react-native';
 import { router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function SplashScreen() {
   useEffect(() => {
-    const timer = setTimeout(() => {
-      router.replace('/(auth)/onboarding');
-    }, 2000);
+    const timer = setTimeout(async () => {
+      const done = await AsyncStorage.getItem('onboarding_completado');
+      if (done === 'true') {
+        router.replace('/(auth)/login');
+      } else {
+        router.replace('/(auth)/onboarding');
+      }
+    }, 2500);
     return () => clearTimeout(timer);
   }, []);
 
   return (
-    <View className="flex-1 bg-primary items-center justify-center">
-      <View className="items-center">
-        {/* Logo placeholder — replace with actual image asset */}
-        <View className="w-24 h-24 bg-white rounded-3xl items-center justify-center mb-6">
-          <Text className="text-primary text-4xl font-bold">J</Text>
+    <View className="flex-1">
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      <LinearGradient
+        colors={['#6366F1', '#8B5CF6']}
+        className="flex-1 items-center justify-center"
+      >
+        <View className="bg-white/20 w-32 h-32 rounded-[40px] items-center justify-center border border-white/30 shadow-glass">
+          <Text className="text-white text-6xl font-bold">J</Text>
         </View>
-        <Text className="text-white text-4xl font-bold tracking-tight">Junto</Text>
-        <Text className="text-white/70 text-base mt-2">Divide gastos, cobra sin incomodidad</Text>
-      </View>
+        
+        <View className="items-center mt-8">
+          <Text className="text-white text-5xl font-extrabold tracking-tighter" style={{ letterSpacing: -2 }}>
+            Junto
+          </Text>
+          <Text className="text-white/60 text-lg mt-2 font-medium">Divide. Cobra. Simple.</Text>
+        </View>
+
+        <View className="absolute bottom-16 flex-row items-center gap-2">
+          <View className="w-2 h-2 rounded-full bg-white/40" />
+          <View className="w-6 h-2 rounded-full bg-white" />
+          <View className="w-2 h-2 rounded-full bg-white/40" />
+        </View>
+      </LinearGradient>
     </View>
   );
 }

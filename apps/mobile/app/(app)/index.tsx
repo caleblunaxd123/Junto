@@ -11,9 +11,11 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useGrupos } from '../../src/hooks/useGrupos';
 import { useAuthStore } from '../../src/store/auth.store';
-import { MontoDisplay } from '../../src/components/ui/MontoDisplay';
+import { GlassCard } from '../../src/components/ui/GlassCard';
+import { SocialPressureWidget } from '../../src/components/SocialPressureWidget';
 import type { GrupoConBalance } from '../../src/types';
 import { centavosASoles } from '../../src/types';
 
@@ -22,63 +24,36 @@ function GrupoCard({ grupo }: { grupo: GrupoConBalance }) {
   const positivo = neto > 0;
 
   return (
-    <TouchableOpacity
-      onPress={() => router.push(`/(app)/grupos/${grupo.id}`)}
-      activeOpacity={0.85}
-      style={{
-        backgroundColor: 'white',
-        borderRadius: 16,
-        padding: 16,
-        marginBottom: 12,
-        shadowColor: '#000',
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-        shadowOffset: { width: 0, height: 2 },
-        elevation: 2,
-      }}
-    >
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <View
-          style={{
-            width: 48,
-            height: 48,
-            borderRadius: 14,
-            backgroundColor: '#EEEDFE',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginRight: 12,
-          }}
-        >
-          <Text style={{ fontSize: 22 }}>
-            {grupo.tipo === 'viaje' ? '✈️' : grupo.tipo === 'casa' ? '🏠' : grupo.tipo === 'pareja' ? '💑' : '👥'}
-          </Text>
-        </View>
-
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 16, fontWeight: '700', color: '#1A1A1A' }}>{grupo.nombre}</Text>
-          <Text style={{ fontSize: 13, color: '#9CA3AF', marginTop: 2 }}>
-            {grupo.miembros.length} miembro{grupo.miembros.length !== 1 ? 's' : ''}
-          </Text>
-        </View>
-
-        <View style={{ alignItems: 'flex-end' }}>
-          {neto === 0 ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Ionicons name="checkmark-circle" size={16} color="#1D9E75" />
-              <Text style={{ color: '#1D9E75', fontSize: 13, fontWeight: '600' }}>Al día</Text>
+    <TouchableOpacity onPress={() => router.push(`/(app)/grupos/${grupo.id}`)} activeOpacity={0.85} className="mb-4">
+      <GlassCard className="p-4" intensity={1.05}>
+        <View className="flex-row items-center">
+          <View className="w-14 h-14 rounded-2xl bg-primary/10 items-center justify-center mr-4">
+            <Text className="text-xl">
+              {grupo.tipo === 'viaje' ? '✈️' : grupo.tipo === 'roomies' ? '🏠' : grupo.tipo === 'amigos' ? '👥' : grupo.tipo === 'trabajo' ? '💼' : '📦'}
+            </Text>
+          </View>
+          <View className="flex-1">
+            <Text className="text-text font-bold text-lg" style={{ letterSpacing: -0.5 }}>{grupo.nombre}</Text>
+            <View className="flex-row items-center mt-1">
+              <Ionicons name="people-outline" size={14} color="#6B7280" />
+              <Text className="text-text-muted text-xs ml-1 font-medium">{grupo.miembros.length} Miembro{grupo.miembros.length !== 1 ? 's' : ''}</Text>
             </View>
-          ) : (
-            <>
-              <Text style={{ fontSize: 16, fontWeight: '700', color: positivo ? '#1D9E75' : '#E24B4A' }}>
-                S/ {centavosASoles(Math.abs(neto)).toFixed(2)}
-              </Text>
-              <Text style={{ fontSize: 12, color: '#9CA3AF' }}>
-                {positivo ? 'te deben' : 'debes'}
-              </Text>
-            </>
-          )}
+          </View>
+          <View className="items-end">
+            {neto === 0 ? (
+              <View className="bg-success/10 px-3 py-1.5 rounded-full flex-row items-center border border-success/20">
+                <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                <Text className="text-success text-xs font-bold ml-1">Al día</Text>
+              </View>
+            ) : (
+              <View className="items-end">
+                <Text className={`text-lg font-extrabold ${positivo ? 'text-success' : 'text-danger'}`}>S/ {centavosASoles(Math.abs(neto))}</Text>
+                <Text className="text-text-hint text-[10px] font-bold uppercase tracking-wider">{positivo ? 'te deben' : 'debes'}</Text>
+              </View>
+            )}
+          </View>
         </View>
-      </View>
+      </GlassCard>
     </TouchableOpacity>
   );
 }
@@ -90,95 +65,117 @@ export default function HomeScreen() {
   const totalTeDeben = grupos?.reduce((acc, g) => acc + g.balanceUsuario.teDeben, 0) ?? 0;
   const totalDebes = grupos?.reduce((acc, g) => acc + g.balanceUsuario.debes, 0) ?? 0;
 
+  // Mock pressure level for demo
+  const pressureLevel = totalTeDeben > 10000 ? 'high' : totalTeDeben > 5000 ? 'medium' : 'low';
+
   return (
-    <View style={{ flex: 1, backgroundColor: '#534AB7' }}>
-      <StatusBar barStyle="light-content" backgroundColor="#534AB7" />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        {/* Purple header */}
-        <View style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+    <View className="flex-1 bg-background">
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      
+      <LinearGradient
+        colors={['#6366F1', '#4F46E5']}
+        className="h-72 w-full absolute top-0"
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+
+      <SafeAreaView className="flex-1" edges={['top']}>
+        {/* Header */}
+        <View className="px-6 pt-4 pb-6">
+          <View className="flex-row items-center justify-between mb-8">
             <View>
-              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 14 }}>Hola,</Text>
-              <Text style={{ color: 'white', fontSize: 22, fontWeight: 'bold' }}>
+              <Text className="text-white/70 text-base font-medium">Hola de nuevo,</Text>
+              <Text className="text-white text-3xl font-extrabold tracking-tight">
                 {usuario?.nombre?.split(' ')[0]} 👋
               </Text>
             </View>
             <TouchableOpacity
               onPress={() => router.push('/(app)/grupos/crear')}
-              style={{
-                backgroundColor: 'rgba(255,255,255,0.2)',
-                width: 44,
-                height: 44,
-                borderRadius: 14,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
+              className="bg-white/20 w-12 h-12 rounded-2xl items-center justify-center border border-white/30"
             >
-              <Ionicons name="add" size={24} color="white" />
+              <Ionicons name="add" size={28} color="white" />
             </TouchableOpacity>
           </View>
 
-          {/* Balance summary cards */}
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 16, padding: 14 }}>
-              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginBottom: 4 }}>Te deben</Text>
-              <Text style={{ color: 'white', fontSize: 18, fontWeight: 'bold' }}>
-                S/ {centavosASoles(totalTeDeben).toFixed(2)}
+          {/* Balance Cards Row */}
+          <View className="flex-row gap-4">
+            <View className="flex-1 bg-white/10 rounded-3xl p-4 border border-white/20">
+              <View className="w-8 h-8 rounded-full bg-success/20 items-center justify-center mb-3">
+                <Ionicons name="arrow-down" size={16} color="#10B981" />
+              </View>
+              <Text className="text-white/60 text-xs font-bold uppercase tracking-widest mb-1">Te deben</Text>
+              <Text className="text-white text-2xl font-black">
+                S/ {centavosASoles(totalTeDeben)}
               </Text>
             </View>
-            <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 16, padding: 14 }}>
-              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginBottom: 4 }}>Debes</Text>
-              <Text style={{ color: 'white', fontSize: 18, fontWeight: 'bold' }}>
-                S/ {centavosASoles(totalDebes).toFixed(2)}
+            
+            <View className="flex-1 bg-white/10 rounded-3xl p-4 border border-white/20">
+              <View className="w-8 h-8 rounded-full bg-danger/20 items-center justify-center mb-3">
+                <Ionicons name="arrow-up" size={16} color="#EF4444" />
+              </View>
+              <Text className="text-white/60 text-xs font-bold uppercase tracking-widest mb-1">Debes</Text>
+              <Text className="text-white text-2xl font-black">
+                S/ {centavosASoles(totalDebes)}
               </Text>
             </View>
           </View>
         </View>
 
-        {/* White content area */}
-        <View style={{ flex: 1, backgroundColor: '#F8F8F8', borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
-          {isLoading ? (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <ActivityIndicator size="large" color="#534AB7" />
-            </View>
-          ) : (
-            <FlatList
-              data={grupos || []}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => <GrupoCard grupo={item} />}
-              contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-              refreshControl={
-                <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#534AB7" />
-              }
-              ListHeaderComponent={
-                grupos && grupos.length > 0 ? (
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#1A1A1A', marginBottom: 12 }}>
-                    Mis grupos
-                  </Text>
-                ) : null
-              }
-              ListEmptyComponent={
-                <View style={{ alignItems: 'center', paddingTop: 60 }}>
-                  <View style={{ width: 80, height: 80, backgroundColor: '#EEEDFE', borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-                    <Text style={{ fontSize: 36 }}>👥</Text>
-                  </View>
-                  <Text style={{ fontSize: 18, fontWeight: '700', color: '#1A1A1A', marginBottom: 8 }}>
-                    Aún no tienes grupos
-                  </Text>
-                  <Text style={{ fontSize: 14, color: '#6B7280', textAlign: 'center', paddingHorizontal: 32, lineHeight: 22 }}>
-                    Crea un grupo e invita a tus amigos para dividir gastos juntos
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => router.push('/(app)/grupos/crear')}
-                    style={{ marginTop: 24, backgroundColor: '#534AB7', paddingHorizontal: 28, paddingVertical: 14, borderRadius: 14 }}
-                  >
-                    <Text style={{ color: 'white', fontWeight: '700', fontSize: 15 }}>Crear mi primer grupo</Text>
-                  </TouchableOpacity>
+        {/* Content Area */}
+        <FlatList
+          data={grupos || []}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <GrupoCard grupo={item} />}
+          contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
+          className="flex-1"
+          refreshControl={
+            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#6366F1" />
+          }
+          ListHeaderComponent={
+            <View className="mb-6">
+              {totalTeDeben > 0 && (
+                <View className="mb-8">
+                   <Text className="text-text font-extrabold text-xl mb-4 tracking-tight">Monitor de Cobros</Text>
+                   <SocialPressureWidget level={pressureLevel as any} totalDebt={centavosASoles(totalTeDeben)} />
                 </View>
-              }
-            />
-          )}
-        </View>
+              )}
+
+              <View className="flex-row items-center justify-between">
+                <Text className="text-text font-extrabold text-xl tracking-tight">
+                  Tus Grupos
+                </Text>
+                {grupos && grupos.length > 0 && (
+                  <TouchableOpacity>
+                    <Text className="text-primary font-bold">Ver todos</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          }
+          ListEmptyComponent={
+            isLoading ? (
+              <View className="flex-1 items-center justify-center py-20">
+                <ActivityIndicator size="large" color="#6366F1" />
+              </View>
+            ) : (
+              <View className="items-center py-12">
+                <View className="w-24 h-24 bg-primary/5 rounded-[40px] items-center justify-center mb-6">
+                  <Ionicons name="people-outline" size={48} color="#6366F1" />
+                </View>
+                <Text className="text-text text-xl font-extrabold mb-2">Aún no tienes grupos</Text>
+                <Text className="text-text-muted text-center px-10 leading-6 font-medium">
+                  Crea un grupo e invita a tus amigos para empezar a dividir gastos.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => router.push('/(app)/grupos/crear')}
+                  className="mt-8 bg-primary h-14 px-8 rounded-2xl items-center justify-center shadow-premium"
+                >
+                  <Text className="text-white font-black text-base">Crear mi primer grupo</Text>
+                </TouchableOpacity>
+              </View>
+            )
+          }
+        />
       </SafeAreaView>
     </View>
   );

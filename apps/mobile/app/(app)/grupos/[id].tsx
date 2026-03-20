@@ -1,160 +1,87 @@
 import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  Share,
-  RefreshControl,
-  ActivityIndicator,
-} from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, Share, RefreshControl, ActivityIndicator, StatusBar } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useGrupo, useGastosGrupo, useEnviarRecordatorio } from '../../../src/hooks/useGrupos';
 import { useAuthStore } from '../../../src/store/auth.store';
-import { Card } from '../../../src/components/ui/Card';
-import { Button } from '../../../src/components/ui/Button';
-import { MontoDisplay } from '../../../src/components/ui/MontoDisplay';
+import { GlassCard } from '../../../src/components/ui/GlassCard';
+import { GradientButton } from '../../../src/components/ui/GradientButton';
 import type { Gasto, Saldo } from '../../../src/types';
+import { centavosASoles } from '../../../src/types';
+
+const CAT: Record<string, string> = { comida:'🍽️', transporte:'🚗', entretenimiento:'🎬', alojamiento:'🏠', compras:'🛒', otro:'💸' };
 
 function GastoItem({ gasto }: { gasto: Gasto }) {
-  const CATEGORY_ICONS: Record<string, string> = {
-    comida: '🍽️',
-    transporte: '🚗',
-    entretenimiento: '🎬',
-    alojamiento: '🏠',
-    compras: '🛒',
-    otro: '💸',
-  };
-
+  const fecha = new Date(gasto.fecha).toLocaleDateString('es-PE', { day:'numeric', month:'short' });
   return (
-    <TouchableOpacity
-      onPress={() => router.push(`/(app)/gastos/${gasto.id}`)}
-      activeOpacity={0.85}
-    >
-      <Card>
-        <View className="flex-row items-center justify-between">
-          <View className="flex-row items-center flex-1 gap-3">
-            <Text className="text-2xl">{CATEGORY_ICONS[gasto.categoria] || '💸'}</Text>
-            <View className="flex-1">
-              <Text className="text-texto font-semibold" numberOfLines={1}>
-                {gasto.descripcion}
-              </Text>
-              <Text className="text-texto-hint text-xs mt-0.5">
-                Pagó {gasto.pagador.nombre}
-              </Text>
-            </View>
-          </View>
-          <MontoDisplay centavos={gasto.montoTotal} className="font-semibold text-texto" />
+    <TouchableOpacity onPress={() => router.push(`/(app)/gastos/${gasto.id}`)} activeOpacity={0.85} className="mb-3">
+      <GlassCard className="p-4 flex-row items-center" intensity={1.1}>
+        <View className="w-12 h-12 bg-primary/10 rounded-2xl items-center justify-center mr-4">
+          <Text className="text-2xl">{CAT[gasto.categoria] || '💸'}</Text>
         </View>
-      </Card>
+        <View className="flex-1">
+          <Text className="text-text font-bold text-[15px]" numberOfLines={1}>{gasto.descripcion}</Text>
+          <Text className="text-text-muted text-xs mt-0.5">Pagó {gasto.pagador.nombre.split(' ')[0]} · {fecha}</Text>
+        </View>
+        <Text className="text-text font-extrabold text-[16px]">S/ {centavosASoles(gasto.montoTotal)}</Text>
+      </GlassCard>
     </TouchableOpacity>
   );
 }
 
-function SaldoItem({
-  saldo,
-  currentUserId,
-  grupoId,
-}: {
-  saldo: Saldo;
-  currentUserId: string;
-  grupoId: string;
-}) {
-  const { mutateAsync: enviarRecordatorio } = useEnviarRecordatorio(grupoId);
-  const esTuDeuda = saldo.deudorId === currentUserId;
-  const esTuAcreencia = saldo.acreedorId === currentUserId;
+function SaldoItem({ saldo, currentUserId, grupoId }: { saldo: Saldo; currentUserId: string; grupoId: string }) {
+  const { mutateAsync: recordar } = useEnviarRecordatorio(grupoId);
+  const esMio = saldo.deudorId === currentUserId;
+  const esAcreencia = saldo.acreedorId === currentUserId;
 
-  const handlePagar = () => {
-    router.push(
-      `/(app)/pagos/pagar?deudorId=${saldo.deudorId}&acreedorId=${saldo.acreedorId}&monto=${saldo.monto}&grupoId=${grupoId}&nombre=${saldo.acreedorNombre}`
-    );
-  };
+  const pagar = () => router.push(
+    `/(app)/pagos/pagar?deudorId=${saldo.deudorId}&acreedorId=${saldo.acreedorId}&monto=${saldo.monto}&grupoId=${grupoId}&nombre=${saldo.acreedorNombre}`
+  );
 
-  const handleRecordar = async () => {
-    Alert.alert('Enviar recordatorio', '¿Con qué tono?', [
-      {
-        text: 'Suave',
-        onPress: async () => {
-          try {
-            await enviarRecordatorio({ deudorId: saldo.deudorId, tono: 'suave' });
-            Alert.alert('✓', 'Recordatorio enviado');
-          } catch {
-            Alert.alert('Error', 'No se pudo enviar el recordatorio');
-          }
-        },
-      },
-      {
-        text: 'Directo',
-        onPress: async () => {
-          try {
-            await enviarRecordatorio({ deudorId: saldo.deudorId, tono: 'directo' });
-            Alert.alert('✓', 'Recordatorio enviado');
-          } catch {
-            Alert.alert('Error', 'No se pudo enviar el recordatorio');
-          }
-        },
-      },
-      {
-        text: 'Urgente',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await enviarRecordatorio({ deudorId: saldo.deudorId, tono: 'urgente' });
-            Alert.alert('✓', 'Recordatorio enviado');
-          } catch {
-            Alert.alert('Error', 'No se pudo enviar el recordatorio');
-          }
-        },
-      },
-      { text: 'Cancelar', style: 'cancel' },
-    ]);
-  };
+  const remind = () => Alert.alert('Recordar deuda', `Tono para ${saldo.deudorNombre}:`, [
+    { text: 'Suave 😊', onPress: () => recordar({ deudorId: saldo.deudorId, tono: 'suave' }).then(() => Alert.alert('✓', 'Enviado')).catch(() => {}) },
+    { text: 'Directo 📢', onPress: () => recordar({ deudorId: saldo.deudorId, tono: 'directo' }).then(() => Alert.alert('✓', 'Enviado')).catch(() => {}) },
+    { text: 'Urgente 🚨', style: 'destructive', onPress: () => recordar({ deudorId: saldo.deudorId, tono: 'urgente' }).then(() => Alert.alert('✓', 'Enviado')).catch(() => {}) },
+    { text: 'Cancelar', style: 'cancel' },
+  ]);
+
+  const titulo = esMio
+    ? `Debes a ${saldo.acreedorNombre.split(' ')[0]}`
+    : esAcreencia
+    ? `${saldo.deudorNombre.split(' ')[0]} te debe`
+    : `${saldo.deudorNombre.split(' ')[0]} → ${saldo.acreedorNombre.split(' ')[0]}`;
 
   return (
-    <Card>
-      <View className="flex-row items-center justify-between">
-        <View className="flex-1">
-          <Text className="text-texto font-medium">
-            {esTuDeuda ? 'Debes a ' : ''}
-            {esTuAcreencia ? '' : saldo.deudorNombre}
-            {esTuAcreencia ? `${saldo.deudorNombre} te debe` : ''}
-            {!esTuDeuda && !esTuAcreencia
-              ? `${saldo.deudorNombre} → ${saldo.acreedorNombre}`
-              : ''}
+    <View className="mb-3">
+      <GlassCard 
+        className={`p-4 flex-row items-center border-l-4 ${esMio ? 'border-l-danger' : esAcreencia ? 'border-l-success' : 'border-l-gray-300'}`} 
+        intensity={1.1}
+      >
+        <View className="flex-1 mr-4">
+          <Text className="text-text font-bold text-[14px]">{titulo}</Text>
+          {(esMio || esAcreencia) && (
+            <Text className="text-text-muted text-[11px] mt-0.5">{esMio ? 'Toca Pagar para saldar' : 'Toca Recordar si no paga'}</Text>
+          )}
+        </View>
+        <View className="items-end">
+          <Text className={`text-[16px] font-black mb-2 ${esMio ? 'text-danger' : esAcreencia ? 'text-success' : 'text-text'}`}>
+            S/ {centavosASoles(saldo.monto)}
           </Text>
-          {(esTuDeuda || esTuAcreencia) && (
-            <Text className="text-texto-hint text-xs mt-0.5">
-              {esTuDeuda ? `a ${saldo.acreedorNombre}` : ''}
-            </Text>
-          )}
-        </View>
-        <View className="items-end gap-2">
-          <MontoDisplay
-            centavos={saldo.monto}
-            className={`font-bold text-base ${esTuDeuda ? 'text-rojo' : esTuAcreencia ? 'text-verde' : 'text-texto'}`}
-          />
-          {esTuDeuda && (
-            <TouchableOpacity
-              onPress={handlePagar}
-              className="bg-primary px-3 py-1.5 rounded-lg"
-            >
-              <Text className="text-white text-xs font-semibold">Pagar</Text>
+          {esMio && (
+            <TouchableOpacity onPress={pagar} className="bg-primary px-4 py-1.5 rounded-xl shadow-premium">
+              <Text className="text-white text-[11px] font-bold">Pagar</Text>
             </TouchableOpacity>
           )}
-          {esTuAcreencia && (
-            <TouchableOpacity
-              onPress={handleRecordar}
-              className="bg-ambar/10 px-3 py-1.5 rounded-lg"
-            >
-              <Text className="text-ambar text-xs font-semibold">Recordar</Text>
+          {esAcreencia && (
+            <TouchableOpacity onPress={remind} className="bg-warning/20 px-4 py-1.5 rounded-xl border border-warning/30">
+              <Text className="text-warning-dark font-bold text-[11px]">Recordar</Text>
             </TouchableOpacity>
           )}
         </View>
-      </View>
-    </Card>
+      </GlassCard>
+    </View>
   );
 }
 
@@ -163,114 +90,98 @@ export default function GrupoDetalleScreen() {
   const { usuario } = useAuthStore();
   const { data: grupo, isLoading, refetch, isRefetching } = useGrupo(id);
   const { data: gastosData } = useGastosGrupo(id);
-  const [tab, setTab] = useState<'gastos' | 'saldos'>('gastos');
+  const [tab, setTab] = useState<'gastos'|'saldos'>('gastos');
 
-  const handleShareInvite = async () => {
-    const link = grupo?.linkInvitacion;
-    if (!link) return;
-    await Share.share({
-      message: `Únete a "${grupo?.nombre}" en Junto: junto://unirse/${link}`,
-    });
+  const share = async () => {
+    if (!grupo?.linkInvitacion) return;
+    await Share.share({ message: `Únete a "${grupo.nombre}" en Junto: junto://unirse/${grupo.linkInvitacion}` });
   };
 
-  if (isLoading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-fondo">
-        <ActivityIndicator size="large" color="#534AB7" />
-      </View>
-    );
-  }
+  if (isLoading) return <View className="flex-1 items-center justify-center bg-background"><ActivityIndicator size="large" color="#6366F1" /></View>;
+  if (!grupo) return <View className="flex-1 items-center justify-center bg-background"><Text className="text-text-muted font-medium">Grupo no encontrado</Text></View>;
 
-  if (!grupo) {
-    return (
-      <View className="flex-1 items-center justify-center bg-fondo">
-        <Text className="text-texto-secundario">Grupo no encontrado</Text>
-      </View>
-    );
-  }
+  const gastos = gastosData?.gastos || [];
+  const saldos = grupo.saldos || [];
+  const miNeto = saldos.reduce((acc: number, x: Saldo) => {
+    if (x.acreedorId === usuario?.id) return acc + x.monto;
+    if (x.deudorId === usuario?.id) return acc - x.monto;
+    return acc;
+  }, 0);
 
   return (
-    <SafeAreaView className="flex-1 bg-fondo">
-      {/* Header */}
-      <View className="px-4 pt-4 pb-0 bg-white border-b border-gray-100">
-        <View className="flex-row items-center justify-between mb-4">
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleShareInvite}>
-            <Ionicons name="person-add-outline" size={24} color="#534AB7" />
-          </TouchableOpacity>
+    <View className="flex-1 bg-background">
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      
+      <LinearGradient
+        colors={['#6366F1', '#4F46E5']}
+        className="h-64 w-full absolute top-0"
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+
+      <SafeAreaView className="flex-1" edges={['top']}>
+        {/* Header */}
+        <View className="px-6 pt-4 pb-6">
+          <View className="flex-row justify-between items-center mb-6">
+            <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 bg-white/20 rounded-xl items-center justify-center border border-white/30">
+              <Ionicons name="arrow-back" size={22} color="white" />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={share} className="w-10 h-10 bg-white/20 rounded-xl items-center justify-center border border-white/30">
+              <Ionicons name="person-add-outline" size={22} color="white" />
+            </TouchableOpacity>
+          </View>
+          
+          <Text className="text-white text-3xl font-black mb-1" numberOfLines={1}>{grupo.nombre}</Text>
+          <Text className="text-white/70 text-sm font-medium">{grupo.miembros.length} Miembros activos</Text>
+          
+          {miNeto !== 0 && (
+            <View className="mt-4 bg-white/10 self-start px-4 py-2 rounded-2xl border border-white/20">
+              <Text className="text-white font-bold text-sm">
+                {miNeto > 0 ? `Te deben S/ ${centavosASoles(miNeto)}` : `Debes S/ ${centavosASoles(Math.abs(miNeto))}`}
+              </Text>
+            </View>
+          )}
         </View>
 
-        <Text className="text-2xl font-bold text-texto mb-1">{grupo.nombre}</Text>
-        <Text className="text-texto-hint text-sm mb-4">
-          {grupo.miembros.length} miembros
-        </Text>
-
-        {/* Tabs */}
-        <View className="flex-row">
-          {(['gastos', 'saldos'] as const).map((t) => (
-            <TouchableOpacity
-              key={t}
-              onPress={() => setTab(t)}
-              className={`flex-1 py-3 border-b-2 ${tab === t ? 'border-primary' : 'border-transparent'}`}
+        {/* Tab Bar */}
+        <View className="flex-row bg-white/80 border-b border-gray-100 backdrop-blur-md">
+          {(['gastos','saldos'] as const).map((t) => (
+            <TouchableOpacity 
+              key={t} 
+              onPress={() => setTab(t)} 
+              className={`flex-1 py-4 items-center border-b-2 ${tab===t ? 'border-primary' : 'border-transparent'}`}
             >
-              <Text
-                className={`text-center font-medium capitalize ${tab === t ? 'text-primary' : 'text-texto-secundario'}`}
-              >
-                {t}
+              <Text className={`text-sm font-bold ${tab===t ? 'text-primary' : 'text-text-hint'}`}>
+                {t === 'gastos' ? `GASTOS (${gastos.length})` : `SALDOS (${saldos.length})`}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
-      </View>
 
-      <ScrollView
-        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-        refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#534AB7" />
-        }
-      >
-        {tab === 'gastos' ? (
-          <>
-            {gastosData?.gastos.length === 0 ? (
-              <View className="items-center py-16">
-                <Text className="text-4xl mb-4">🧾</Text>
-                <Text className="text-texto-secundario text-lg">Sin gastos aún</Text>
-              </View>
-            ) : (
-              gastosData?.gastos.map((gasto) => <GastoItem key={gasto.id} gasto={gasto} />)
-            )}
-          </>
-        ) : (
-          <>
-            {grupo.saldos.length === 0 ? (
-              <View className="items-center py-16">
-                <Text className="text-4xl mb-4">🎉</Text>
-                <Text className="text-texto-secundario text-lg">¡Todos están al día!</Text>
-              </View>
-            ) : (
-              grupo.saldos.map((saldo, i) => (
-                <SaldoItem
-                  key={i}
-                  saldo={saldo}
-                  currentUserId={usuario?.id || ''}
-                  grupoId={id}
-                />
-              ))
-            )}
-          </>
-        )}
-      </ScrollView>
+        <ScrollView 
+          className="flex-1" 
+          contentContainerStyle={{ padding:24, paddingBottom:120 }}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#6366F1" />}
+        >
+          {tab === 'gastos'
+            ? (gastos.length === 0
+              ? <View className="items-center py-20"><Text className="text-6xl mb-4">🧾</Text><Text className="text-text text-xl font-bold">Sin gastos aún</Text><Text className="text-text-muted mt-2">Agreguen el primero pulsando +</Text></View>
+              : gastos.map((g: Gasto) => <GastoItem key={g.id} gasto={g} />))
+            : (saldos.length === 0
+              ? <View className="items-center py-20"><Text className="text-6xl mb-4">🎉</Text><Text className="text-text text-xl font-bold">¡Todos al día!</Text><Text className="text-text-muted mt-2">No hay deudas pendientes en este grupo</Text></View>
+              : saldos.map((x: Saldo, i: number) => <SaldoItem key={i} saldo={x} currentUserId={usuario?.id || ''} grupoId={id} />))
+          }
+        </ScrollView>
 
-      {/* FAB — Agregar gasto */}
-      <TouchableOpacity
-        onPress={() => router.push(`/(app)/gastos/agregar?grupoId=${id}`)}
-        className="absolute bottom-8 right-6 bg-primary w-14 h-14 rounded-full items-center justify-center"
-        style={{ elevation: 6, shadowColor: '#534AB7', shadowOpacity: 0.4, shadowRadius: 8 }}
-      >
-        <Ionicons name="add" size={32} color="white" />
-      </TouchableOpacity>
-    </SafeAreaView>
+        <View className="absolute bottom-8 right-8">
+           <TouchableOpacity 
+            onPress={() => router.push(`/(app)/gastos/agregar?grupoId=${id}`)}
+            className="w-16 h-16 bg-primary rounded-[24px] items-center justify-center shadow-premium shadow-primary/40"
+          >
+            <Ionicons name="add" size={32} color="white" />
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }

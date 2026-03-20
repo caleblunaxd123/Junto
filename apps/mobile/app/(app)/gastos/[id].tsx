@@ -1,14 +1,24 @@
 import React from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Alert, ActivityIndicator, StatusBar } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '../../../src/lib/api';
 import { useAuthStore } from '../../../src/store/auth.store';
-import { Card } from '../../../src/components/ui/Card';
-import { MontoDisplay } from '../../../src/components/ui/MontoDisplay';
+import { centavosASoles } from '../../../src/types';
+import { GlassCard } from '../../../src/components/ui/GlassCard';
 import type { Gasto } from '../../../src/types';
+
+const CAT: Record<string, string> = { 
+  comida: '🍽️', 
+  transporte: '🚗', 
+  entretenimiento: '🎬', 
+  alojamiento: '🏠', 
+  compras: '🛒', 
+  otro: '💸' 
+};
 
 export default function GastoDetalleScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -21,7 +31,7 @@ export default function GastoDetalleScreen() {
     enabled: !!id,
   });
 
-  const { mutateAsync: eliminar } = useMutation({
+  const { mutateAsync: eliminar, isPending: eliminando } = useMutation({
     mutationFn: () => api.delete(`/gastos/${id}`),
     onSuccess: () => {
       if (gasto) {
@@ -32,110 +42,147 @@ export default function GastoDetalleScreen() {
     },
   });
 
+  const handleEliminar = () => Alert.alert(
+    'Eliminar gasto', 
+    '¿Estás seguro? Esta acción no se puede deshacer y afectará los balances de todos.', 
+    [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Eliminar', style: 'destructive', onPress: () => eliminar() },
+    ]
+  );
+
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-fondo">
-        <ActivityIndicator size="large" color="#534AB7" />
+      <View className="flex-1 bg-background items-center justify-center">
+        <ActivityIndicator color="#6366F1" size="large" />
       </View>
     );
   }
 
   if (!gasto) return null;
 
-  const puedeEliminar =
-    gasto.creadoPor === usuario?.id;
-
-  const CATEGORY_ICONS: Record<string, string> = {
-    comida: '🍽️',
-    transporte: '🚗',
-    entretenimiento: '🎬',
-    alojamiento: '🏠',
-    compras: '🛒',
-    otro: '💸',
-  };
-
-  const handleEliminar = () => {
-    Alert.alert('Eliminar gasto', '¿Estás seguro?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Eliminar',
-        style: 'destructive',
-        onPress: () => eliminar(),
-      },
-    ]);
-  };
+  const puedeEliminar = gasto.creadoPor === usuario?.id;
 
   return (
-    <SafeAreaView className="flex-1 bg-fondo">
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
-        {/* Header */}
-        <View className="px-4 pt-4 pb-6 bg-white border-b border-gray-100">
-          <View className="flex-row items-center justify-between mb-6">
-            <TouchableOpacity onPress={() => router.back()}>
-              <Ionicons name="arrow-back" size={24} color="#1A1A1A" />
+    <View className="flex-1 bg-background">
+      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      
+      <LinearGradient
+        colors={['#6366F1', '#4F46E5']}
+        className="h-80 w-full absolute top-0"
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      />
+
+      <SafeAreaView className="flex-1" edges={['top']}>
+        {/* Header Navigation */}
+        <View className="px-6 pt-4 pb-4 flex-row items-center justify-between">
+          <TouchableOpacity 
+            onPress={() => router.back()}
+            className="w-10 h-10 bg-white/20 rounded-xl items-center justify-center border border-white/30"
+          >
+            <Ionicons name="arrow-back" size={24} color="white" />
+          </TouchableOpacity>
+          <Text className="text-white text-xl font-black">Detalle de Gasto</Text>
+          {puedeEliminar ? (
+            <TouchableOpacity 
+              onPress={handleEliminar}
+              disabled={eliminando}
+              className="w-10 h-10 bg-red-400/20 rounded-xl items-center justify-center border border-red-400/30"
+            >
+              {eliminando ? <ActivityIndicator size="small" color="white" /> : <Ionicons name="trash-outline" size={20} color="white" />}
             </TouchableOpacity>
-            {puedeEliminar && (
-              <TouchableOpacity onPress={handleEliminar}>
-                <Ionicons name="trash-outline" size={22} color="#E24B4A" />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <View className="items-center">
-            <Text className="text-5xl mb-3">{CATEGORY_ICONS[gasto.categoria]}</Text>
-            <Text className="text-3xl font-bold text-texto mb-1">{gasto.descripcion}</Text>
-            <MontoDisplay centavos={gasto.montoTotal} className="text-4xl font-bold text-primary mt-2" />
-          </View>
-        </View>
-
-        <View className="px-4 pt-4">
-          {/* Pagador */}
-          <Card>
-            <View className="flex-row items-center gap-3">
-              <View className="w-10 h-10 rounded-full bg-primary-50 items-center justify-center">
-                <Ionicons name="person" size={20} color="#534AB7" />
-              </View>
-              <View>
-                <Text className="text-texto-hint text-xs">Pagó</Text>
-                <Text className="text-texto font-semibold">{gasto.pagador.nombre}</Text>
-              </View>
-            </View>
-          </Card>
-
-          {/* Participantes */}
-          <Text className="text-texto-secundario font-medium mb-3">División del gasto</Text>
-          {gasto.participantes.map((p) => (
-            <Card key={p.id}>
-              <View className="flex-row items-center justify-between">
-                <View className="flex-row items-center gap-3">
-                  <View className="w-8 h-8 rounded-full bg-gray-100 items-center justify-center">
-                    <Text className="text-texto-secundario text-xs font-bold">
-                      {p.usuario.nombre.charAt(0)}
-                    </Text>
-                  </View>
-                  <Text className="text-texto font-medium">
-                    {p.usuario.nombre}
-                    {p.usuarioId === usuario?.id ? ' (yo)' : ''}
-                  </Text>
-                </View>
-                <View className="items-end">
-                  <MontoDisplay centavos={p.montoAsignado} className="font-semibold text-texto" />
-                  {p.pagado && (
-                    <Text className="text-verde text-xs mt-0.5">Pagado ✓</Text>
-                  )}
-                </View>
-              </View>
-            </Card>
-          ))}
-
-          {gasto.notas && (
-            <Card>
-              <Text className="text-texto-hint text-xs mb-1">Notas</Text>
-              <Text className="text-texto">{gasto.notas}</Text>
-            </Card>
+          ) : (
+            <View className="w-10" />
           )}
         </View>
-      </ScrollView>
-    </SafeAreaView>
+
+        <ScrollView 
+          className="flex-1" 
+          contentContainerStyle={{ paddingBottom: 60 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Main Gasto Card */}
+          <GlassCard className="mx-6 p-8 items-center border border-white/30 mb-8" intensity={1.2}>
+            <View className="w-20 h-20 bg-white/20 rounded-[28px] items-center justify-center mb-6 border border-white/30 shadow-sm">
+              <Text className="text-4xl">{CAT[gasto.categoria] || '💸'}</Text>
+            </View>
+            <Text className="text-white text-2xl font-black text-center mb-2 tracking-tight">
+              {gasto.descripcion}
+            </Text>
+            <Text className="text-white text-5xl font-black text-center mb-6 tracking-tighter">
+              S/ {centavosASoles(gasto.montoTotal)}
+            </Text>
+            <View className="bg-white/10 px-4 py-2 rounded-full border border-white/10">
+              <Text className="text-white/80 text-xs font-bold uppercase tracking-widest">
+                Pagado por <Text className="text-white">{gasto.pagador.nombre}</Text>
+              </Text>
+            </View>
+          </GlassCard>
+
+          <View className="px-6">
+            <Text className="text-text font-extrabold text-lg mb-4 tracking-tight">División del gasto</Text>
+            <View className="bg-white rounded-[32px] border border-gray-100 p-2 mb-8 shadow-sm">
+              {gasto.participantes.map((p, idx) => (
+                <View 
+                  key={p.id} 
+                  className={`flex-row items-center p-4 ${idx < gasto.participantes.length - 1 ? 'border-b border-gray-50' : ''}`}
+                >
+                  <View className="w-12 h-12 bg-primary/5 rounded-2xl items-center justify-center mr-4 border border-primary/10">
+                    <Text className="text-primary font-black text-lg">{p.usuario.nombre.charAt(0)}</Text>
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-text font-bold text-base">
+                      {p.usuario.nombre}{p.usuarioId === usuario?.id ? ' (tú)' : ''}
+                    </Text>
+                    {p.pagado && (
+                      <View className="flex-row items-center mt-1">
+                        <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                        <Text className="text-success text-xs font-bold ml-1">Liquidado</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text className={`font-black text-lg tracking-tighter ${p.pagado ? 'text-success' : 'text-text'}`}>
+                    S/ {centavosASoles(p.montoAsignado)}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            <Text className="text-text font-extrabold text-lg mb-4 tracking-tight">Información adicional</Text>
+            <View className="bg-white rounded-[32px] border border-gray-100 p-6 shadow-sm">
+              <View className="flex-row items-center justify-between mb-4 pb-4 border-b border-gray-50">
+                <View className="flex-row items-center">
+                  <View className="w-8 h-8 bg-gray-100 rounded-lg items-center justify-center mr-3">
+                    <Ionicons name="calendar-outline" size={18} color="#6B7280" />
+                  </View>
+                  <Text className="text-text-hint font-bold text-sm">Fecha</Text>
+                </View>
+                <Text className="text-text font-bold text-sm">
+                  {new Date(gasto.fecha).toLocaleDateString('es-PE', { day:'2-digit', month:'short', year:'numeric' })}
+                </Text>
+              </View>
+
+              <View className="flex-row items-center justify-between mb-4 pb-4 border-b border-gray-50">
+                <View className="flex-row items-center">
+                  <View className="w-8 h-8 bg-gray-100 rounded-lg items-center justify-center mr-3">
+                    <Ionicons name="pricetag-outline" size={18} color="#6B7280" />
+                  </View>
+                  <Text className="text-text-hint font-bold text-sm">Categoría</Text>
+                </View>
+                <Text className="text-text font-bold text-sm capitalize">{gasto.categoria}</Text>
+              </View>
+
+              {gasto.notas && (
+                <View className="mt-2">
+                  <Text className="text-text-hint font-bold text-xs uppercase tracking-widest mb-2">Notas</Text>
+                  <Text className="text-text text-sm leading-6">{gasto.notas}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
