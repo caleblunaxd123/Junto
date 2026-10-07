@@ -14,6 +14,7 @@ export async function crearGrupo(input: CrearGrupoInput, creadoPor: string) {
       nombre: input.nombre,
       descripcion: input.descripcion,
       tipo: input.tipo,
+      aprobacionPagos: input.aprobacionPagos,
       creadoPor,
       linkInvitacion: generateLinkInvitacion(),
       miembros: {

@@ -203,6 +203,7 @@ export async function getGastosGrupo(
         },
         pagador: { select: { id: true, nombre: true, fotoUrl: true } },
         creador: { select: { id: true, nombre: true } },
+        _count: { select: { comentarios: { where: { eliminado: false } } } },
       },
       orderBy: { fecha: "desc" },
       skip,

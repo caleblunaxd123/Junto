@@ -21,3 +21,15 @@ test('third parties and resolved payments never ask for an action', () => {
     assert.equal(describePayment({ estado, pagador: luis, receptor: yo, grupo }, 'otro').requiereAccion, false);
   assert.equal(describePayment({ estado: 'exitoso', pagador: yo, receptor: luis, grupo }, 'yo').titulo, 'Luis confirmó tu pago');
 });
+test('an admin who may approve sees the pending payment as their action; an admin approval is named', () => {
+  const ana = { id: 'ana', nombre: 'Ana Torres' };
+  const pending = describePayment({ estado: 'reportado', pagador: luis, receptor: ana, grupo }, 'yo', true);
+  assert.equal(pending.requiereAccion, true);
+  assert.match(pending.detalle, /apruébalo/);
+  const approved = { estado: 'exitoso', pagador: luis, receptor: ana, grupo, resolutor: yo };
+  assert.equal(describePayment(approved, 'yo').titulo, 'Aprobaste el pago de Luis a Ana');
+  assert.equal(describePayment(approved, 'ana').titulo, 'Caleb aprobó el pago de Luis para ti');
+  assert.equal(describePayment(approved, 'luis').titulo, 'Caleb aprobó tu pago a Ana');
+  // Confirmed by the receiver themselves: unchanged wording.
+  assert.equal(describePayment({ ...approved, resolutor: ana }, 'luis').titulo, 'Ana confirmó tu pago');
+});

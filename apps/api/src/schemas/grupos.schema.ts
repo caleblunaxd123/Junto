@@ -4,6 +4,8 @@ export const crearGrupoSchema = z.object({
   nombre: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres').max(100),
   descripcion: z.string().trim().max(500).optional(),
   tipo: z.enum(['viaje', 'roomies', 'pareja', 'amigos', 'trabajo', 'deporte', 'otro']).default('amigos'),
+  // "administrador": who receives a payment or a group admin may approve it (never the payer).
+  aprobacionPagos: z.enum(['receptor', 'administrador']).optional(),
 });
 
 // Metadata only: never accept participants, balances, ownership or invite codes.

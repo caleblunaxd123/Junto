@@ -14,6 +14,7 @@ import aiRoutes from './routes/ai.routes';
 import cuentasRoutes from './routes/cuentas.routes';
 import publicRoutes from './routes/public.routes';
 import compartirRoutes from './routes/compartir.routes';
+import comentariosRoutes from './routes/comentarios.routes';
 import { emailProvider } from './lib/email';
 import { authMiddleware } from './middleware/auth';
 import { getActivity } from './services/activity.service';
@@ -55,6 +56,7 @@ app.use('/api/pagos', pagosRoutes);
 app.use('/api/ia', aiRoutes);
 app.use('/api/cuentas-rapidas', cuentasRoutes);
 app.use('/api/compartir', compartirRoutes);
+app.use('/api/comentarios', comentariosRoutes);
 app.get('/api/actividad', authMiddleware, async (req, res, next) => {
   try { res.json(await getActivity(req.user!.userId, typeof req.query.grupoId === 'string' ? req.query.grupoId : undefined)); }
   catch (error) { next(error); }

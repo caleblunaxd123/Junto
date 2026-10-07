@@ -65,6 +65,12 @@ export async function deleteAccount(userId: string, confirmation: { password?: s
       data: { estado: "cancelado", fechaResolucion: new Date() },
     });
     await tx.cuentaRapida.deleteMany({ where: { creadoPor: userId } });
+    // Voucher images show the person's name and number: erased. Read amounts stay as the record.
+    await tx.comprobante.deleteMany({ where: { subidoPor: userId, pagoId: null } });
+    await tx.comprobanteImagen.deleteMany({ where: { comprobante: { subidoPor: userId } } });
+    await tx.comprobante.updateMany({ where: { subidoPor: userId }, data: { destinatarioLeido: null, codigoSeguridad: null } });
+    await tx.comentario.updateMany({ where: { autorId: userId }, data: { eliminado: true, texto: "" } });
+    await tx.reporteComentario.deleteMany({ where: { usuarioId: userId } });
     await tx.correoCompartido.deleteMany({ where: { usuarioId: userId } });
     await tx.recordatorio.deleteMany({ where: { OR: [{ enviadoPor: userId }, { enviadoA: userId }] } });
     await tx.configRecordatorio.deleteMany({ where: { configuradoPor: userId } });

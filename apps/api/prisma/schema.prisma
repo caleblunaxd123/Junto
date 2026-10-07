@@ -41,6 +41,10 @@ model Usuario {
   refreshTokens       RefreshToken[]
   cuentasRapidas      CuentaRapida[]
   correosCompartidos  CorreoCompartido[]
+  pagosResueltos      Pago[]            @relation("PagoResolutor")
+  comprobantes        Comprobante[]
+  comentarios         Comentario[]
+  reportesComentarios ReporteComentario[]
 
   @@map("usuarios")
 }
@@ -75,6 +79,9 @@ model Grupo {
   linkInvitacion  String?   @unique @map("link_invitacion") @db.VarChar(50)
   fechaCreacion   DateTime  @default(now()) @map("fecha_creacion")
   activo          Boolean   @default(true)
+  // Who may approve a reported payment: "receptor" (only who receives it) or "administrador"
+  // (who receives it or a group admin). The payer never approves their own payment.
+  aprobacionPagos String    @default("receptor") @map("aprobacion_pagos") @db.VarChar(20)
 
   // Relations
   creador         Usuario           @relation("GrupoCreador", fields: [creadoPor], references: [id])
@@ -83,6 +90,8 @@ model Grupo {
   pagos           Pago[]
   recordatorios   Recordatorio[]
   configRecordatorio ConfigRecordatorio[]
+  comprobantes    Comprobante[]
+  comentarios     Comentario[]
 
   @@map("grupos")
 }
@@ -124,6 +133,7 @@ model Gasto {
   pagador      Usuario             @relation("GastoPagador", fields: [pagadoPor], references: [id])
   creador      Usuario             @relation("GastoCreador", fields: [creadoPor], references: [id])
   participantes GastoParticipante[]
+  comentarios  Comentario[]
 
   @@index([grupoId])
   @@unique([creadoPor, solicitudId])
@@ -161,11 +171,16 @@ model Pago {
   fechaPago       DateTime  @default(now()) @map("fecha_pago")
   nota            String?   @db.VarChar(100)
   fechaResolucion DateTime? @map("fecha_resolucion")
+  // Who approved or rejected it: the receiver or, when the group allows it, an admin.
+  resueltoPor     String?   @map("resuelto_por") @db.Uuid
 
   // Relations
   grupo           Grupo     @relation(fields: [grupoId], references: [id])
   pagador         Usuario   @relation("PagoPagador", fields: [pagadorId], references: [id])
   receptor        Usuario   @relation("PagoReceptor", fields: [receptorId], references: [id])
+  resolutor       Usuario?  @relation("PagoResolutor", fields: [resueltoPor], references: [id])
+  comprobante     Comprobante?
+  comentarios     Comentario[]
 
   @@index([pagadorId])
   @@map("pagos")
@@ -243,4 +258,81 @@ model CorreoCompartido {
   @@unique([usuarioId, solicitudId])
   @@index([usuarioId, fechaCreacion])
   @@map("correos_compartidos")
+}
+
+// A Yape/Plin/transfer screenshot uploaded as evidence of a payment. Starts as a draft (pagoId null)
+// while the payer reviews what was read, and is linked when the payment is reported. Yape and Plin
+// offer no API to verify person-to-person transfers, so this is evidence for a human approval.
+model Comprobante {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  subidoPor         String    @map("subido_por") @db.Uuid
+  grupoId           String    @map("grupo_id") @db.Uuid
+  pagoId            String?   @unique @map("pago_id") @db.Uuid
+  // SHA-256 of the image bytes: the same screenshot cannot back two payments.
+  hash              String    @db.Char(64)
+  // What OCR read; the reported payment keeps the values the payer confirmed.
+  app               String?   @db.VarChar(20)
+  montoLeido        Int?      @map("monto_leido") // en centavos
+  operacion         String?   @db.VarChar(24)
+  destinatarioLeido String?   @map("destinatario_leido") @db.VarChar(80)
+  fechaLeida        DateTime? @map("fecha_leida") @db.Date
+  codigoSeguridad   String?   @map("codigo_seguridad") @db.VarChar(6)
+  fechaCreacion     DateTime  @default(now()) @map("fecha_creacion")
+
+  subidor Usuario            @relation(fields: [subidoPor], references: [id])
+  grupo   Grupo              @relation(fields: [grupoId], references: [id])
+  pago    Pago?              @relation(fields: [pagoId], references: [id])
+  imagen  ComprobanteImagen?
+
+  @@index([subidoPor, fechaCreacion])
+  @@index([hash])
+  @@index([operacion])
+  @@map("comprobantes")
+}
+
+// The image lives apart so that listing payments never loads it; deleting the row purges it.
+model ComprobanteImagen {
+  comprobanteId String      @id @map("comprobante_id") @db.Uuid
+  mime          String      @db.VarChar(20)
+  datos         Bytes
+  comprobante   Comprobante @relation(fields: [comprobanteId], references: [id], onDelete: Cascade)
+
+  @@map("comprobante_imagenes")
+}
+
+// Short comments on an expense or a payment, visible to the active members of the group.
+model Comentario {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  grupoId       String   @map("grupo_id") @db.Uuid
+  gastoId       String?  @map("gasto_id") @db.Uuid
+  pagoId        String?  @map("pago_id") @db.Uuid
+  autorId       String   @map("autor_id") @db.Uuid
+  texto         String   @db.VarChar(500)
+  // Deleted comments keep their place in the thread but lose their text.
+  eliminado     Boolean  @default(false)
+  fechaCreacion DateTime @default(now()) @map("fecha_creacion")
+
+  grupo    Grupo               @relation(fields: [grupoId], references: [id])
+  gasto    Gasto?              @relation(fields: [gastoId], references: [id])
+  pago     Pago?               @relation(fields: [pagoId], references: [id])
+  autor    Usuario             @relation(fields: [autorId], references: [id])
+  reportes ReporteComentario[]
+
+  @@index([gastoId, fechaCreacion])
+  @@index([pagoId, fechaCreacion])
+  @@index([autorId, fechaCreacion])
+  @@map("comentarios")
+}
+
+model ReporteComentario {
+  id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  comentarioId  String     @map("comentario_id") @db.Uuid
+  usuarioId     String     @map("usuario_id") @db.Uuid
+  motivo        String?    @db.VarChar(200)
+  fechaCreacion DateTime   @default(now()) @map("fecha_creacion")
+  comentario    Comentario @relation(fields: [comentarioId], references: [id], onDelete: Cascade)
+  usuario       Usuario    @relation(fields: [usuarioId], references: [id])
+
+  @@unique([comentarioId, usuarioId])
+  @@map("reportes_comentarios")
 }

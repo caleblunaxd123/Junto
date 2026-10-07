@@ -60,17 +60,21 @@ router.get('/unirse/:code', (req, res) => {
 
 router.get('/privacidad', (_req, res) => {
   page(res, 'Política de privacidad', `<h1>Política de privacidad</h1>
-<p class="muted">Última actualización: 7 de octubre de 2026. Responsable del tratamiento: ${escapeHTML(legalOwner())}.</p>
+<p class="muted">Última actualización: 10 de octubre de 2026. Responsable del tratamiento: ${escapeHTML(legalOwner())}.</p>
 <h2>Qué datos usamos</h2>
 <p>Tu nombre, correo, contraseña (guardada solo como hash), y si los agregas, tu celular y foto de perfil. También los grupos a los que perteneces, los gastos y pagos que registras o que otros registran contigo, y las cuentas puntuales que organizas (con los nombres de tus invitados). Si entras con Google, recibimos de Google tu nombre, correo y foto de perfil; nunca tu contraseña de Google. Si activas las notificaciones guardamos el identificador de notificaciones de tu teléfono.</p>
 <h2>Para qué</h2>
 <p>Para crear tu cuenta, verificar tu correo, calcular quién le debe a quién, avisarte de pagos por confirmar y darte soporte. No vendemos tus datos ni mostramos publicidad.</p>
 <h2>Fotos de boletas y textos</h2>
-<p>Las fotos de boletas se procesan en el servidor para leer el total y no se guardan como comprobante. Si describes un gasto con texto, se procesa para proponer el reparto; siempre revisas la propuesta antes de guardar.</p>
+<p>Las fotos de boletas se procesan en el servidor para leer el total y no se guardan. Si describes un gasto con texto, se procesa para proponer el reparto; siempre revisas la propuesta antes de guardar.</p>
+<h2>Comprobantes de pago (Yape, Plin, transferencias)</h2>
+<p>Si adjuntas la captura de un pago, la leemos en nuestro servidor (sin enviarla a terceros) para proponer el monto, la app, el número de operación, la fecha y el nombre de quien recibe. La imagen se guarda junto al pago para que pueda revisarla quien lo aprueba: solo la ven quien pagó, quien recibe y, si el grupo lo permite, sus administradores. Las capturas que no terminas de registrar se borran en 24 horas, y la imagen de un pago ya resuelto se borra a los 180 días (conservamos solo el monto y el número de operación leídos). JUNTO no se conecta con Yape, Plin ni bancos y no puede comprobar una transferencia por su cuenta: por eso un pago solo baja la deuda cuando una persona lo aprueba.</p>
+<h2>Comentarios</h2>
+<p>Los comentarios en gastos y pagos los ven las personas activas del grupo. Quien lo escribió o un administrador del grupo puede eliminarlo; cualquier integrante puede reportarlo y lo revisamos.</p>
 <h2>Quién ve tus datos</h2>
 <p>Solo las personas de cada grupo ven tu nombre, los gastos y los pagos de ese grupo. Usamos proveedores para alojar la base de datos, enviar correos y enviar notificaciones, que tratan los datos solo para prestar ese servicio.</p>
 <h2>Cuánto tiempo</h2>
-<p>Mientras tu cuenta esté activa. Si la eliminas, borramos tus datos personales; los gastos y pagos compartidos con otras personas se conservan como «Usuario eliminado» para no alterar las cuentas de los demás.</p>
+<p>Mientras tu cuenta esté activa. Si la eliminas, borramos tus datos personales, las capturas de comprobantes que subiste y el texto de tus comentarios; los gastos y pagos compartidos con otras personas se conservan como «Usuario eliminado» para no alterar las cuentas de los demás.</p>
 <h2>Tus derechos</h2>
 <p>Puedes acceder, rectificar o eliminar tus datos desde la app (Perfil) o escribiendo a soporte, conforme a la Ley N.º 29733 de Protección de Datos Personales del Perú. Ver también <a href="/eliminar-cuenta">cómo eliminar tu cuenta</a>.</p>`);
 });

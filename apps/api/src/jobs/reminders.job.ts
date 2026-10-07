@@ -1,6 +1,7 @@
 import { describeError } from "../lib/logSafe";
 import cron from 'node-cron';
 import { ejecutarRecordatoriosAutomaticos } from '../services/recordatorios.service';
+import { purgeVouchers } from '../services/vouchers.service';
 
 /**
  * Cron job: runs daily at 9 AM Peru time (UTC-5 = 14:00 UTC).
@@ -12,6 +13,11 @@ export function initRemindersJob(): void {
       await ejecutarRecordatoriosAutomaticos();
     } catch (err) {
       console.error('[Cron] Error in reminders job:', describeError(err));
+    }
+    try {
+      await purgeVouchers();
+    } catch (err) {
+      console.error('[Cron] Error purging vouchers:', describeError(err));
     }
   });
 
