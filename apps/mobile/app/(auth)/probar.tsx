@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { Pressable, Share, TextInput, View } from "react-native";
+import { Pressable, TextInput, View } from "react-native";
 import { router } from "expo-router";
-import { calculateQuickBill } from "@junto/shared/quickBill";
-import { Screen, Card, Label, Button, palette, design } from "../../src/components/ui/Design";
-import { parseMoney } from "../../src/lib/expensePreview";
+import { Screen, Card, Label, Button, ErrorBox, palette, design } from "../../src/components/ui/Design";
+import { previewTryBill, tryBillShareMessage } from "../../src/lib/tryBill";
+import { ShareMessageSheet } from "../../src/components/ui/ShareMessage";
+import type { ShareMessage } from "../../src/lib/shareMessage";
 import { centavosASoles } from "../../src/types";
 
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
@@ -29,20 +30,8 @@ export default function TryWithoutAccount() {
   const [people, setPeople] = useState(4);
   const [guests, setGuests] = useState(0);
   const [tip, setTip] = useState(0);
-  const cents = parseMoney(total);
-  const extras = cents ? Math.round((cents * tip) / 100) : 0;
-  const result =
-    cents && cents > 0 && guests < people
-      ? calculateQuickBill({
-          nombre: "Cuenta",
-          cobrarA: "",
-          instrucciones: "",
-          division: "igual",
-          totalCuenta: cents,
-          extras,
-          participantes: Array.from({ length: people }, (_, i) => ({ id: `p${i}`, nombre: `Persona ${i + 1}`, consumo: 0, invitado: i >= people - guests })),
-        })
-      : null;
+  const [shareMessage, setShareMessage] = useState<ShareMessage | null>(null);
+  const { input, result, extras, error } = previewTryBill(total, people, guests, tip);
   const payers = result?.partes.filter((p) => !p.invitado) ?? [];
   const high = payers.length ? Math.max(...payers.map((p) => p.total)) : 0;
   const low = payers.length ? Math.min(...payers.map((p) => p.total)) : 0;
@@ -53,7 +42,7 @@ export default function TryWithoutAccount() {
       subtitle="Sin crear cuenta. No guardamos nada."
       back
       footer={
-        <Button title="Crear cuenta gratis para guardar y cobrar" onPress={() => router.replace("/(auth)/register")} />
+        <Button title="Crear cuenta gratis" onPress={() => router.replace("/(auth)/register")} />
       }
     >
       <Card>
@@ -72,6 +61,8 @@ export default function TryWithoutAccount() {
             style={{ flex: 1, minWidth: 0, fontSize: 30, fontFamily: "JakartaExtra", color: palette.ink, minHeight: 48 }}
           />
         </View>
+        {!!error && <ErrorBox message={error} />}
+        <Label size={12} color={palette.muted}>Usa el total final. Añade propina abajo solo si no está incluida.</Label>
         <Stepper label="Personas" value={people} min={1} max={30} onChange={(v) => { setPeople(v); setGuests((g) => Math.min(g, v - 1)); }} />
         <Stepper label="Invitados (no pagan)" value={guests} min={0} max={Math.max(0, people - 1)} onChange={setGuests} />
         <View style={{ gap: 8 }}>
@@ -93,13 +84,13 @@ export default function TryWithoutAccount() {
       </Card>
       {result ? (
         <Card style={{ backgroundColor: palette.mint, borderColor: "#BDEBD9", alignItems: "center", gap: 4 }}>
-          <Label size={14} color={palette.muted}>Cada uno paga</Label>
+          <Label size={14} color={palette.muted}>{high === low ? "Cada uno aporta" : "Aportes de hasta"}</Label>
           <Label accessibilityLiveRegion="polite" size={40} weight="extra" color="#007B60">
             {money(high)}
           </Label>
           {high !== low && (
             <Label size={12} color={palette.muted} style={{ textAlign: "center" }}>
-              Para que cuadre al céntimo, algunos pagan {money(low)}.
+              {payers.filter(p => p.total === high).length} {payers.filter(p => p.total === high).length === 1 ? "persona aporta" : "personas aportan"} {money(high)} y {payers.filter(p => p.total === low).length} {payers.filter(p => p.total === low).length === 1 ? "aporta" : "aportan"} {money(low)}. Así suma exactamente {money(result.montoTotal)}.
             </Label>
           )}
           <Label size={13} style={{ textAlign: "center" }}>
@@ -109,12 +100,8 @@ export default function TryWithoutAccount() {
           <Button
             compact
             secondary
-            title="Compartir por WhatsApp"
-            onPress={() =>
-              Share.share({
-                message: `La cuenta fue ${money(result.montoTotal)}. Somos ${people}${guests ? ` (${guests} ${guests === 1 ? "invitado" : "invitados"})` : ""}: cada uno paga ${money(high)}. Calculado con JUNTO.`,
-              }).catch(() => undefined)
-            }
+            title="Revisar y compartir cuenta"
+            onPress={() => { if (input) setShareMessage(tryBillShareMessage(input)); }}
           />
         </Card>
       ) : (
@@ -128,6 +115,7 @@ export default function TryWithoutAccount() {
         <Label size={13} color={palette.muted}>• Marcar quién ya te pagó y recordar a quien falta.</Label>
         <Label size={13} color={palette.muted}>• Crear grupos para el depa, la pareja o un viaje.</Label>
       </Card>
+      <ShareMessageSheet message={shareMessage} onClose={() => setShareMessage(null)} />
     </Screen>
   );
 }

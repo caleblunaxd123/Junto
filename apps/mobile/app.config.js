@@ -3,6 +3,7 @@ module.exports = ({ config }) => {
   validateReleaseEnvironment(process.env);
   const host = appLinkHost(process.env);
   const android = { ...config.android };
+  android.blockedPermissions = [...new Set([...(android.blockedPermissions || []), "android.permission.RECORD_AUDIO", "android.permission.WRITE_CONTACTS"])];
   // Opens https://<dominio>/unirse/CODE directly in the app (Android App Links).
   if (host)
     android.intentFilters = [
@@ -17,6 +18,8 @@ module.exports = ({ config }) => {
   if (process.env.GOOGLE_SERVICES_JSON) android.googleServicesFile = process.env.GOOGLE_SERVICES_JSON;
   // Google Sign-In: Android needs no plugin (only the OAuth clients in Google Cloud); iOS needs its URL scheme.
   const plugins = [...(config.plugins || [])];
+  if (!plugins.includes("expo-mail-composer")) plugins.push("expo-mail-composer");
+  plugins.push("./plugins/withShareTargets", "./plugins/withQaSigning");
   if (process.env.GOOGLE_IOS_URL_SCHEME)
     plugins.push(["@react-native-google-signin/google-signin", { iosUrlScheme: process.env.GOOGLE_IOS_URL_SCHEME }]);
   const extra = { ...config.extra };

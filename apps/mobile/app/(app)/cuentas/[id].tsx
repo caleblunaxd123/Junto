@@ -2,7 +2,7 @@ import React, { useCallback } from "react";
 import { ActivityIndicator, View, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
-import { useGrupo } from "../../../src/hooks/useGrupos";
+import { useGrupo, usePagos } from "../../../src/hooks/useGrupos";
 import { memberLabels } from "../../../src/lib/people";
 import { useAuthStore } from "../../../src/store/auth.store";
 import {
@@ -17,6 +17,8 @@ import {
 } from "../../../src/components/ui/Design";
 import { groupCover, art } from "../../../src/components/ui/Artwork";
 import { centavosASoles } from "../../../src/types";
+import { ShareMessageSheet } from "../../../src/components/ui/ShareMessage";
+import { groupShareMessage, type ShareMessage } from "../../../src/lib/shareMessage";
 const money = (v: number) => `S/ ${centavosASoles(v)}`;
 function Step({
   number,
@@ -96,6 +98,8 @@ function Step({
 export default function Accounts() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: group, isLoading, isError, refetch } = useGrupo(id);
+  const payments = usePagos();
+  const [shareMessage, setShareMessage] = React.useState<ShareMessage | null>(null);
   useFocusEffect(
     useCallback(() => {
       refetch();
@@ -331,7 +335,10 @@ export default function Accounts() {
           <Label size={11} color={palette.muted}>
             Compensamos los gastos para reducir la cantidad de pagos necesarios.
           </Label>
+          <Button title="Compartir cuentas por WhatsApp o correo" secondary disabled={payments.isError || payments.isLoading || isError || payments.isFetching} onPress={() => setShareMessage(groupShareMessage(group, payments.data?.filter(p => p.grupoId === id && p.estado === "reportado").length || 0))} />
+          {payments.isError && <><ErrorBox message="Actualiza los pagos antes de compartir las cuentas." /><Button title="Actualizar pagos" secondary onPress={() => payments.refetch()} /></>}
           <Button title="¡Entendido!" onPress={() => router.back()} />
+          <ShareMessageSheet message={shareMessage} onClose={() => setShareMessage(null)} disabled={isError || payments.isError} />
         </>
       )}
     </Screen>

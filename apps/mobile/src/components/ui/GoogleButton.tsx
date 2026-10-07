@@ -5,6 +5,7 @@ import { Label, palette } from "./Design";
 
 /** White button with the Google mark, following Google's sign-in branding. */
 export function GoogleButton({ onPress, loading = false, disabled = false }: { onPress: () => void; loading?: boolean; disabled?: boolean }) {
+  const [pressed, setPressed] = React.useState(false);
   return (
     <Pressable
       accessibilityRole="button"
@@ -12,7 +13,9 @@ export function GoogleButton({ onPress, loading = false, disabled = false }: { o
       accessibilityState={{ busy: loading, disabled: disabled || loading }}
       disabled={disabled || loading}
       onPress={onPress}
-      style={({ pressed }) => ({
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      style={{
         minHeight: 56,
         borderRadius: 20,
         borderWidth: 1,
@@ -24,7 +27,7 @@ export function GoogleButton({ onPress, loading = false, disabled = false }: { o
         gap: 12,
         paddingHorizontal: 18,
         opacity: disabled ? 0.55 : 1,
-      })}
+      }}
     >
       {loading ? (
         <ActivityIndicator color={palette.ink} />

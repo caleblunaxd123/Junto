@@ -7,6 +7,8 @@ import { api } from "../../../src/lib/api";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { useGrupo } from "../../../src/hooks/useGrupos";
 import { Gasto, centavosASoles } from "../../../src/types";
+import { ShareMessageSheet } from "../../../src/components/ui/ShareMessage";
+import { expenseShareMessage, type ShareMessage } from "../../../src/lib/shareMessage";
 import {
   Screen,
   Card,
@@ -22,7 +24,8 @@ export default function ExpenseDetail() {
   const user = useAuthStore((s) => s.usuario);
   const qc = useQueryClient();
   const [error, setError] = useState("");
-  const { data: expense, isLoading } = useQuery<Gasto>({
+  const [shareMessage, setShareMessage] = useState<ShareMessage | null>(null);
+  const { data: expense, isLoading, isError, refetch } = useQuery<Gasto>({
     queryKey: ["gastos", "detalle", id],
     queryFn: () => api.get(`/gastos/${id}`).then((r) => r.data),
   });
@@ -60,8 +63,8 @@ export default function ExpenseDetail() {
     <Screen title="Cada parte, clara" back>
       {isLoading ? (
         <ActivityIndicator />
-      ) : !expense ? (
-        <ErrorBox message="No pudimos cargar este gasto." />
+      ) : isError || !expense ? (
+        <><ErrorBox message="No pudimos cargar este gasto actualizado." /><Button title="Reintentar" onPress={() => refetch()} /></>
       ) : (
         <>
           <Card style={{ backgroundColor: palette.mint }}>
@@ -104,6 +107,8 @@ export default function ExpenseDetail() {
               <Label>{expense.notas}</Label>
             </Card>
           )}
+          <Button title="Compartir gasto por WhatsApp o correo" secondary disabled={!group || remove.isPending} onPress={() => { try { setShareMessage(expenseShareMessage(expense, group?.nombre || "Mi grupo")); } catch (err) { setError((err as Error).message); } }} />
+          <ShareMessageSheet message={shareMessage} onClose={() => setShareMessage(null)} disabled={isError || remove.isPending} />
           <Button
             title="Ver las cuentas del grupo"
             secondary

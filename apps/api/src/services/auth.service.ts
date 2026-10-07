@@ -83,7 +83,7 @@ export async function register(input: RegisterInput) {
     input.nombre,
     otp,
   )
-    .then(() => true)
+    .then((accepted) => accepted)
     .catch(() => {
       console.error(
         "[Email] Verification delivery failed; account remains unverified.",
@@ -218,7 +218,7 @@ export async function resendVerification(email: string) {
     },
   });
   try {
-    await sendVerificationEmail(email, usuario.nombre, otp);
+    if (!await sendVerificationEmail(email, usuario.nombre, otp)) throw new Error("No hay entrega real de correo configurada");
   } catch {
     throw new UserError(
       "No pudimos enviar el correo. Tu cuenta sigue protegida. Intenta reenviar en un minuto o contacta con soporte.",

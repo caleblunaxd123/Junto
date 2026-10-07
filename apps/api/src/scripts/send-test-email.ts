@@ -13,7 +13,7 @@ async function main() {
     text: "Si lees esto, JUNTO puede enviar códigos de verificación. Revisa que no haya llegado a spam.",
     html: "<p>Si lees esto, JUNTO puede enviar códigos de verificación.</p><p>Revisa que no haya llegado a spam.</p>",
   });
-  console.info(`Correo de prueba enviado con ${provider} a ${to}.`);
+  console.info(`Correo de prueba aceptado por ${provider} para ${to}. Comprueba su recepción en la bandeja y en spam; la aceptación no garantiza entrega.`);
 }
 
 main().catch((error) => {

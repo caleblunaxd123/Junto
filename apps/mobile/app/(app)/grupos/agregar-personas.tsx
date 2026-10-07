@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { TextInput, Share, View } from "react-native";
+import { TextInput, View } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGrupo } from "../../../src/hooks/useGrupos";
@@ -7,6 +7,8 @@ import { api } from "../../../src/lib/api";
 import { invitationUrl } from "../../../src/lib/invitation";
 import { memberLabels, meFirst } from "../../../src/lib/people";
 import { useAuthStore } from "../../../src/store/auth.store";
+import { ShareMessageSheet } from "../../../src/components/ui/ShareMessage";
+import type { ShareMessage } from "../../../src/lib/shareMessage";
 import {
   Screen,
   Card,
@@ -27,7 +29,12 @@ export default function Invite() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [shareMessage, setShareMessage] = useState<ShareMessage | null>(null);
+  const shareGate = React.useRef(false);
+  const inviteGate = React.useRef(false);
   async function invite() {
+    if (inviteGate.current || identifier.trim().length < 5) return;
+    inviteGate.current = true;
     try {
       setBusy(true);
       setError("");
@@ -51,19 +58,20 @@ export default function Invite() {
         "No pudimos agregar a esta persona. Revisa el correo o celular.",
       );
     } finally {
+      inviteGate.current = false;
       setBusy(false);
     }
   }
   async function share() {
+    if (shareGate.current) return;
+    shareGate.current = true;
     try {
       setError("");
       const { data } = await api.post(`/grupos/${grupoId}/invitar`, {});
-      await Share.share({
-        message: `Únete a «${group?.nombre || "mi grupo"}» en JUNTO para llevar las cuentas juntos: ${invitationUrl(data.linkCode)}`,
-      });
+      setShareMessage({ subject: `Únete a ${group?.nombre || "mi grupo"} · JUNTO`, body: `Únete a «${group?.nombre || "mi grupo"}» en JUNTO para llevar las cuentas juntos:\n${invitationUrl(data.linkCode)}\n\nCualquiera con el enlace puede unirse: compártelo solo con las personas del grupo. JUNTO registra gastos y pagos hechos por fuera; no mueve dinero.` });
     } catch {
       setError("No pudimos preparar el enlace. Reintenta.");
-    }
+    } finally { shareGate.current = false; }
   }
   const fresh = nuevo === "1";
   return (
@@ -128,6 +136,7 @@ export default function Invite() {
       <Label size={12} color={palette.muted}>
         Cualquiera con el enlace puede unirse: compártelo solo con tu grupo.
       </Label>
+      <ShareMessageSheet message={shareMessage} onClose={() => setShareMessage(null)} />
     </Screen>
   );
 }

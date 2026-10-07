@@ -151,3 +151,42 @@ test("expense categories are suggested from the description", () => {
   assert.equal(guessCategory("Entradas del cine"), "entretenimiento");
   assert.equal(guessCategory("Luz y agua"), null);
 });
+const { previewTryBill, tryBillShareMessage, quickBillSharePreview } = require("../apps/mobile/src/lib/tryBill.ts");
+test("anonymous demo shares all exact cents, not a rounded per-person fiction", () => {
+  const preview = previewTryBill("100", 3, 0, 0);
+  assert.deepEqual(preview.result.partes.map(p => p.total), [3334, 3333, 3333]);
+  const message = tryBillShareMessage(preview.input);
+  assert.match(message.body, /Persona 1: S\/ 33.34/);
+  assert.match(message.body, /Persona 2: S\/ 33.33/);
+  assert.match(message.body, /Persona 3: S\/ 33.33/);
+  assert.equal(message.preview.total, 10000);
+  assert.deepEqual(message.preview.rows.map(p => p.amount), [3334, 3333, 3333]);
+  assert.equal(message.preview.rows.reduce((sum, p) => sum + p.amount, 0), message.preview.total);
+});
+test("anonymous demo handles malformed amounts and tip overflow without crashing", () => {
+  assert.equal(previewTryBill("", 4, 0, 0).error, "");
+  for (const total of ["0", "-1", "1e3", "1.001", "10000000", "abc"]) {
+    const preview = previewTryBill(total, 3, 0, 0);
+    assert.ok(preview.error); assert.equal(preview.result, undefined);
+  }
+  assert.match(previewTryBill("9999999.99", 3, 0, 15).error, /no superar/);
+});
+test("anonymous birthday accounts for invitees and explicit extra tip", () => {
+  const preview = previewTryBill("180", 6, 1, 10);
+  assert.equal(preview.extras, 1800);
+  assert.equal(preview.result.montoTotal, 19800);
+  assert.deepEqual(preview.result.partes.map(p => p.total), [3960,3960,3960,3960,3960,0]);
+  assert.match(tryBillShareMessage(preview.input).body, /Persona 6: invitado\/a/);
+  assert.ok(previewTryBill("180", 6, 6, 0).error);
+});
+test("visual bill summary keeps invitees, extras, and confirmed amounts distinct", () => {
+  const input = previewTryBill("180", 6, 1, 10).input;
+  const preview = quickBillSharePreview(input, { p0: 1000 });
+  assert.equal(preview.total, 19800);
+  assert.match(preview.caption, /5 personas aportan · 1 invitado/);
+  assert.equal(preview.rows[5].tone, "guest");
+  assert.equal(preview.rows[5].amount, 0);
+  assert.match(preview.rows[0].detail, /Confirmado S\/ 10.00 · Pendiente S\/ 29.60/);
+  assert.equal(preview.rows[0].amount, 3960);
+  assert.match(preview.note, /18.00/);
+});

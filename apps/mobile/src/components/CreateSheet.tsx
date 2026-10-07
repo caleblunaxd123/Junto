@@ -9,6 +9,7 @@ type Option = { icon: keyof typeof Ionicons.glyphMap; title: string; subtitle: s
 
 /** The single "+" entry point: one question instead of four competing buttons. */
 export function CreateSheet({ visible, onClose, groups }: { visible: boolean; onClose: () => void; groups: { id: string }[] }) {
+  const [pressedOption, setPressedOption] = React.useState<string | null>(null);
   const options: Option[] = [
     { icon: "receipt-outline", title: "Una cuenta de hoy", subtitle: "Cena, cumple o salida. Tus invitados no necesitan la app.", href: "/(app)/cuentas/rapida", color: "#007B60", bg: palette.mint },
     ...(groups.length
@@ -39,7 +40,9 @@ export function CreateSheet({ visible, onClose, groups }: { visible: boolean; on
                 onClose();
                 router.push(option.href);
               }}
-              style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, backgroundColor: "white", borderWidth: 1, borderColor: palette.line, opacity: pressed ? 0.8 : 1 })}
+              onPressIn={() => setPressedOption(option.title)}
+              onPressOut={() => setPressedOption(null)}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, backgroundColor: "white", borderWidth: 1, borderColor: palette.line, opacity: pressedOption === option.title ? 0.8 : 1 }}
             >
               <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: option.bg, alignItems: "center", justifyContent: "center" }}>
                 <Ionicons name={option.icon} size={24} color={option.color} />
@@ -62,13 +65,16 @@ export function CreateSheet({ visible, onClose, groups }: { visible: boolean; on
 
 /** Floating "+" button. */
 export function AddButton({ onPress }: { onPress: () => void }) {
+  const [pressed, setPressed] = React.useState(false);
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Agregar"
       accessibilityHint="Dividir una cuenta, agregar un gasto, crear un grupo o unirte con un enlace"
       onPress={onPress}
-      style={({ pressed }) => ({
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
+      style={{
         position: "absolute",
         right: 20,
         bottom: 20,
@@ -84,7 +90,7 @@ export function AddButton({ onPress }: { onPress: () => void }) {
         shadowRadius: 10,
         shadowOffset: { width: 0, height: 4 },
         opacity: pressed ? 0.85 : 1,
-      })}
+      }}
     >
       <Ionicons name="add" size={34} color="white" />
     </Pressable>

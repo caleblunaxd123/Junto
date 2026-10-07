@@ -1,5 +1,5 @@
 import React from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, Share, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, ScrollView, View } from "react-native";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -10,6 +10,9 @@ import { centavosASoles } from "../../../src/types";
 import { parseMoney } from "../../../src/lib/expensePreview";
 import { Screen, Card, Label, Button, ErrorBox, palette, design } from "../../../src/components/ui/Design";
 import { Brand, FormField } from "../../../src/components/ui/Reference";
+import { ShareChannels, ShareMessageSheet, ShareSummary } from "../../../src/components/ui/ShareMessage";
+import type { ShareMessage } from "../../../src/lib/shareMessage";
+import { quickBillSharePreview } from "../../../src/lib/tryBill";
 const money = (cents: number) => `S/ ${centavosASoles(cents)}`;
 export default function QuickBillDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -23,7 +26,9 @@ export default function QuickBillDetail() {
   const [page, setPage] = React.useState(0);
   const [exporting, setExporting] = React.useState(false);
   const [imageReady, setImageReady] = React.useState(false);
+  const [reminder, setReminder] = React.useState<ShareMessage | null>(null);
   const image = React.useRef<View>(null);
+  const emailReport = React.useRef<View>(null);
   const { refetch } = query;
   useFocusEffect(React.useCallback(() => { refetch(); setError(""); }, [refetch]));
   const bill = query.data;
@@ -45,11 +50,6 @@ export default function QuickBillDetail() {
       details: [{ label: "Confirmado antes", value: money(paid) }, { label: "Pendiente después", value: money(part.total - entered) }],
       footnote: "Solo actualiza el registro. JUNTO no cobra ni transfiere dinero.",
     });
-  }
-  async function share(message?: string) {
-    if (!bill || query.isError) return;
-    try { await Share.share({ title: bill.datos.nombre, message: message || bill.mensajeBreve }); }
-    catch { setError("No pudimos abrir las opciones para compartir."); }
   }
   async function shareImage() {
     if (!bill || query.isError || !imageReady || exporting) return;
@@ -97,13 +97,19 @@ export default function QuickBillDetail() {
         {part && (entered === null || entered > part.total) && <ErrorBox message="Usa un monto válido entre cero y su parte." />}
         <Button title="Revisar y confirmar monto" disabled={disabled || entered === null || entered > (part?.total || 0)} onPress={confirmAmount} />
         {part && <Button title="Completar toda su parte" secondary disabled={disabled} onPress={() => setAmount(centavosASoles(part.total))} />}
-        {part && paid < part.total && <Button title="Preparar recordatorio de su pendiente" secondary disabled={query.isError} onPress={() => share(`${bill.datos.nombre} · JUNTO\n${part.nombre}, tu parte es ${money(part.total)}; falta confirmar ${money(part.total - paid)}.${bill.datos.cobrarA ? ` Aportar a ${bill.datos.cobrarA}.` : ""}\n${bill.datos.instrucciones}\nJUNTO no cobra ni transfiere dinero.`)} />}
+        {part && paid < part.total && <Button title="Preparar recordatorio de su pendiente" secondary disabled={query.isError} onPress={() => { setReminder({ subject: `JUNTO · ${bill.datos.nombre}`, preview: {
+          title: bill.datos.nombre, total: part.total - paid, totalLabel: "Falta confirmar", caption: bill.datos.cobrarA ? `Recibe: ${bill.datos.cobrarA}` : "Recordatorio de aporte", rowsHeading: "Aporte pendiente",
+          rows: [{ id: part.id, name: part.nombre, amount: part.total - paid, detail: `Su parte: ${money(part.total)} · Confirmado: ${money(paid)}` }],
+          payment: { recipient: bill.datos.cobrarA, instructions: bill.datos.instrucciones },
+          note: "La organización confirma los aportes después de comprobar que recibió el dinero.",
+        }, body: `${bill.datos.nombre} · JUNTO\n${part.nombre}, tu parte es ${money(part.total)}; falta confirmar ${money(part.total - paid)}.${bill.datos.cobrarA ? ` Aportar a ${bill.datos.cobrarA}.` : ""}\n${bill.datos.instrucciones || ""}\nConfirmaciones manuales de la organización. JUNTO no cobra ni transfiere dinero.` }); setSelected(undefined); }} />}
         <Button title="Cerrar sin cambios" secondary disabled={mutation.isPending} onPress={() => setSelected(undefined)} />
       </ScrollView></SafeAreaView></Modal>
       <Modal visible={preview} animationType="slide" onRequestClose={() => !exporting && setPreview(false)}><SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}><ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
         <Label size={24} weight="extra">Antes de compartir</Label><Label size={12}>Revisa los nombres, montos e instrucciones. Tú eliges la app y los destinatarios; no se envía automáticamente.</Label>
         {!!error && <ErrorBox message={error} />}
-        <Card><Label size={13} selectable>{bill.mensajeBreve}</Label></Card><Button title="Compartir mensaje" disabled={query.isError || exporting} onPress={() => share()} />
+        <ShareSummary reportRef={emailReport} message={{ subject: `JUNTO · ${bill.datos.nombre}`, body: bill.mensajeBreve, preview: quickBillSharePreview(bill.datos, bill.aportes) }} />
+        <ShareChannels reportRef={emailReport} message={{ subject: `JUNTO · ${bill.datos.nombre}`, body: bill.mensajeBreve, preview: quickBillSharePreview(bill.datos, bill.aportes) }} disabled={query.isError || exporting} />
         <View ref={image} collapsable={false} key={`${bill.version}-${page}`} onLayout={() => setImageReady(true)} style={{ padding: 20, gap: 12, backgroundColor: "#FFFCF7", borderRadius: 16 }}>
           <Brand compact /><Label weight="extra" size={23}>{bill.datos.nombre}</Label><Label size={13}>Total {money(bill.resultado.montoTotal)} · {bill.resultado.cantidadPagadores} aportan</Label>
           <View style={[design.row, { borderBottomWidth: 1, borderBottomColor: palette.line, paddingBottom: 8 }]}><Label size={12} weight="bold" style={{ flex: 1 }}>Persona</Label><Label size={12} weight="bold">Su parte / pendiente</Label></View>
@@ -115,6 +121,7 @@ export default function QuickBillDetail() {
         <Button title={`Compartir imagen${pages > 1 ? ` ${page + 1}/${pages}` : ""}`} loading={exporting} disabled={!imageReady || query.isError} onPress={shareImage} />
         <Button title="Volver al reparto" secondary disabled={exporting} onPress={() => setPreview(false)} />
       </ScrollView></SafeAreaView></Modal>
+      <ShareMessageSheet message={reminder} onClose={() => setReminder(null)} disabled={query.isError} />
     </>}
   </Screen>;
 }

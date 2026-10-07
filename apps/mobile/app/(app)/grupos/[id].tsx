@@ -31,6 +31,8 @@ import { PendingActions } from "../../../src/components/PendingActions";
 import { pendingActions } from "../../../src/lib/pending";
 import { memberLabels, meFirst } from "../../../src/lib/people";
 import { centavosASoles, type ActividadEvento } from "../../../src/types";
+import { ShareMessageSheet } from "../../../src/components/ui/ShareMessage";
+import { groupShareMessage, type ShareMessage } from "../../../src/lib/shareMessage";
 
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
 type Tab = "Gastos" | "Saldos" | "Actividad";
@@ -42,7 +44,7 @@ export default function Group() {
   const { data: group, isLoading, isRefetchError, isRefetching, refetch } = useGrupo(id);
   const [page, setPage] = useState(1);
   const expenses = useGastosGrupo(id, page);
-  const { data: payments = [], isError: paymentsError, refetch: refetchPayments } = usePagos();
+  const { data: payments = [], isError: paymentsError, isFetching: paymentsFetching, isLoading: paymentsLoading, refetch: refetchPayments } = usePagos();
   const refetchExpenses = expenses.refetch;
   const refreshAll = useCallback(() => {
     refetch();
@@ -53,6 +55,7 @@ export default function Group() {
   const [tab, setTab] = useState<Tab>("Gastos");
   const [menu, setMenu] = useState(false);
   const [error, setError] = useState("");
+  const [shareMessage, setShareMessage] = useState<ShareMessage | null>(null);
   const activity = useQuery<ActividadEvento[]>({
     queryKey: ["actividad", id],
     queryFn: () => api.get(`/actividad?grupoId=${id}`).then((r) => r.data),
@@ -66,6 +69,7 @@ export default function Group() {
   const actions = group ? pendingActions([group], groupPayments, user?.id) : [];
   const othersWaiting = groupPayments.filter((p) => p.pagadorId !== user?.id && p.receptorId !== user?.id);
   const goInvite = () => router.push(`/(app)/grupos/agregar-personas?grupoId=${id}`);
+  const shareUnavailable = !group || isRefetchError || paymentsError || isRefetching || paymentsFetching || paymentsLoading;
 
   function leave() {
     setMenu(false);
@@ -336,6 +340,7 @@ export default function Group() {
                     ))
                   )}
                   <Button title="Ver cómo se calcula" secondary onPress={() => router.push(`/(app)/cuentas/${id}`)} />
+                  <Button title="Compartir cuentas por WhatsApp o correo" secondary disabled={shareUnavailable} onPress={() => setShareMessage(groupShareMessage(group, groupPayments.length))} />
                 </>
               ) : activity.isLoading ? (
                 <ActivityIndicator color={palette.primary} />
@@ -371,6 +376,7 @@ export default function Group() {
           <SafeAreaView edges={["bottom"]} style={{ backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 12 }}>
             <Label accessibilityRole="header" size={22} weight="extra">{group?.nombre || "Tu grupo"}</Label>
             <Button title="Invitar personas" onPress={() => { setMenu(false); goInvite(); }} />
+            <Button title="Compartir cuentas por WhatsApp o correo" secondary disabled={shareUnavailable} onPress={() => { if (group) { setMenu(false); setShareMessage(groupShareMessage(group, groupPayments.length)); } }} />
             {group?.rolUsuario === "admin" && (
               <Button title="Editar nombre y tipo" secondary onPress={() => { setMenu(false); router.push(`/(app)/grupos/editar?grupoId=${id}`); }} />
             )}
@@ -384,6 +390,7 @@ export default function Group() {
           </SafeAreaView>
         </View>
       </Modal>
+      <ShareMessageSheet message={shareMessage} onClose={() => setShareMessage(null)} disabled={shareUnavailable} />
     </SafeAreaView>
   );
 }

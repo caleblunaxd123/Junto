@@ -1,5 +1,6 @@
 import axios from "axios";
 import nodemailer from "nodemailer";
+import { smtpConfiguration } from "../domain/emailConfig";
 
 /**
  * Correo transaccional (verificación, recuperación, bienvenida).
@@ -21,19 +22,11 @@ function sender() {
 
 let smtp: ReturnType<typeof nodemailer.createTransport> | undefined;
 function smtpTransport() {
-  smtp ??= nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: Number(process.env.SMTP_PORT) === 465,
-    connectionTimeout: 5000,
-    greetingTimeout: 5000,
-    socketTimeout: 8000,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  });
+  smtp ??= nodemailer.createTransport(smtpConfiguration(process.env));
   return smtp;
 }
 
-export async function deliver(message: Message): Promise<void> {
+export async function deliver(message: Message): Promise<boolean> {
   const provider = emailProvider();
   if (provider === "resend") {
     await axios.post(
@@ -41,15 +34,15 @@ export async function deliver(message: Message): Promise<void> {
       { from: sender(), to: [message.to], subject: message.subject, html: message.html, text: message.text },
       { headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` }, timeout: 8000 },
     );
-    return;
+    return true;
   }
   if (provider === "smtp") {
     await smtpTransport().sendMail({ from: sender(), ...message });
-    return;
+    return true;
   }
   if (process.env.NODE_ENV !== "production") {
     console.info(`[Email:dev] Para ${message.to} · ${message.subject}\n${message.text}`);
-    return;
+    return false;
   }
   throw new Error("No hay proveedor de correo configurado");
 }
@@ -72,8 +65,8 @@ export async function sendOTPEmail(
   email: string,
   nombre: string,
   otp: string,
-): Promise<void> {
-  await deliver({
+): Promise<boolean> {
+  return deliver({
     to: email,
     subject: "Tu código para cambiar la contraseña · JUNTO",
     text: `Hola ${nombre}. Tu código para cambiar la contraseña de JUNTO es ${otp}. Expira en 15 minutos. Si no lo pediste, ignora este correo.`,
@@ -94,8 +87,8 @@ export async function sendVerificationEmail(
   email: string,
   nombre: string,
   otp: string,
-): Promise<void> {
-  await deliver({
+): Promise<boolean> {
+  return deliver({
     to: email,
     subject: `${otp} es tu código de JUNTO`,
     text: `Hola ${nombre}. Tu código para verificar tu cuenta de JUNTO es ${otp}. Expira en 15 minutos.`,
