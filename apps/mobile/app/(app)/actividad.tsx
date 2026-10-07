@@ -55,6 +55,8 @@ export default function Activity() {
   const [error, setError] = React.useState("");
   const toAnswer = data.filter((e) => e.requiereAccion && e.pagoId);
   const rest = data.filter((e) => !(e.requiereAccion && e.pagoId));
+  const open = (e: ActividadEvento) =>
+    router.push(e.gastoId ? `/(app)/gastos/${e.gastoId}` : e.pagoId ? `/(app)/pagos/${e.pagoId}` : `/(app)/grupos/${e.grupoId}`);
 
   function answer(event: ActividadEvento, received: boolean) {
     Alert.alert(
@@ -105,12 +107,21 @@ export default function Activity() {
       ) : (
         <>
           {!!error && <ErrorBox message={error} />}
-          {toAnswer.map((e) => (
+          {toAnswer.map((e) => e.apruebaComo === "administrador" ? (
+            <Card key={e.id} style={{ backgroundColor: palette.lilac, borderColor: "#DCD0FF", padding: 14, gap: 8 }}>
+              <Label weight="bold" size={15}>{e.titulo} de {money(e.monto)}. ¿Lo apruebas?</Label>
+              <Label size={12} color={palette.muted}>{e.detalle.split(" · ")[0]} · {when(e.fecha)}</Label>
+              <Button compact title="Revisar comprobante" onPress={() => open(e)} />
+            </Card>
+          ) : (
             <Card key={e.id} style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", padding: 14, gap: 8 }}>
               <Label weight="bold" size={15}>
                 {e.titulo} {money(e.monto)}. ¿Lo recibiste?
               </Label>
               <Label size={12} color={palette.muted}>{e.detalle.split(" · ")[0]} · {when(e.fecha)}</Label>
+              <Pressable accessibilityRole="button" onPress={() => open(e)} style={{ minHeight: 40, justifyContent: "center" }}>
+                <Label size={13} weight="bold" color={palette.purple}>Ver el pago y su comprobante ›</Label>
+              </Pressable>
               <View style={{ flexDirection: "row", gap: 8 }}>
                 <View style={{ flex: 1 }}><Button compact title="Sí, lo recibí" disabled={resolve.isPending} onPress={() => answer(e, true)} /></View>
                 <View style={{ flex: 1 }}><Button compact secondary title="No" disabled={resolve.isPending} onPress={() => answer(e, false)} /></View>
@@ -127,13 +138,7 @@ export default function Activity() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`${e.titulo}. ${money(e.monto)}. ${impact(e)?.text ?? ""}. ${e.detalle}. ${when(e.fecha)}`}
-              onPress={() =>
-                router.push(
-                  e.gastoId
-                    ? `/(app)/gastos/${e.gastoId}`
-                    : `/(app)/grupos/${e.grupoId}`,
-                )
-              }
+              onPress={() => open(e)}
             >
               <Card style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14 }}>
                 <View style={{ width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: e.tipo === "pago" ? palette.mint : palette.lilac }}>

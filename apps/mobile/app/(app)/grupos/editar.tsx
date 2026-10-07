@@ -1,5 +1,5 @@
 import React from "react";
-import { ActivityIndicator, BackHandler, Image, Pressable, TextInput, View } from "react-native";
+import { ActivityIndicator, BackHandler, Image, Pressable, Switch, TextInput, View } from "react-native";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
@@ -7,7 +7,7 @@ import { useEditarGrupo, useGrupo } from "../../../src/hooks/useGrupos";
 import { Screen, Card, Label, Button, ErrorBox, design, palette } from "../../../src/components/ui/Design";
 import { FormField, ReferenceHero } from "../../../src/components/ui/Reference";
 import { art } from "../../../src/components/ui/Artwork";
-import type { GrupoTipo } from "../../../src/types";
+import type { AprobacionPagos, GrupoTipo } from "../../../src/types";
 
 const types: { id: GrupoTipo; label: string; image: typeof art.travel }[] = [
   { id: "viaje", label: "Viaje", image: art.travel },
@@ -24,17 +24,17 @@ export default function EditGroup() {
   const query = useGrupo(grupoId);
   const focused = useIsFocused();
   const update = useEditarGrupo(grupoId);
-  const [draft, setDraft] = React.useState<{ id: string; nombre: string; tipo: GrupoTipo; descripcion: string }>();
+  const [draft, setDraft] = React.useState<{ id: string; nombre: string; tipo: GrupoTipo; descripcion: string; aprobacionPagos: AprobacionPagos }>();
   const [error, setError] = React.useState("");
   React.useEffect(() => {
     if (focused && query.data && draft?.id !== grupoId) {
-      setDraft({ id: grupoId, nombre: query.data.nombre, tipo: query.data.tipo, descripcion: query.data.descripcion || "" });
+      setDraft({ id: grupoId, nombre: query.data.nombre, tipo: query.data.tipo, descripcion: query.data.descripcion || "", aprobacionPagos: query.data.aprobacionPagos ?? "receptor" });
       setError("");
     }
   }, [focused, query.data, grupoId, draft?.id]);
   React.useEffect(() => { if (!focused) setDraft(undefined); }, [focused]);
   const group = query.data;
-  const dirty = !!group && !!draft && (draft.nombre.trim() !== group.nombre || draft.tipo !== group.tipo || draft.descripcion.trim() !== (group.descripcion || ""));
+  const dirty = !!group && !!draft && (draft.nombre.trim() !== group.nombre || draft.tipo !== group.tipo || draft.descripcion.trim() !== (group.descripcion || "") || draft.aprobacionPagos !== (group.aprobacionPagos ?? "receptor"));
   const leave = React.useCallback(() => {
     if (update.isPending) return;
     function goBack() {
@@ -56,7 +56,7 @@ export default function EditGroup() {
     if (!draft || !dirty || update.isPending || draft.nombre.trim().length < 2) return;
     setError("");
     try {
-      await update.mutateAsync({ nombre: draft.nombre.trim(), tipo: draft.tipo, descripcion: draft.descripcion.trim() });
+      await update.mutateAsync({ nombre: draft.nombre.trim(), tipo: draft.tipo, descripcion: draft.descripcion.trim(), aprobacionPagos: draft.aprobacionPagos });
       router.replace(`/(app)/grupos/${grupoId}`);
     } catch (err) {
       const response = (err as { response?: { data?: { error?: string } } }).response;
@@ -85,9 +85,32 @@ export default function EditGroup() {
         <Label weight="bold">Descripción (opcional)</Label>
         <TextInput accessibilityLabel="Descripción del grupo" value={draft.descripcion} onChangeText={(descripcion) => setDraft({ ...draft, descripcion })} editable={!update.isPending} maxLength={500} multiline placeholder="Ej. Alquiler, compras y servicios del mes" style={[design.input, { minHeight: 90, textAlignVertical: "top" }]} />
         <Label size={12} color={palette.muted}>{draft.descripcion.length}/500 caracteres</Label>
+        <Label weight="extra" size={20}>¿Quién aprueba los pagos?</Label>
+        <Card style={{ gap: 10 }}>
+          <View style={[design.row, { gap: 12 }]}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Label weight="bold">La administración también aprueba</Label>
+              <Label size={12} color={palette.muted}>
+                {draft.aprobacionPagos === "administrador"
+                  ? "Quien recibe el dinero o un administrador aprueba cada pago con su comprobante. Nadie aprueba su propio pago."
+                  : "Solo quien recibe el dinero aprueba cada pago."}
+              </Label>
+            </View>
+            <Switch
+              accessibilityLabel="La administración del grupo también aprueba los pagos"
+              value={draft.aprobacionPagos === "administrador"}
+              disabled={update.isPending}
+              onValueChange={(on) => setDraft({ ...draft, aprobacionPagos: on ? "administrador" : "receptor" })}
+              trackColor={{ true: palette.primary }}
+            />
+          </View>
+          <Label size={12} color={palette.muted}>
+            Yape y Plin no permiten que una app verifique transferencias entre personas: por eso alguien revisa la captura. Si un administrador aprueba un pago que no llegó, quien debía recibirlo puede marcar «No me llegó» y la deuda vuelve.
+          </Label>
+        </Card>
         <Card style={{ backgroundColor: palette.mint }}>
           <Label weight="bold">Tus cuentas quedan intactas</Label>
-          <Label size={13}>Cambiar el nombre, la descripción o el tipo no cambia integrantes, invitaciones, gastos, pagos ni la parte de cada persona.</Label>
+          <Label size={13}>Cambiar estos datos no cambia integrantes, invitaciones, gastos, pagos ya aprobados ni la parte de cada persona.</Label>
         </Card>
         {!!error && <ErrorBox message={error} />}
         <Button title="Guardar cambios" loading={update.isPending} disabled={!dirty || draft.nombre.trim().length < 2} onPress={save} />

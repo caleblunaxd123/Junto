@@ -1,5 +1,6 @@
 import React from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { AppDialog as Alert } from "./ui/AppDialog";
 import { Button, Card, Label, ErrorBox, palette } from "./ui/Design";
@@ -71,10 +72,26 @@ export function PendingActions({ actions, showGroup = true }: { actions: Pending
                 {action.metodo ? ` por ${methods[action.metodo] ?? action.metodo}` : ""}. ¿Lo recibiste?
               </Label>
               {where}
+              {action.conComprobante && (
+                <Pressable accessibilityRole="button" accessibilityLabel={`Ver el comprobante del pago de ${action.persona}`} onPress={() => router.push(`/(app)/pagos/${action.pagoId}`)} style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 40 }}>
+                  <Ionicons name="receipt-outline" size={18} color={palette.purple} />
+                  <Label size={13} weight="bold" color={palette.purple}>Ver comprobante</Label>
+                </Pressable>
+              )}
               <View style={{ flexDirection: "row", gap: 8 }}>
                 <View style={{ flex: 1 }}><Button compact title="Sí, lo recibí" disabled={resolve.isPending} onPress={() => answer(action, true)} /></View>
                 <View style={{ flex: 1 }}><Button compact secondary title="No" disabled={resolve.isPending} onPress={() => answer(action, false)} /></View>
               </View>
+            </Card>
+          );
+        if (action.kind === "revisar")
+          return (
+            <Card key={action.key} style={{ backgroundColor: palette.lilac, borderColor: "#DCD0FF", padding: 14, gap: 8 }}>
+              <Label weight="bold" size={15}>
+                {action.persona} registró un pago de {money(action.monto)} a {action.receptor}{action.conComprobante ? " con comprobante" : ""}. ¿Lo apruebas?
+              </Label>
+              {where}
+              <Button compact title={action.conComprobante ? "Revisar comprobante" : "Revisar pago"} accessibilityHint="Abre el pago para aprobarlo o rechazarlo" onPress={() => router.push(`/(app)/pagos/${action.pagoId}`)} />
             </Card>
           );
         if (action.kind === "pagar")

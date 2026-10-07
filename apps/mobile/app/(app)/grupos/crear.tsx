@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, TextInput, Pressable, Image, ScrollView } from "react-native";
+import { View, TextInput, Pressable, Image, ScrollView, Switch } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useCrearGrupo } from "../../../src/hooks/useGrupos";
@@ -30,6 +30,8 @@ export default function CreateGroup() {
   const [manual, setManual] = useState(false);
   const [createdId, setCreatedId] = useState("");
   const [busy, setBusy] = useState(false);
+  // Whoever creates the group usually organizes and collects: they may approve uploaded vouchers too.
+  const [adminApproves, setAdminApproves] = useState(true);
   const create = useCrearGrupo();
 
   function addPerson() {
@@ -62,7 +64,7 @@ export default function CreateGroup() {
       setBusy(true);
       setError("");
       if (!groupId) {
-        const group = await create.mutateAsync({ nombre: name.trim(), tipo: type });
+        const group = await create.mutateAsync({ nombre: name.trim(), tipo: type, aprobacionPagos: adminApproves ? "administrador" : "receptor" });
         groupId = group.id;
         setCreatedId(groupId);
       }
@@ -137,6 +139,22 @@ export default function CreateGroup() {
         {!picked && !!guessGroupType(name) && (
           <Label size={12} color={palette.muted}>Lo elegimos por el nombre; puedes cambiarlo.</Label>
         )}
+      </View>
+
+      <View style={[design.row, { gap: 12, padding: 12, borderRadius: 16, backgroundColor: palette.lilac }]}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Label weight="bold" size={14}>Yo también apruebo los pagos</Label>
+          <Label size={12} color={palette.muted}>
+            Cada integrante sube la captura de su Yape o Plin y tú (o quien recibe el dinero) la apruebas. Puedes cambiarlo después.
+          </Label>
+        </View>
+        <Switch
+          accessibilityLabel="Yo también apruebo los pagos del grupo"
+          value={adminApproves}
+          disabled={!!createdId || busy}
+          onValueChange={setAdminApproves}
+          trackColor={{ true: palette.primary }}
+        />
       </View>
 
       <View style={{ gap: 8 }}>

@@ -6,8 +6,10 @@ import type {
   Saldo,
   Gasto,
   Pago,
+  PagoDetalle,
   AiExpenseProposal,
   GrupoTipo,
+  AprobacionPagos,
 } from "../types";
 
 export function useGrupos() {
@@ -40,6 +42,7 @@ export function useCrearGrupo() {
       nombre: string;
       descripcion?: string;
       tipo: string;
+      aprobacionPagos?: AprobacionPagos;
       fecha_inicio?: string;
       fecha_fin?: string;
     }) => api.post<Grupo>("/grupos", data).then((r) => r.data),
@@ -50,7 +53,7 @@ export function useCrearGrupo() {
 export function useEditarGrupo(grupoId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { nombre: string; tipo: GrupoTipo; descripcion: string }) =>
+    mutationFn: (data: { nombre?: string; tipo?: GrupoTipo; descripcion?: string; aprobacionPagos?: AprobacionPagos }) =>
       api.put<GrupoConBalance>(`/grupos/${grupoId}`, data).then((r) => r.data),
     onSuccess: async () => {
       await Promise.all([
@@ -145,5 +148,25 @@ export function useResolverPago() {
       queryClient.invalidateQueries({ queryKey: ["grupos"] });
       queryClient.invalidateQueries({ queryKey: ["saldos"] });
     },
+  });
+}
+
+/** One payment with its voucher data and what the viewer may do with it. */
+export function usePago(id: string) {
+  return useQuery<PagoDetalle>({
+    queryKey: ["pagos", "detalle", id],
+    queryFn: () => api.get(`/pagos/${id}`).then((r) => r.data),
+    enabled: !!id,
+  });
+}
+
+/** The voucher image, only fetched when the viewer may see it. Never cached on disk. */
+export function useComprobanteImagen(pagoId: string, enabled: boolean) {
+  return useQuery<{ mime: string; imagen: string }>({
+    queryKey: ["pagos", "comprobante", pagoId],
+    queryFn: () => api.get(`/pagos/${pagoId}/comprobante`, { timeout: 30_000 }).then((r) => r.data),
+    enabled: enabled && !!pagoId,
+    staleTime: 5 * 60_000,
+    gcTime: 5 * 60_000,
   });
 }

@@ -67,7 +67,8 @@ export default function Group() {
   const me = group?.resumen.cuentas.find((a) => a.usuarioId === user?.id);
   const groupPayments = payments.filter((p) => p.grupoId === id && p.estado === "reportado");
   const actions = group ? pendingActions([group], groupPayments, user?.id) : [];
-  const othersWaiting = groupPayments.filter((p) => p.pagadorId !== user?.id && p.receptorId !== user?.id);
+  // Payments between others that the viewer cannot approve (approvable ones are cards above).
+  const othersWaiting = groupPayments.filter((p) => p.pagadorId !== user?.id && p.receptorId !== user?.id && !p.permisos?.aprobar);
   const goInvite = () => router.push(`/(app)/grupos/agregar-personas?grupoId=${id}`);
   const shareUnavailable = !group || isRefetchError || paymentsError || isRefetching || paymentsFetching || paymentsLoading;
 
@@ -191,9 +192,11 @@ export default function Group() {
                 </Card>
               )}
               {othersWaiting.map((p) => (
-                <Label key={p.id} size={12} color={palette.muted}>
-                  {label(p.pagadorId, p.pagador.nombre)} registró un pago de {money(p.monto)} a {label(p.receptorId, p.receptor.nombre)}; falta que lo confirme.
-                </Label>
+                <Pressable key={p.id} accessibilityRole="button" onPress={() => router.push(`/(app)/pagos/${p.id}`)} style={{ minHeight: 44, justifyContent: "center" }}>
+                  <Label size={12} color={palette.muted}>
+                    {label(p.pagadorId, p.pagador.nombre)} registró un pago de {money(p.monto)} a {label(p.receptorId, p.receptor.nombre)}; falta que lo aprueben. <Label size={12} weight="bold" color={palette.purple}>Ver ›</Label>
+                  </Label>
+                </Pressable>
               ))}
               {me && group.resumen.totalGastado > 0 && (
                 <Pressable
@@ -279,11 +282,13 @@ export default function Group() {
                     {expenses.data?.gastos.map((e) => {
                       const mine = e.participantes.find((p) => p.usuarioId === user?.id)?.montoAsignado;
                       const payer = e.pagadoPor === user?.id ? "Pagaste tú" : `Pagó ${label(e.pagadoPor, e.pagador.nombre)}`;
+                      const comments = e._count?.comentarios ?? 0;
+                      const commentsText = comments ? ` · ${comments} ${comments === 1 ? "comentario" : "comentarios"}` : "";
                       return (
                         <Pressable
                           key={e.id}
                           accessibilityRole="button"
-                          accessibilityLabel={`${e.descripcion}, ${money(e.montoTotal)}. ${payer}. ${mine ? `Tu parte ${money(mine)}` : "No participas"}`}
+                          accessibilityLabel={`${e.descripcion}, ${money(e.montoTotal)}. ${payer}. ${mine ? `Tu parte ${money(mine)}` : "No participas"}${commentsText ? `.${commentsText.slice(2)}` : ""}`}
                           onPress={() => router.push(`/(app)/gastos/${e.id}`)}
                         >
                           <Card style={{ flexDirection: "row", padding: 12, gap: 12, alignItems: "center" }}>
@@ -293,6 +298,12 @@ export default function Group() {
                               <Label size={12} color={palette.muted}>
                                 {payer} · {new Date(e.fecha).toLocaleDateString("es-PE", { day: "numeric", month: "short" })}
                               </Label>
+                              {!!comments && (
+                                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                                  <Ionicons name="chatbubble-outline" size={13} color={palette.purple} />
+                                  <Label size={12} weight="bold" color={palette.purple}>{commentsText.slice(3)}</Label>
+                                </View>
+                              )}
                             </View>
                             <View style={{ alignItems: "flex-end", gap: 2 }}>
                               <Label weight="extra" size={16}>{money(e.montoTotal)}</Label>
@@ -339,6 +350,9 @@ export default function Group() {
                       </Card>
                     ))
                   )}
+                  <Label size={12} color={palette.muted}>
+                    Un pago baja la deuda cuando lo aprueba quien recibe el dinero{group.aprobacionPagos === "administrador" ? " o la administración del grupo" : ""}.
+                  </Label>
                   <Button title="Ver cómo se calcula" secondary onPress={() => router.push(`/(app)/cuentas/${id}`)} />
                   <Button title="Compartir cuentas por WhatsApp o correo" secondary disabled={shareUnavailable} onPress={() => setShareMessage(groupShareMessage(group, group.pagosPorConfirmar ?? groupPayments.length))} />
                 </>
@@ -366,8 +380,15 @@ export default function Group() {
         )}
       </ScrollView>
       {group && (
-        <View style={{ padding: 12, borderTopWidth: 1, borderColor: palette.line, backgroundColor: palette.background }}>
-          <Button title="＋ Agregar gasto" onPress={() => router.push(`/(app)/gastos/agregar?grupoId=${id}`)} />
+        <View style={{ flexDirection: "row", gap: 8, padding: 12, borderTopWidth: 1, borderColor: palette.line, backgroundColor: palette.background }}>
+          {group.balanceUsuario.debes > 0 && (
+            <View style={{ flex: 3 }}>
+              <Button title="Subir comprobante" secondary accessibilityHint="Sube la captura de tu Yape o Plin para registrar tu pago" onPress={() => router.push(`/(app)/pagos/pagar?grupoId=${id}&subir=1`)} />
+            </View>
+          )}
+          <View style={{ flex: 2 }}>
+            <Button title={group.balanceUsuario.debes > 0 ? "＋ Gasto" : "＋ Agregar gasto"} accessibilityHint="Registrar un gasto del grupo" onPress={() => router.push(`/(app)/gastos/agregar?grupoId=${id}`)} />
+          </View>
         </View>
       )}
       <Modal transparent visible={menu} animationType="slide" onRequestClose={() => setMenu(false)}>
@@ -378,7 +399,7 @@ export default function Group() {
             <Button title="Invitar personas" onPress={() => { setMenu(false); goInvite(); }} />
             <Button title="Compartir cuentas por WhatsApp o correo" secondary disabled={shareUnavailable} onPress={() => { if (group) { setMenu(false); setShareMessage(groupShareMessage(group, group.pagosPorConfirmar ?? groupPayments.length)); } }} />
             {group?.rolUsuario === "admin" && (
-              <Button title="Editar nombre y tipo" secondary onPress={() => { setMenu(false); router.push(`/(app)/grupos/editar?grupoId=${id}`); }} />
+              <Button title="Editar grupo y quién aprueba los pagos" secondary onPress={() => { setMenu(false); router.push(`/(app)/grupos/editar?grupoId=${id}`); }} />
             )}
             <Button title="Cómo se calculan las cuentas" secondary onPress={() => { setMenu(false); router.push(`/(app)/cuentas/${id}`); }} />
             <Pressable accessibilityRole="button" onPress={leave} style={{ minHeight: 48, alignItems: "center", justifyContent: "center" }}>

@@ -54,7 +54,7 @@ export async function registerForPush() {
   }
 }
 
-/** Opens the group a notification is about. Returns a cleanup function. */
+/** Opens what a notification is about (expense, payment or group). Returns a cleanup function. */
 export function listenForNotificationTaps(router: Router) {
   let remove: (() => void) | undefined;
   let cancelled = false;
@@ -64,8 +64,14 @@ export function listenForNotificationTaps(router: Router) {
       const Notifications: NotificationsModule = await import("expo-notifications");
       if (cancelled) return;
       const open = (data: Record<string, unknown> | undefined) => {
-        const grupoId = typeof data?.grupoId === "string" ? data.grupoId : null;
-        if (grupoId && /^[0-9a-f-]{36}$/i.test(grupoId)) router.push(`/(app)/grupos/${grupoId}`);
+        const id = (key: string) => (typeof data?.[key] === "string" && /^[0-9a-f-]{36}$/i.test(data[key] as string) ? (data[key] as string) : null);
+        // A comment or a payment opens exactly that; anything else opens its group.
+        const gastoId = id("gastoId");
+        const pagoId = id("pagoId");
+        const grupoId = id("grupoId");
+        if (gastoId) router.push(`/(app)/gastos/${gastoId}`);
+        else if (pagoId) router.push(`/(app)/pagos/${pagoId}`);
+        else if (grupoId) router.push(`/(app)/grupos/${grupoId}`);
       };
       const subscription = Notifications.addNotificationResponseReceivedListener((response) =>
         open(response.notification.request.content.data),

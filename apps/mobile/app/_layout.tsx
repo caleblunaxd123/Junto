@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { Stack } from "expo-router";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { ShareIntentProvider } from "expo-share-intent";
 import { queryClient } from "../src/lib/queryClient";
 import {
   useFonts,
@@ -15,7 +16,7 @@ import { useAuthStore } from "../src/store/auth.store";
 import { DialogHost } from "../src/components/ui/AppDialog";
 import { OfflineBanner } from "../src/components/ui/OfflineBanner";
 import { Button, Label, palette } from "../src/components/ui/Design";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import type { ErrorBoundaryProps } from "expo-router";
 import "../global.css";
 
@@ -51,9 +52,12 @@ function RootLayoutInner() {
 
 export default function RootLayout() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <RootLayoutInner />
-    </QueryClientProvider>
+    // Receives images shared to JUNTO on Android; inert on web and where the native module is absent.
+    <ShareIntentProvider options={{ resetOnBackground: true, disabled: Platform.OS !== "android" }}>
+      <QueryClientProvider client={queryClient}>
+        <RootLayoutInner />
+      </QueryClientProvider>
+    </ShareIntentProvider>
   );
 }
 

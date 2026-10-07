@@ -1,5 +1,7 @@
 import React, { useEffect } from "react";
 import { Redirect, Tabs, useRouter } from "expo-router";
+import { useShareIntentContext } from "expo-share-intent";
+import { setSharedVoucher } from "../../src/lib/sharedVoucher";
 import { listenForNotificationTaps, registerForPush } from "../../src/lib/push";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -14,6 +16,16 @@ export default function AppLayout() {
     registerForPush();
     return listenForNotificationTaps(router);
   }, [isAuthenticated, router]);
+  // "Compartir → JUNTO" from WhatsApp, Yape or the gallery (Android): ask which group it is for.
+  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
+  useEffect(() => {
+    if (!isAuthenticated || !hasShareIntent) return;
+    const image = shareIntent.files?.find((file) => file.mimeType?.startsWith("image/"));
+    resetShareIntent();
+    if (!image) return;
+    setSharedVoucher({ uri: image.path, mimeType: image.mimeType, size: image.size ?? undefined });
+    router.push("/(app)/pagos/compartido");
+  }, [isAuthenticated, hasShareIntent, shareIntent, resetShareIntent, router]);
   if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
   const screens: [string, string, keyof typeof Ionicons.glyphMap][] = [
     ["index", "Inicio", "home-outline"],
@@ -68,6 +80,8 @@ export default function AppLayout() {
         "gastos/agregar",
         "gastos/editar",
         "pagos/pagar",
+        "pagos/[id]",
+        "pagos/compartido",
         "perfil/editar",
         "perfil/eliminar",
       ].map((name) => (

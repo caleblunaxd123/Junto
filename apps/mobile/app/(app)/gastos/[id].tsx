@@ -9,6 +9,7 @@ import { useGrupo } from "../../../src/hooks/useGrupos";
 import { Gasto, centavosASoles } from "../../../src/types";
 import { ShareMessageSheet } from "../../../src/components/ui/ShareMessage";
 import { expenseShareMessage, type ShareMessage } from "../../../src/lib/shareMessage";
+import { Comments } from "../../../src/components/Comments";
 import {
   Screen,
   Card,
@@ -107,6 +108,7 @@ export default function ExpenseDetail() {
               <Label>{expense.notas}</Label>
             </Card>
           )}
+          <Comments gastoId={expense.id} hint="¿Algo que aclarar? Por ejemplo «¿Incluye la propina?» o «Te pago el viernes»." />
           <Button title="Compartir gasto por WhatsApp o correo" secondary disabled={!group || remove.isPending} onPress={() => { try { setShareMessage(expenseShareMessage(expense, group?.nombre || "Mi grupo")); } catch (err) { setError((err as Error).message); } }} />
           <ShareMessageSheet message={shareMessage} onClose={() => setShareMessage(null)} disabled={isError || remove.isPending} />
           <Button

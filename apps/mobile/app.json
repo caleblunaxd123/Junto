@@ -40,7 +40,14 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-share-intent",
+        {
+          "androidIntentFilters": ["image/*"],
+          "disableIOS": true
+        }
+      ]
     ],
     "scheme": "junto",
     "experiments": {

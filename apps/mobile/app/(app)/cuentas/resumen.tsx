@@ -108,9 +108,7 @@ export default function AccountsOverview() {
                   <Pressable
                     accessibilityRole="button"
                     key={payment.id}
-                    onPress={() =>
-                      router.push(`/(app)/grupos/${payment.grupoId}`)
-                    }
+                    onPress={() => router.push(`/(app)/pagos/${payment.id}`)}
                   >
                     <Label size={13}>
                       {payment.receptorId === user?.id
@@ -120,7 +118,7 @@ export default function AccountsOverview() {
                           : `${payment.pagador.nombre.split(" ")[0]} → ${payment.receptor.nombre.split(" ")[0]}: ${money(payment.monto)}`}
                     </Label>
                     <Label size={12} color={palette.muted}>
-                      {payment.receptorId === user?.id ? "Confirmar en el grupo ›" : "Ver grupo ›"}
+                      {payment.receptorId === user?.id ? "Confirmar ›" : payment.permisos?.aprobar ? "Revisar y aprobar ›" : "Ver pago ›"}
                     </Label>
                   </Pressable>
                 ))}

@@ -41,11 +41,15 @@ export interface GrupoMiembro {
   usuario: Pick<Usuario, "id" | "nombre" | "email" | "fotoUrl"> & { celular?: string | null };
 }
 
+/** "receptor": only who receives approves a payment. "administrador": who receives or a group admin. */
+export type AprobacionPagos = "receptor" | "administrador";
+
 export interface Grupo {
   id: string;
   nombre: string;
   descripcion?: string | null;
   tipo: GrupoTipo;
+  aprobacionPagos?: AprobacionPagos;
   creadoPor: string;
   linkInvitacion?: string | null;
   fechaCreacion: string;
@@ -113,6 +117,7 @@ export interface Gasto {
   participantes: GastoParticipante[];
   pagador: Pick<Usuario, "id" | "nombre" | "fotoUrl">;
   creador: Pick<Usuario, "id" | "nombre">;
+  _count?: { comentarios: number };
 }
 
 export interface AiExpenseProposal {
@@ -157,7 +162,63 @@ export interface Pago {
   fechaPago: string;
   pagador: Pick<Usuario, "id" | "nombre" | "fotoUrl">;
   receptor: Pick<Usuario, "id" | "nombre" | "fotoUrl">;
-  grupo: Pick<Grupo, "id" | "nombre">;
+  grupo: Pick<Grupo, "id" | "nombre" | "aprobacionPagos">;
+  /** Who approved or rejected it (the receiver or an admin). */
+  resueltoPor?: string | null;
+  resolutor?: Pick<Usuario, "id" | "nombre"> | null;
+  comprobante?: { id: string; app?: string | null; montoLeido?: number | null } | null;
+  _count?: { comentarios: number };
+  /** What the viewer may do with this payment, computed by the server. */
+  permisos?: PermisosPago;
+}
+
+export interface PermisosPago {
+  aprobar: boolean;
+  /** The receiver may say an admin-approved payment never arrived. */
+  marcarNoRecibido: boolean;
+  verComprobante: boolean;
+}
+
+export interface PagoDetalle extends Omit<Pago, "comprobante"> {
+  permisos: PermisosPago;
+  aprobadores: { id: string; nombre: string; rol: "receptor" | "administrador" }[];
+  comprobante: null | {
+    id: string;
+    app: string | null;
+    montoLeido: number | null;
+    imagenDisponible: boolean;
+    operacion?: string | null;
+    destinatarioLeido?: string | null;
+    fechaLeida?: string | null;
+    codigoSeguridad?: string | null;
+  };
+}
+
+/** What JUNTO read from a Yape/Plin/transfer screenshot. Always a proposal to review. */
+export interface LecturaComprobante {
+  comprobanteId: string;
+  leido: boolean;
+  app: MetodoPago | null;
+  monto: number | null;
+  candidatos: number[];
+  operacion: string | null;
+  destinatario: string | null;
+  fecha: string | null;
+  codigoSeguridad: string | null;
+  sugerenciaReceptorId: string | null;
+  duplicado: string | null;
+  advertencias: string[];
+}
+
+export interface Comentario {
+  id: string;
+  texto: string;
+  eliminado: boolean;
+  fechaCreacion: string;
+  autor: Pick<Usuario, "id" | "nombre" | "fotoUrl">;
+  mio: boolean;
+  puedeEliminar: boolean;
+  reportadoPorMi: boolean;
 }
 
 // ─── Reminders ────────────────────────────────────────────────────────────────
@@ -195,6 +256,8 @@ export interface ActividadEvento {
   tuParte?: number | null;
   pagaste?: boolean;
   requiereAccion: boolean;
+  /** For a payment waiting on the viewer: as who they decide. */
+  apruebaComo?: "receptor" | "administrador" | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

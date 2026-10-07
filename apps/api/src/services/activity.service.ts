@@ -80,6 +80,8 @@ export async function getActivity(userId: string, grupoId?: string) {
       id: `payment-${p.id}`,
       tipo: 'pago',
       ...describePayment(p, userId, approves.has(p.grupoId)),
+      // As who the viewer decides a waiting payment; null when it is not theirs to decide.
+      apruebaComo: p.estado !== 'reportado' || p.pagadorId === userId ? null : p.receptorId === userId ? 'receptor' : approves.has(p.grupoId) ? 'administrador' : null,
       monto: p.monto,
       fecha: p.fechaResolucion || p.fechaPago,
       grupoId: p.grupoId,
