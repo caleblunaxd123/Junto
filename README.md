@@ -69,7 +69,7 @@ junto/
 
 ## Validación y estado de publicación
 
-`npm run test --workspace=apps/api`, `node ops/test-mobile-ux.cjs`, `node ops/test-release-config.cjs`, `npm run build:api`, `npm run typecheck --workspace=apps/mobile` y `npm run lint --workspace=apps/mobile`.
+`npm run test --workspace=apps/api`, `node ops/test-mobile-ux.cjs`, `node ops/test-hardening.cjs` (con la API local en 3005), `node ops/test-release-config.cjs`, `npm run build:api`, `npm run typecheck --workspace=apps/mobile` y `npm run lint --workspace=apps/mobile`.
 
 La base local de QA usa localhost:5433. `ops/apply-quick-bills-local.cjs` aplica únicamente migraciones aditivas locales y conserva los registros existentes. Los scripts `ops/test-*.cjs` de integración crean datos ficticios; no envían pagos ni mensajes. Las migraciones de producción deben revisarse y aplicarse con copia de seguridad, no con un reset.
 

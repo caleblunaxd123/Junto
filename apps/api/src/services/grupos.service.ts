@@ -123,7 +123,7 @@ export async function invitarPorCelular(grupoId: string, celular: string, invita
   });
   if (!miembro) throw new Error('No perteneces a este grupo');
 
-  const usuario = await prisma.usuario.findFirst({ where: { celular } });
+  const usuario = await prisma.usuario.findFirst({ where: { celular, activo: true } });
   if (!usuario) {
     return { found: false, mensaje: 'Usuario no encontrado. Comparte el link de invitación.' };
   }
@@ -170,8 +170,23 @@ export async function salirDeGrupo(grupoId: string, usuarioId: string) {
   );
   if (tieneDeuda) throw new Error('Debes saldar tus deudas antes de salir del grupo');
 
-  await prisma.grupoMiembro.update({
-    where: { id: miembro.id },
-    data: { activo: false },
+  await prisma.$transaction(async (tx) => {
+    // A group must never be left without an administrator: hand the role to the longest-standing member.
+    if (miembro.rol === 'admin') {
+      const otrosAdmins = await tx.grupoMiembro.count({
+        where: { grupoId, activo: true, rol: 'admin', usuarioId: { not: usuarioId } },
+      });
+      if (otrosAdmins === 0) {
+        const sucesor = await tx.grupoMiembro.findFirst({
+          where: { grupoId, activo: true, usuarioId: { not: usuarioId } },
+          orderBy: { fechaUnion: 'asc' },
+        });
+        if (sucesor) await tx.grupoMiembro.update({ where: { id: sucesor.id }, data: { rol: 'admin' } });
+      }
+    }
+    await tx.grupoMiembro.update({
+      where: { id: miembro.id },
+      data: { activo: false },
+    });
   });
 }

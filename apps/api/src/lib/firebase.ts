@@ -33,7 +33,9 @@ export async function sendPushNotification(
   body: string,
   data?: Record<string, string>
 ): Promise<void> {
-  if (!firebaseInitialized) return;
+  // Delivery goes through Expo's push service, which does not need Firebase credentials here
+  // (FCM keys are configured in the Expo project). Only real Expo tokens are accepted.
+  if (!/^Expo(nent)?PushToken\[.+\]$/.test(expoPushToken)) return;
 
   try {
     // Expo push token format: ExponentPushToken[...]

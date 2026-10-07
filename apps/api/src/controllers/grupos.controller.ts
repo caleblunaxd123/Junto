@@ -225,7 +225,7 @@ export async function agregarMiembrosBulk(
   try {
     const { z } = await import("zod");
     const { celulares } = z
-      .object({ celulares: z.array(z.string()) })
+      .object({ celulares: z.array(z.string()).min(1).max(30) })
       .parse(req.body);
     const results = await Promise.all(
       celulares.map((cel: string) =>

@@ -15,6 +15,8 @@ const JWT_SECRET = process.env.JWT_SECRET as string;
 const JWT_EXPIRY = process.env.JWT_EXPIRY || "15m";
 const REFRESH_EXPIRY_DAYS = 30;
 
+const DUMMY_HASH = bcrypt.hashSync("junto-timing-equalizer", 12);
+
 function generateOTP(): string {
   return crypto.randomInt(100000, 1000000).toString();
 }
@@ -94,14 +96,14 @@ export async function login(input: LoginInput) {
     where: { email: input.email },
   });
 
+  // Always run one bcrypt comparison so response time does not reveal which e-mails are registered.
+  const passwordValid = await bcrypt.compare(
+    input.password,
+    usuario?.passwordHash ?? DUMMY_HASH,
+  );
   if (!usuario || !usuario.activo) {
     throw new UserError("El correo o la contraseña no coinciden.", 401);
   }
-
-  const passwordValid = await bcrypt.compare(
-    input.password,
-    usuario.passwordHash,
-  );
   if (!passwordValid) {
     throw new UserError("El correo o la contraseña no coinciden.", 401);
   }
@@ -411,8 +413,15 @@ export async function getMe(userId: string) {
 }
 
 export async function updatePushToken(userId: string, expoPushToken: string) {
-  await prisma.usuario.update({
-    where: { id: userId },
-    data: { expoPushToken },
-  });
+  // A physical device belongs to whoever signed in last; never keep notifying the previous person.
+  await prisma.$transaction([
+    prisma.usuario.updateMany({
+      where: { expoPushToken, id: { not: userId } },
+      data: { expoPushToken: null },
+    }),
+    prisma.usuario.update({
+      where: { id: userId },
+      data: { expoPushToken },
+    }),
+  ]);
 }

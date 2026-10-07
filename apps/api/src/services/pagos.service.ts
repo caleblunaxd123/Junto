@@ -111,10 +111,34 @@ export async function resolverPago(
   });
   if (result.count !== 1)
     throw new Error("Este pago ya fue resuelto. Actualiza el grupo.");
-  return prisma.pago.findUnique({
+  const resuelto = await prisma.pago.findUnique({
     where: { id: pagoId },
     include: pagoInclude,
   });
+
+  // Tell the payer the outcome so they are not left guessing; delivery failure never undoes the decision.
+  const pagador = await prisma.usuario.findUnique({
+    where: { id: pago.pagadorId },
+    select: { expoPushToken: true },
+  });
+  if (pagador?.expoPushToken) {
+    const monto = `S/ ${(pago.monto / 100).toFixed(2)}`;
+    await sendPushNotification(
+      pagador.expoPushToken,
+      confirmar ? "Pago confirmado" : "Pago no confirmado",
+      confirmar
+        ? `${pago.receptor.nombre} confirmó tu pago de ${monto} en ${pago.grupo.nombre}.`
+        : `${pago.receptor.nombre} no pudo confirmar tu pago de ${monto} en ${pago.grupo.nombre}. Revisa con esa persona.`,
+      {
+        grupoId: pago.grupoId,
+        pagoId: pago.id,
+        type: confirmar ? "pago_confirmado" : "pago_rechazado",
+      },
+    ).catch(() =>
+      console.error("[Notification] Payment resolved; push delivery failed"),
+    );
+  }
+  return resuelto;
 }
 
 export async function getHistorial(usuarioId: string) {

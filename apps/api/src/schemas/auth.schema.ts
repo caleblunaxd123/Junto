@@ -37,7 +37,7 @@ export const refreshTokenSchema = z.object({
 });
 
 export const updatePushTokenSchema = z.object({
-  expoPushToken: z.string().min(1),
+  expoPushToken: z.string().regex(/^Expo(nent)?PushToken\[.+\]$/, 'Token de notificaciones inválido').max(200),
 });
 
 export const verifyEmailSchema = z.object({

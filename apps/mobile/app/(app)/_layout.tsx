@@ -1,5 +1,6 @@
-import React from "react";
-import { Redirect, Tabs } from "expo-router";
+import React, { useEffect } from "react";
+import { Redirect, Tabs, useRouter } from "expo-router";
+import { listenForNotificationTaps, registerForPush } from "../../src/lib/push";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthStore } from "../../src/store/auth.store";
@@ -7,6 +8,12 @@ import { palette } from "../../src/components/ui/Design";
 export default function AppLayout() {
   const { isAuthenticated } = useAuthStore();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    registerForPush();
+    return listenForNotificationTaps(router);
+  }, [isAuthenticated, router]);
   if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
   const screens: [string, string, keyof typeof Ionicons.glyphMap][] = [
     ["index", "Inicio", "home-outline"],
