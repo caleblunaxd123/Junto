@@ -60,3 +60,24 @@ test("group email explains payment direction and never discounts unconfirmed pay
   assert.match(html, /Parte S\/ 60.00 · Adelantó S\/ 120.00/);
   assert.match(html, /Todavía no descuentan la deuda/);
 });
+const { shareEmailText, shareFingerprint } = require("../packages/shared/share.js");
+test("sent by JUNTO: the sender is named, escaped, and a text alternative carries the same content", () => {
+  const message = tryBillShareMessage(bill);
+  const html = shareEmailHtml(message, { sentBy: 'Eve <img src=x onerror="steal()">' });
+  assert.match(html, /Eve &lt;img src=x onerror=&quot;steal\(\)&quot;&gt;<\/strong> te compartió este resumen/);
+  assert.doesNotMatch(html, /<img/);
+  assert.match(html, /Recibes este correo porque/);
+  const text = shareEmailText(message, { sentBy: "Ana\r\nBcc: spy@x.com" });
+  assert.match(text, /^Ana\s+Bcc: spy@x\.com te compartió/, "line breaks in names cannot fake headers or lines");
+  assert.ok(text.includes(message.body));
+  // Without a sender (e-mail opened in the person's own app) nothing changes.
+  assert.doesNotMatch(shareEmailHtml(message), /te compartió/);
+});
+test("the review fingerprint is stable and changes with any amount or name", () => {
+  const message = tryBillShareMessage(bill);
+  assert.equal(shareFingerprint(message), shareFingerprint(tryBillShareMessage(bill)));
+  assert.match(shareFingerprint(message), /^[0-9a-f]{16}$/);
+  const changed = tryBillShareMessage({ ...bill, totalCuenta: 18001 });
+  assert.notEqual(shareFingerprint(changed), shareFingerprint(message));
+  assert.notEqual(shareFingerprint({ ...message, body: message.body.replace("Davetsy", "Davetsi") }), shareFingerprint(message));
+});

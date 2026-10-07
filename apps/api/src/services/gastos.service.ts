@@ -225,6 +225,8 @@ export async function getGastoDetalle(gastoId: string, usuarioId: string) {
     where: { id: gastoId },
     include: {
       participantes: {
+        // Stable order: the shared summary (app preview and e-mail) must list people identically.
+        orderBy: { id: "asc" },
         include: {
           usuario: { select: { id: true, nombre: true, fotoUrl: true } },
         },

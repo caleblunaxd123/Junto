@@ -7,8 +7,27 @@ import * as Clipboard from "expo-clipboard";
 import { captureRef, releaseCapture } from "react-native-view-shot";
 import { Avatar, Card, Label, Button, ErrorBox, palette } from "./Design";
 import { FormField } from "./Reference";
+import { useQuery } from "@tanstack/react-query";
+import { shareFingerprint } from "@junto/shared/share";
 import { emailDraftUrl, validShareEmail, whatsappDraftUrl, type ShareMessage } from "../../lib/shareMessage";
 import { shareEmailHtml } from "../../lib/shareEmail";
+import { api } from "../../lib/api";
+import { useAuthStore } from "../../store/auth.store";
+import { AppDialog as Alert } from "./AppDialog";
+
+type ServerMailResult = { estado: "aceptado" | "fallido" | "incierto" | "enviando"; mensaje: string; destinatario?: string };
+const newMailRequestId = () => `correo_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+/** What happened with an e-mail JUNTO sent: accepted by the provider is not "delivered". */
+function MailOutcome({ result }: { result: ServerMailResult }) {
+  const tone = result.estado === "aceptado" ? { bg: palette.mint, border: "#BDEBD9", icon: "checkmark-circle" as const, color: "#007B60", title: "Enviado al proveedor de correo" }
+    : result.estado === "incierto" || result.estado === "enviando" ? { bg: palette.yellow, border: "#F1DFA8", icon: "help-circle" as const, color: "#8A5B05", title: "Envío sin confirmar" }
+    : { bg: palette.blush, border: "#F6D8DD", icon: "alert-circle" as const, color: palette.coral, title: "No se envió" };
+  return <View accessibilityLiveRegion="polite" style={{ flexDirection: "row", gap: 10, padding: 14, borderRadius: 18, backgroundColor: tone.bg, borderWidth: 1, borderColor: tone.border }}>
+    <Ionicons name={tone.icon} size={22} color={tone.color} />
+    <View style={{ flex: 1, gap: 2 }}><Label weight="bold" size={14} color={tone.color}>{tone.title}</Label><Label size={12}>{result.mensaje}</Label></View>
+  </View>;
+}
 
 const money = (cents: number) => `S/ ${(cents / 100).toFixed(2)}`;
 
@@ -127,6 +146,21 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
   const gate = React.useRef(false);
   const email = recipient.trim();
   const invalidEmail = !!email && !validShareEmail(email);
+  // "Enviar desde JUNTO": only for saved records the API can rebuild and authorize.
+  const signedIn = useAuthStore((state) => state.isAuthenticated);
+  const resource = signedIn ? message.resource : undefined;
+  const availability = useQuery<{ disponible: boolean }>({
+    queryKey: ["compartir", "correo", "estado"],
+    queryFn: () => api.get("/compartir/correo/estado").then((r) => r.data),
+    enabled: !!resource && showMail,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const serverMail = !!resource && availability.data?.disponible === true;
+  const [serverResult, setServerResult] = React.useState<ServerMailResult | null>(null);
+  const mailRequest = React.useRef(newMailRequestId());
+  // A different recipient or content is a different e-mail: never reuse the previous request id.
+  React.useEffect(() => { mailRequest.current = newMailRequestId(); setServerResult(null); }, [email, message.body]);
   async function run(action: () => Promise<unknown>, success: string) {
     if (gate.current || disabled) return;
     gate.current = true;
@@ -167,6 +201,39 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
       // Keep a handed-off file until the app closes so an unfinished draft can still read it.
     } finally { if (attachment && !handedOff) releaseCapture(attachment); }
   }
+  async function sendFromJunto() {
+    if (!resource || !validShareEmail(email)) throw new Error("Escribe el correo de la persona que lo recibirá.");
+    try {
+      const { data } = await api.post<ServerMailResult>("/compartir/correo", {
+        recurso: resource, destinatario: email, solicitudId: mailRequest.current, huella: shareFingerprint(message),
+      }, { timeout: 30_000 });
+      setServerResult(data);
+      mailRequest.current = newMailRequestId();
+    } catch (err) {
+      const e = err as { response?: { status?: number; data?: ServerMailResult & { error?: string; code?: string } } };
+      const data = e.response?.data;
+      if (data?.estado) {
+        // 502/504: the server recorded a definite failure or an unknown outcome.
+        setServerResult(data);
+        if (data.estado === "fallido") mailRequest.current = newMailRequestId();
+        return;
+      }
+      if (data?.code === "EMAIL_NO_CONFIGURADO") availability.refetch();
+      if (!e.response) throw new Error("No sabemos si se envió: revisa tu conexión y vuelve a tocar «Enviar desde JUNTO». Si ya había salido, no se enviará otra vez.");
+      throw new Error(data?.error || "No pudimos enviar el correo. Puedes abrirlo en tu app de correo.");
+    }
+  }
+  function confirmSend() {
+    if (!validShareEmail(email)) { setError("Escribe el correo de la persona que lo recibirá."); return; }
+    Alert.alert("¿Enviar este resumen?", `JUNTO lo enviará a ${email} con tu nombre. Si te responden, la respuesta llegará a tu correo.`, [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Enviar", onPress: () => run(sendFromJunto, "") },
+    ], {
+      tone: "info", eyebrow: "ENVIAR DESDE JUNTO",
+      ...(message.preview ? { summary: { label: message.preview.title, value: money(message.preview.total), caption: message.preview.totalLabel } } : {}),
+      footnote: "Se envía una sola vez. JUNTO no guarda esta dirección para escribirle después.",
+    });
+  }
   return <View style={{ gap: 10 }}>
     <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><Label size={15} weight="extra" style={{ flex: 1 }}>Comparte las cuentas claras</Label>{busy && <ActivityIndicator size="small" color={palette.primary} />}</View>
     {!!error && <View accessibilityLiveRegion="assertive"><ErrorBox message={error} /></View>}
@@ -192,10 +259,17 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><Ionicons name="mail-outline" size={22} color="#007E65" /><Label size={13} weight="bold" style={{ flex: 1 }}>{message.preview?.title || message.subject}</Label></View>
               {!!message.preview && <Label size={22} weight="extra">{money(message.preview.total)}<Label size={12} color={palette.muted}> · {message.preview.totalLabel}</Label></Label>}
             </Card>
-            <FormField label="Destinatario (opcional)" value={recipient} onChangeText={setRecipient} editable={!busy && !disabled} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} maxLength={254} placeholder="nombre@correo.com" error={invalidEmail ? "Escribe un solo correo válido." : undefined} />
-            <Label size={11} color={palette.muted}>Puedes dejarlo vacío y elegir a quién enviarlo en tu app de correo.</Label>
+            <FormField label={serverMail ? "Para" : "Destinatario (opcional)"} value={recipient} onChangeText={setRecipient} editable={!busy && !disabled} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" maxLength={254} placeholder="nombre@correo.com" error={invalidEmail ? "Escribe un solo correo válido." : undefined} />
             {!!error && <ErrorBox message={error} />}
-            <Button title="Preparar correo" loading={busy} disabled={disabled || invalidEmail} onPress={() => run(mail, "Volviste de tu app de correo. Si no pulsaste enviar, el mensaje sigue sin compartir. JUNTO no puede comprobar la entrega.")} />
+            {!!serverResult && <MailOutcome result={serverResult} />}
+            {serverMail ? <>
+              <Button title={serverResult?.estado === "aceptado" ? "Enviar a otra persona" : "Enviar desde JUNTO"} loading={busy} disabled={disabled || !email || invalidEmail || serverResult?.estado === "aceptado"} onPress={confirmSend} />
+              <Label size={11} color={palette.muted}>Llega con el diseño del resumen, desde JUNTO y con tu nombre. Las respuestas van a tu correo.</Label>
+              {serverResult?.estado === "incierto" && <Button title="Enviar de nuevo de todos modos" secondary disabled={busy} onPress={() => Alert.alert("¿Enviar otra vez?", "Si el primero sí llegó, la persona recibirá dos correos iguales.", [{ text: "Cancelar", style: "cancel" }, { text: "Enviar otra vez", onPress: () => { mailRequest.current = newMailRequestId(); run(sendFromJunto, ""); } }])} />}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><View style={{ flex: 1, height: 1, backgroundColor: palette.line }} /><Label size={11} color={palette.muted}>o</Label><View style={{ flex: 1, height: 1, backgroundColor: palette.line }} /></View>
+            </> : !!resource && availability.data?.disponible === false && <Label size={11} color={palette.muted}>El envío directo desde JUNTO no está activo en esta versión. Usa tu app de correo.</Label>}
+            <Button title="Abrir en mi app de correo" secondary={serverMail} loading={busy && !serverMail} disabled={disabled || invalidEmail} onPress={() => run(mail, "Volviste de tu app de correo. Si no pulsaste enviar, el mensaje sigue sin compartir. JUNTO no puede comprobar la entrega.")} />
+            {!serverMail && <Label size={11} color={palette.muted}>Puedes dejar el destinatario vacío y elegirlo en Gmail, Outlook o tu app de correo.</Label>}
             {Platform.OS === "android" && !!message.preview && !!reportRef && <>
               <Button title="Ver imagen del resumen" secondary disabled={disabled || busy}
                 onPress={() => run(async () => { const uri = await captureReport(); setShowMail(false); setImagePreview(uri); }, "Resumen visual preparado. Todavía no se ha enviado nada.")} />

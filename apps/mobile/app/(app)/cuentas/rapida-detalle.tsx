@@ -12,7 +12,7 @@ import { Screen, Card, Label, Button, ErrorBox, palette, design } from "../../..
 import { Brand, FormField } from "../../../src/components/ui/Reference";
 import { ShareChannels, ShareMessageSheet, ShareSummary } from "../../../src/components/ui/ShareMessage";
 import type { ShareMessage } from "../../../src/lib/shareMessage";
-import { quickBillSharePreview } from "../../../src/lib/tryBill";
+import { quickBillShareMessage } from "@junto/shared/share";
 import { nextContribution, type ContributionMode } from "../../../src/lib/contribution";
 const money = (cents: number) => `S/ ${centavosASoles(cents)}`;
 export default function QuickBillDetail() {
@@ -38,6 +38,8 @@ export default function QuickBillDetail() {
   const pages = Math.ceil((bill?.resultado.partes.length || 1) / 10);
   const paid = part ? bill?.aportes[part.id] || 0 : 0;
   const entered = parseMoney(amount);
+  // One object for preview, text and e-mail: all from the same server snapshot (same version).
+  const shareMessage: ShareMessage | null = bill ? { ...quickBillShareMessage(bill.datos, bill.aportes), body: bill.mensajeBreve, resource: { tipo: "cuenta_rapida", id: bill.id } } : null;
   const next = part ? nextContribution(mode, paid, part.total, entered) : { total: null, error: "" };
   const disabled = mutation.isPending || query.isError || !!bill?.archivada;
   async function record(participanteId: string, monto: number) {
@@ -128,8 +130,8 @@ export default function QuickBillDetail() {
       <Modal visible={preview} animationType="slide" onRequestClose={() => !exporting && setPreview(false)}><SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}><ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
         <Label size={24} weight="extra">Antes de compartir</Label><Label size={12}>Revisa los nombres, montos e instrucciones. Tú eliges la app y los destinatarios; no se envía automáticamente.</Label>
         {!!error && <ErrorBox message={error} />}
-        <ShareSummary reportRef={emailReport} message={{ subject: `JUNTO · ${bill.datos.nombre}`, body: bill.mensajeBreve, preview: quickBillSharePreview(bill.datos, bill.aportes) }} />
-        <ShareChannels reportRef={emailReport} message={{ subject: `JUNTO · ${bill.datos.nombre}`, body: bill.mensajeBreve, preview: quickBillSharePreview(bill.datos, bill.aportes) }} disabled={query.isError || exporting} />
+        {shareMessage && <ShareSummary reportRef={emailReport} message={shareMessage} />}
+        {shareMessage && <ShareChannels reportRef={emailReport} message={shareMessage} disabled={query.isError || exporting} />}
         <View ref={image} collapsable={false} key={`${bill.version}-${page}`} onLayout={() => setImageReady(true)} style={{ padding: 20, gap: 12, backgroundColor: "#FFFCF7", borderRadius: 16 }}>
           <Brand compact /><Label weight="extra" size={23}>{bill.datos.nombre}</Label><Label size={13}>Total {money(bill.resultado.montoTotal)} · {bill.resultado.cantidadPagadores} aportan</Label>
           <View style={[design.row, { borderBottomWidth: 1, borderBottomColor: palette.line, paddingBottom: 8 }]}><Label size={12} weight="bold" style={{ flex: 1 }}>Persona</Label><Label size={12} weight="bold">Su parte / pendiente</Label></View>

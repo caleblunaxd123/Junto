@@ -113,7 +113,9 @@ export async function getGrupoDetalle(grupoId: string, usuarioId: string) {
 
   const resumen = await resumenCuentasGrupo(grupoId);
   const neto = resumen.cuentas.find((account) => account.usuarioId === usuarioId)?.neto || 0;
-  return { ...grupo, resumen, saldos: resumen.saldos, balanceUsuario: { neto, teDeben: Math.max(neto, 0), debes: Math.max(-neto, 0) }, rolUsuario: miembro.rol };
+  // Every payment waiting for confirmation in the group, not only the viewer's: shared summaries cite it.
+  const pagosPorConfirmar = await prisma.pago.count({ where: { grupoId, estado: 'reportado' } });
+  return { ...grupo, resumen, saldos: resumen.saldos, pagosPorConfirmar, balanceUsuario: { neto, teDeben: Math.max(neto, 0), debes: Math.max(-neto, 0) }, rolUsuario: miembro.rol };
 }
 
 export async function invitarPorCelular(grupoId: string, celular: string, invitadorId: string) {

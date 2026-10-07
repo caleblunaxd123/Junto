@@ -18,7 +18,7 @@ export function useGrupos() {
 }
 
 export function useGrupo(id: string) {
-  return useQuery<GrupoConBalance & { saldos: Saldo[] }>({
+  return useQuery<GrupoConBalance & { saldos: Saldo[]; pagosPorConfirmar?: number }>({
     queryKey: ["grupos", id],
     queryFn: () => api.get(`/grupos/${id}`).then((r) => r.data),
     enabled: !!id,

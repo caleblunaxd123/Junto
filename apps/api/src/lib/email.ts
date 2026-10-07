@@ -8,7 +8,9 @@ import { smtpConfiguration } from "../domain/emailConfig";
  * Sin proveedor, en desarrollo el código se escribe en la consola; en producción falla
  * para que la app muestre "reenviar" en lugar de dar por enviado un correo que no salió.
  */
-type Message = { to: string; subject: string; html: string; text: string };
+type Message = { to: string; subject: string; html: string; text: string; replyTo?: string };
+/** accepted = the provider took the message. It never means delivered or read. */
+export type DeliveryReceipt = { accepted: boolean; providerId?: string };
 
 export function emailProvider(): "resend" | "smtp" | null {
   if (process.env.RESEND_API_KEY) return "resend";
@@ -27,18 +29,22 @@ function smtpTransport() {
 }
 
 export async function deliver(message: Message): Promise<boolean> {
+  return (await deliverWithReceipt(message)).accepted;
+}
+
+export async function deliverWithReceipt(message: Message): Promise<DeliveryReceipt> {
   const provider = emailProvider();
   if (provider === "resend") {
-    await axios.post(
+    const { data } = await axios.post<{ id?: string }>(
       "https://api.resend.com/emails",
-      { from: sender(), to: [message.to], subject: message.subject, html: message.html, text: message.text },
+      { from: sender(), to: [message.to], subject: message.subject, html: message.html, text: message.text, ...(message.replyTo ? { reply_to: message.replyTo } : {}) },
       { headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` }, timeout: 8000 },
     );
-    return true;
+    return { accepted: true, providerId: typeof data?.id === "string" ? data.id.slice(0, 200) : undefined };
   }
   if (provider === "smtp") {
-    await smtpTransport().sendMail({ from: sender(), ...message });
-    return true;
+    const info = await smtpTransport().sendMail({ from: sender(), ...message });
+    return { accepted: true, providerId: typeof info?.messageId === "string" ? info.messageId.slice(0, 200) : undefined };
   }
   if (process.env.NODE_ENV !== "production") {
     // Local development without a provider: nothing is sent. Codes and amounts are printed only on
@@ -48,7 +54,7 @@ export async function deliver(message: Message): Promise<boolean> {
         ? `[Email:dev] Para ${message.to} · ${message.subject}\n${message.text}`
         : "[Email:dev] Sin proveedor configurado: el correo no se envió. Usa EMAIL_DEV_LOG=true para verlo en consola.",
     );
-    return false;
+    return { accepted: false };
   }
   throw new Error("No hay proveedor de correo configurado");
 }

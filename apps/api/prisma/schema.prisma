@@ -40,6 +40,7 @@ model Usuario {
   configRecordatorios ConfigRecordatorio[]
   refreshTokens       RefreshToken[]
   cuentasRapidas      CuentaRapida[]
+  correosCompartidos  CorreoCompartido[]
 
   @@map("usuarios")
 }
@@ -220,4 +221,26 @@ model RefreshToken {
   usuario          Usuario   @relation(fields: [usuarioId], references: [id])
 
   @@map("refresh_tokens")
+}
+
+// Summaries a person asked JUNTO to e-mail on their behalf. Kept for idempotency, rate limits and
+// the visible status; the recipient is stored only as a keyed hash and a masked address.
+model CorreoCompartido {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuarioId           String   @map("usuario_id") @db.Uuid
+  solicitudId         String   @map("solicitud_id") @db.VarChar(80)
+  recursoTipo         String   @map("recurso_tipo") @db.VarChar(20)
+  recursoId           String   @map("recurso_id") @db.Uuid
+  destinatarioHash    String   @map("destinatario_hash") @db.VarChar(64)
+  destinatarioMascara String   @map("destinatario_mascara") @db.VarChar(80)
+  // enviando | aceptado | fallido | incierto. "aceptado" = the provider took it, not delivered/read.
+  estado              String   @db.VarChar(12)
+  proveedorId         String?  @map("proveedor_id") @db.VarChar(200)
+  fechaCreacion       DateTime @default(now()) @map("fecha_creacion")
+  fechaActualizacion  DateTime @default(now()) @updatedAt @map("fecha_actualizacion")
+  usuario             Usuario  @relation(fields: [usuarioId], references: [id])
+
+  @@unique([usuarioId, solicitudId])
+  @@index([usuarioId, fechaCreacion])
+  @@map("correos_compartidos")
 }

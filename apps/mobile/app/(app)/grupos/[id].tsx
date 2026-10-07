@@ -340,7 +340,7 @@ export default function Group() {
                     ))
                   )}
                   <Button title="Ver cómo se calcula" secondary onPress={() => router.push(`/(app)/cuentas/${id}`)} />
-                  <Button title="Compartir cuentas por WhatsApp o correo" secondary disabled={shareUnavailable} onPress={() => setShareMessage(groupShareMessage(group, groupPayments.length))} />
+                  <Button title="Compartir cuentas por WhatsApp o correo" secondary disabled={shareUnavailable} onPress={() => setShareMessage(groupShareMessage(group, group.pagosPorConfirmar ?? groupPayments.length))} />
                 </>
               ) : activity.isLoading ? (
                 <ActivityIndicator color={palette.primary} />
@@ -376,7 +376,7 @@ export default function Group() {
           <SafeAreaView edges={["bottom"]} style={{ backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 12 }}>
             <Label accessibilityRole="header" size={22} weight="extra">{group?.nombre || "Tu grupo"}</Label>
             <Button title="Invitar personas" onPress={() => { setMenu(false); goInvite(); }} />
-            <Button title="Compartir cuentas por WhatsApp o correo" secondary disabled={shareUnavailable} onPress={() => { if (group) { setMenu(false); setShareMessage(groupShareMessage(group, groupPayments.length)); } }} />
+            <Button title="Compartir cuentas por WhatsApp o correo" secondary disabled={shareUnavailable} onPress={() => { if (group) { setMenu(false); setShareMessage(groupShareMessage(group, group.pagosPorConfirmar ?? groupPayments.length)); } }} />
             {group?.rolUsuario === "admin" && (
               <Button title="Editar nombre y tipo" secondary onPress={() => { setMenu(false); router.push(`/(app)/grupos/editar?grupoId=${id}`); }} />
             )}

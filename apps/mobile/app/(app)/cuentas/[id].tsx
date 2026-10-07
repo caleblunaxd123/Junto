@@ -335,7 +335,7 @@ export default function Accounts() {
           <Label size={11} color={palette.muted}>
             Compensamos los gastos para reducir la cantidad de pagos necesarios.
           </Label>
-          <Button title="Compartir cuentas por WhatsApp o correo" secondary disabled={payments.isError || payments.isLoading || isError || payments.isFetching} onPress={() => setShareMessage(groupShareMessage(group, payments.data?.filter(p => p.grupoId === id && p.estado === "reportado").length || 0))} />
+          <Button title="Compartir cuentas por WhatsApp o correo" secondary disabled={payments.isError || payments.isLoading || isError || payments.isFetching} onPress={() => setShareMessage(groupShareMessage(group, group.pagosPorConfirmar ?? payments.data?.filter(p => p.grupoId === id && p.estado === "reportado").length ?? 0))} />
           {payments.isError && <><ErrorBox message="Actualiza los pagos antes de compartir las cuentas." /><Button title="Actualizar pagos" secondary onPress={() => payments.refetch()} /></>}
           <Button title="¡Entendido!" onPress={() => router.back()} />
           <ShareMessageSheet message={shareMessage} onClose={() => setShareMessage(null)} disabled={isError || payments.isError} />
