@@ -291,9 +291,10 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     } catch (err) {
       const e = err as { response?: { status?: number; data?: { error?: string } } };
       const status = e.response?.status;
-      // A rejected request (4xx) saved nothing: the next attempt is a new one. With no answer
-      // (timeout, no signal) we keep the key, so retrying cannot create a second copy.
-      if (status && status >= 400 && status < 500 && status !== 409) requestId.current = newRequestId();
+      // A 4xx answer is final (409: that key already saved a different expense, and the message says
+      // so): the next attempt is a new request. With no answer (timeout, no signal) we keep the key,
+      // so retrying cannot create a second copy.
+      if (status && status >= 400 && status < 500) requestId.current = newRequestId();
       setError(
         e.response?.data?.error ||
           (status ? "No se pudo guardar. Tus datos siguen aquí." : "No sabemos si se guardó: revisa tu conexión y vuelve a tocar Guardar. No se creará un gasto repetido."),
