@@ -1,17 +1,21 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import axios, {
+  create as createAxios,
+  AxiosError,
+  InternalAxiosRequestConfig,
+} from "axios";
+import * as SecureStore from "expo-secure-store";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
 
-export const api = axios.create({
+export const api = createAxios({
   baseURL: `${API_URL}/api`,
   timeout: 15000,
-  headers: { 'Content-Type': 'application/json' },
+  headers: { "Content-Type": "application/json" },
 });
 
 // Attach access token to every request
 api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
-  const token = await SecureStore.getItemAsync('accessToken');
+  const token = await SecureStore.getItemAsync("accessToken");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -19,10 +23,22 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
 });
 
 let isRefreshing = false;
-let failedQueue: Array<{
+let sessionExpiredListener: (() => void) | undefined;
+export function onSessionExpired(listener: () => void) {
+  sessionExpiredListener = listener;
+}
+async function expireSession() {
+  await Promise.all(
+    ["accessToken", "refreshToken", "cachedUsuario"].map((key) =>
+      SecureStore.deleteItemAsync(key),
+    ),
+  );
+  sessionExpiredListener?.();
+}
+let failedQueue: {
   resolve: (token: string) => void;
   reject: (err: unknown) => void;
-}> = [];
+}[] = [];
 
 function processQueue(error: unknown, token: string | null) {
   failedQueue.forEach((p) => {
@@ -36,9 +52,19 @@ function processQueue(error: unknown, token: string | null) {
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const originalRequest = error.config as InternalAxiosRequestConfig & {
+      _retry?: boolean;
+    };
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const authEntry =
+      originalRequest?.url?.startsWith("/auth/") &&
+      !originalRequest.url.includes("/me");
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !authEntry
+    ) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -52,27 +78,34 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshToken = await SecureStore.getItemAsync('refreshToken');
-        if (!refreshToken) throw new Error('No refresh token');
+        const refreshToken = await SecureStore.getItemAsync("refreshToken");
+        if (!refreshToken) {
+          await expireSession();
+          throw new Error("Session expired");
+        }
 
-        const { data } = await axios.post(`${API_URL}/api/auth/refresh`, { refreshToken });
-        await SecureStore.setItemAsync('accessToken', data.accessToken);
-        await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+        const { data } = await axios.post(
+          `${API_URL}/api/auth/refresh`,
+          { refreshToken },
+          { timeout: 15000 },
+        );
+        await SecureStore.setItemAsync("accessToken", data.accessToken);
+        await SecureStore.setItemAsync("refreshToken", data.refreshToken);
 
         processQueue(null, data.accessToken);
         originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        await SecureStore.deleteItemAsync('accessToken');
-        await SecureStore.deleteItemAsync('refreshToken');
-        // Auth store will handle logout via listener
+        const status = (refreshError as AxiosError).response?.status;
+        if (status === 401 || status === 403) await expireSession();
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
       }
     }
-
+    if (error.response?.status === 401 && originalRequest?._retry && !authEntry)
+      await expireSession();
     return Promise.reject(error);
-  }
+  },
 );

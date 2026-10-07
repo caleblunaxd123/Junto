@@ -35,3 +35,7 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
+
+# Capturas y volcados de QA en el emulador
+/emulator-*.png
+/*window.xml

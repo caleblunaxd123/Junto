@@ -1,133 +1,100 @@
-import React, { useRef, useState } from 'react';
+import React from "react";
+import { View, Image } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { router } from "expo-router";
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  Dimensions,
-  ScrollView,
-  StatusBar,
-} from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { GradientButton } from '../../src/components/ui/GradientButton';
-
-const { width } = Dimensions.get('window');
-
-const SLIDES = [
-  {
-    id: 1,
-    emoji: '💸',
-    titulo: 'Divide sin drama',
-    subtitulo: 'Registra gastos y Junto calcula automáticamente quién debe cuánto. Sin errores, sin estrés.',
-    colors: ['#6366F1', '#4F46E5'] as const,
-  },
-  {
-    id: 2,
-    emoji: '🔔',
-    titulo: 'Cobra sin roches',
-    subtitulo: 'La app hace el trabajo social incómodo por ti con recordatorios automáticos y elegantes.',
-    colors: ['#8B5CF6', '#6366F1'] as const,
-  },
-  {
-    id: 3,
-    emoji: '⚡',
-    titulo: 'Paga con Yape',
-    subtitulo: 'Salda tus deudas directo con Yape sin salir de la app. Rápido, seguro y oficial.',
-    colors: ['#10B981', '#059669'] as const,
-  },
-];
-
-export default function OnboardingScreen() {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
-
-  const slide = SLIDES[currentIndex];
-
-  const goNext = () => {
-    if (currentIndex < SLIDES.length - 1) {
-      const next = currentIndex + 1;
-      scrollRef.current?.scrollTo({ x: next * width, animated: true });
-      setCurrentIndex(next);
-    } else {
-      finishOnboarding();
-    }
-  };
-
-  const finishOnboarding = async () => {
-    await AsyncStorage.setItem('onboarding_completado', 'true');
-    router.replace('/(auth)/login');
-  };
-
+  Screen,
+  Card,
+  Label,
+  Button,
+  palette,
+} from "../../src/components/ui/Design";
+import { Brand } from "../../src/components/ui/Reference";
+import { art } from "../../src/components/ui/Artwork";
+export default function Onboarding() {
+  async function start(register: boolean) {
+    await AsyncStorage.setItem("onboarding_completado", "true");
+    router.replace(register ? "/(auth)/register" : "/(auth)/login");
+  }
+  const steps = [
+    {
+      title: "Crea un grupo",
+      copy: "Invita a tus amigos, pareja o roommates. Para un viaje, un depa, una salida o lo que quieras.",
+      image: art.welcome,
+    },
+    {
+      title: "Anota lo que pagaron",
+      copy: "Registra quién pagó, cuánto y en qué. Puedes completar el formulario o pedir una propuesta al asistente.",
+      image: art.receipt,
+    },
+    {
+      title: "Revisa y salda las cuentas",
+      copy: "JUNTO calcula quién debe a quién. Pagan por fuera y el receptor confirma el pago. ¡Y listo!",
+      image: art.character,
+    },
+  ];
   return (
-    <View className="flex-1">
-      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-      <LinearGradient
-        colors={slide.colors}
-        className="flex-1"
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+    <Screen>
+      <Brand />
+      <Label size={28} weight="extra" style={{ lineHeight: 33 }}>
+        Las cuentas claras.
+      </Label>
+      <Label
+        size={25}
+        weight="extra"
+        color={palette.primary}
+        style={{ lineHeight: 31 }}
       >
-        <SafeAreaView className="flex-1" edges={['top', 'bottom']}>
-          <ScrollView
-            ref={scrollRef}
-            horizontal
-            pagingEnabled
-            scrollEnabled={false}
-            showsHorizontalScrollIndicator={false}
-            className="flex-1"
-            contentContainerStyle={{ width: width * SLIDES.length }}
-          >
-            {SLIDES.map((sl) => (
-              <View key={sl.id} style={{ width }} className="items-center justify-center px-10">
-                <View className="bg-white/10 w-48 h-48 rounded-[60px] items-center justify-center border border-white/20 mb-12 shadow-glass">
-                   <Text className="text-8xl">{sl.emoji}</Text>
-                </View>
-                <Text className="text-white text-4xl font-extrabold text-center mb-4 tracking-tighter" style={{ letterSpacing: -1 }}>
-                  {sl.titulo}
-                </Text>
-                <Text className="text-white/70 text-lg text-center leading-7 font-medium">
-                  {sl.subtitulo}
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
-
-          <View className="px-8 pb-10 items-center">
-            {/* Dots */}
-            <View className="flex-row gap-2 mb-10">
-              {SLIDES.map((_, i) => (
-                <View 
-                  key={i} 
-                  className={`h-2 rounded-full ${
-                    i === currentIndex ? 'w-8 bg-white' : 'w-2 bg-white/30'
-                  }`} 
-                />
-              ))}
-            </View>
-
-            <GradientButton 
-              title={currentIndex < SLIDES.length - 1 ? 'Siguiente' : 'Comenzar ahora'}
-              onPress={goNext}
-              className="w-full"
-              colors={['#FFFFFF', '#F3F4F6']}
-              style={{ paddingVertical: 0 }}
+        Los buenos momentos, juntos.
+      </Label>
+      <Label size={14} color={palette.muted}>
+        Comparte gastos con amigos, pareja, roommates o en tus viajes. Mantengan
+        sus planes, sin complicaciones.
+      </Label>
+      {steps.map((step, i) => (
+        <Card
+          key={step.title}
+          style={{ padding: 14, minHeight: 145, overflow: "hidden" }}
+        >
+          <View style={{ width: "56%", gap: 8 }}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
             >
-               {/* Customizing text color for the light button */}
-               <Text style={{ color: slide.colors[0], fontWeight: '800', fontSize: 18 }}>
-                  {currentIndex < SLIDES.length - 1 ? 'Siguiente' : 'Comenzar ahora'}
-               </Text>
-            </GradientButton>
-
-            {currentIndex < SLIDES.length - 1 && (
-              <TouchableOpacity onPress={finishOnboarding} className="mt-6 py-2">
-                <Text className="text-white/60 font-semibold">Saltar introducción</Text>
-              </TouchableOpacity>
-            )}
+              <View
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 15,
+                  backgroundColor: i === 1 ? "#E6DAFF" : "#CFFAEA",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Label weight="extra">{i + 1}</Label>
+              </View>
+              <Label size={17} weight="extra" style={{ flex: 1 }}>
+                {step.title}
+              </Label>
+            </View>
+            <Label size={12} color={palette.muted}>
+              {step.copy}
+            </Label>
           </View>
-        </SafeAreaView>
-      </LinearGradient>
-    </View>
+          <Image
+            source={step.image}
+            style={{
+              position: "absolute",
+              right: -6,
+              bottom: 0,
+              width: "45%",
+              height: 140,
+            }}
+            resizeMode="contain"
+          />
+        </Card>
+      ))}
+      <Button title="Comenzar →" onPress={() => start(true)} />
+      <Button title="Ya tengo cuenta" secondary onPress={() => start(false)} />
+    </Screen>
   );
 }

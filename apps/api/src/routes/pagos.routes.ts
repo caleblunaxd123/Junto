@@ -8,7 +8,11 @@ const router = Router();
 router.post('/webhook', pagosController.webhook);
 
 router.use(authMiddleware);
-router.post('/procesar', pagosController.procesarPago);
+// Junto registra pagos hechos fuera de la app; el receptor los confirma.
+// El cobro por Culqi queda fuera de la app hasta integrar tokenización real.
+router.post('/reportar', pagosController.reportarPago);
+router.post('/:id/confirmar', pagosController.confirmarPago);
+router.post('/:id/rechazar', pagosController.rechazarPago);
 router.get('/historial', pagosController.getHistorial);
 
 export default router;

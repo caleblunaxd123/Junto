@@ -1,4 +1,4 @@
-import admin from 'firebase-admin';
+import { initializeApp, cert } from 'firebase-admin';
 
 let firebaseInitialized = false;
 
@@ -15,8 +15,8 @@ export function initFirebase(): void {
     return;
   }
 
-  admin.initializeApp({
-    credential: admin.credential.cert({
+  initializeApp({
+    credential: cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
       privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,

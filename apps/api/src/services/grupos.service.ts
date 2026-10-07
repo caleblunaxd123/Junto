@@ -1,7 +1,8 @@
 import { randomBytes } from 'crypto';
+import { UserError as Error } from '../domain/errors';
 import { prisma } from '../lib/prisma';
-import { calcularSaldosGrupo } from './balance.service';
-import type { CrearGrupoInput } from '../schemas/grupos.schema';
+import { calcularSaldosGrupo, resumenCuentasGrupo } from './balance.service';
+import type { CrearGrupoInput, EditarGrupoInput } from '../schemas/grupos.schema';
 
 function generateLinkInvitacion(): string {
   return randomBytes(12).toString('base64url');
@@ -54,7 +55,8 @@ export async function getGruposUsuario(usuarioId: string) {
     memberships
       .filter((m) => m.grupo.activo)
       .map(async (m) => {
-        const saldos = await calcularSaldosGrupo(m.grupo.id);
+        const resumen = await resumenCuentasGrupo(m.grupo.id);
+        const saldos = resumen.saldos;
         const teDeben = saldos
           .filter((s) => s.acreedorId === usuarioId)
           .reduce((acc, s) => acc + s.monto, 0);
@@ -66,12 +68,26 @@ export async function getGruposUsuario(usuarioId: string) {
           ...m.grupo,
           miembros: m.grupo.miembros,
           balanceUsuario: { teDeben, debes, neto: teDeben - debes },
+          resumen,
           rolUsuario: m.rol,
         };
       })
   );
 
   return grupos;
+}
+
+export async function editarGrupo(grupoId: string, input: EditarGrupoInput, usuarioId: string) {
+  const updated = await prisma.grupo.updateMany({
+    where: {
+      id: grupoId,
+      activo: true,
+      miembros: { some: { usuarioId, activo: true, rol: 'admin' } },
+    },
+    data: input,
+  });
+  if (!updated.count) throw new Error('Solo un administrador activo puede editar este grupo.', 403);
+  return getGrupoDetalle(grupoId, usuarioId);
 }
 
 export async function getGrupoDetalle(grupoId: string, usuarioId: string) {
@@ -95,9 +111,9 @@ export async function getGrupoDetalle(grupoId: string, usuarioId: string) {
 
   if (!grupo || !grupo.activo) throw new Error('Grupo no encontrado');
 
-  const saldos = await calcularSaldosGrupo(grupoId);
-
-  return { ...grupo, saldos, rolUsuario: miembro.rol };
+  const resumen = await resumenCuentasGrupo(grupoId);
+  const neto = resumen.cuentas.find((account) => account.usuarioId === usuarioId)?.neto || 0;
+  return { ...grupo, resumen, saldos: resumen.saldos, balanceUsuario: { neto, teDeben: Math.max(neto, 0), debes: Math.max(-neto, 0) }, rolUsuario: miembro.rol };
 }
 
 export async function invitarPorCelular(grupoId: string, celular: string, invitadorId: string) {

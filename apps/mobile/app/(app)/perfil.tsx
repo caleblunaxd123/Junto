@@ -1,186 +1,283 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, Alert, ScrollView, StatusBar, ActivityIndicator, Image } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useAuthStore } from '../../src/store/auth.store';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../../src/lib/api';
-import { centavosASoles } from '../../src/types';
-import { GlassCard } from '../../src/components/ui/GlassCard';
-import { router } from 'expo-router';
-
-export default function PerfilScreen() {
-  const { usuario, logout } = useAuthStore();
-
-  const { data: historialPagos, isLoading: loadingPagos } = useQuery({
-    queryKey: ['pagos', 'historial'],
-    queryFn: () => api.get('/pagos/historial').then((r) => r.data),
-  });
-
-  const handleLogout = () => {
-    Alert.alert('Cerrar sesión', '¿Estás seguro que quieres salir de Junto?', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Cerrar sesión', style: 'destructive', onPress: logout },
-    ]);
-  };
-
-  const inicial = usuario?.nombre?.charAt(0).toUpperCase() || 'U';
-
+import React from "react";
+import {
+  View,
+  Pressable,
+  Linking,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { AppDialog as Alert } from "../../src/components/ui/AppDialog";
+import { router } from "expo-router";
+import { useAuthStore } from "../../src/store/auth.store";
+import {
+  Screen,
+  Card,
+  Label,
+  Avatar,
+  palette,
+  design,
+} from "../../src/components/ui/Design";
+import { IconBubble, ReferenceHero } from "../../src/components/ui/Reference";
+import { art } from "../../src/components/ui/Artwork";
+function Row({
+  icon,
+  title,
+  subtitle,
+  color = palette.purple,
+  bg = palette.lilac,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  subtitle: string;
+  color?: string;
+  bg?: string;
+  onPress: () => void;
+}) {
   return (
-    <View className="flex-1 bg-background">
-      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-      
-      <LinearGradient
-        colors={['#6366F1', '#4F46E5']}
-        className="h-80 w-full absolute top-0"
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      />
-
-      <SafeAreaView className="flex-1" edges={['top']}>
-        {/* Header */}
-        <View className="px-6 pt-4 pb-10 items-center">
-          <View className="w-full flex-row justify-between items-center mb-6">
-            <TouchableOpacity 
-              onPress={() => router.push('/(app)/perfil/editar')}
-              className="bg-white/20 px-4 py-2 rounded-xl flex-row items-center border border-white/30"
-            >
-              <Ionicons name="pencil" size={16} color="white" />
-              <Text className="text-white ml-2 font-bold text-xs uppercase tracking-wider">Editar</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              onPress={handleLogout}
-              className="w-10 h-10 bg-white/20 rounded-xl items-center justify-center border border-white/30"
-            >
-              <Ionicons name="log-out-outline" size={22} color="white" />
-            </TouchableOpacity>
-          </View>
-
-          <TouchableOpacity 
-            activeOpacity={0.9}
-            onPress={() => router.push('/(app)/perfil/editar')}
-            className="items-center"
-          >
-            <View className="relative">
-              <View className="w-24 h-24 bg-white/20 rounded-[32px] items-center justify-center mb-4 border-2 border-white/40 shadow-sm overflow-hidden">
-                {usuario?.fotoUrl ? (
-                  <Image source={{ uri: usuario.fotoUrl }} className="w-full h-full" />
-                ) : (
-                  <Text className="text-white text-4xl font-black">{inicial}</Text>
-                )}
-              </View>
-              <View className="absolute bottom-2 right-[-4px] w-8 h-8 bg-primary rounded-full items-center justify-center border-2 border-indigo-500 shadow-sm">
-                <Ionicons name="camera" size={14} color="white" />
-              </View>
-            </View>
-            <Text className="text-white text-2xl font-black mb-1">{usuario?.nombre}</Text>
-            <Text className="text-white/70 font-medium mb-3">{usuario?.email}</Text>
-          </TouchableOpacity>
-            
-            {usuario?.emailVerificado && (
-              <View className="flex-row items-center bg-white/10 px-3 py-1.5 rounded-full border border-white/10">
-                <Ionicons name="shield-checkmark" size={14} color="#10B981" />
-                <Text className="text-white text-[10px] font-black uppercase tracking-wider ml-1.5">Verificado</Text>
-              </View>
-            )}
-          </View>
-
-        {/* Content */}
-        <ScrollView 
-          className="flex-1 bg-background-alt rounded-t-[40px] -mt-4 shadow-2xl"
-          contentContainerStyle={{ padding: 24, paddingBottom: 60 }}
-          showsVerticalScrollIndicator={false}
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[design.row, { paddingVertical: 10, gap: 10 }]}
+    >
+      <IconBubble name={icon} size={36} color={color} background={bg} />
+      <View style={{ flex: 1 }}>
+        <Label
+          weight="bold"
+          size={13}
+          color={title === "Cerrar sesión" ? palette.coral : palette.ink}
         >
-          {/* Info Section */}
-          <Text className="text-text font-extrabold text-lg mb-4 tracking-tight">Información de Cuenta</Text>
-          <View className="bg-white rounded-[32px] border border-gray-100 p-2 mb-8 shadow-sm">
-            <InfoRow icon="person-outline" label="Nombre" value={usuario?.nombre || ''} />
-            <InfoRow icon="mail-outline" label="Email" value={usuario?.email || ''} />
-            {usuario?.celular && (
-              <InfoRow icon="call-outline" label="Celular" value={`+51 ${usuario.celular}`} last />
-            )}
-          </View>
-
-          {/* Payment History */}
-          <View className="flex-row justify-between items-center mb-4">
-            <Text className="text-text font-extrabold text-lg tracking-tight">Actividad de Pagos</Text>
-            {historialPagos && historialPagos.length > 5 && (
-              <TouchableOpacity>
-                <Text className="text-primary font-bold text-xs">Ver todo</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {loadingPagos ? (
-            <ActivityIndicator color="#6366F1" className="my-10" />
-          ) : !historialPagos || historialPagos.length === 0 ? (
-            <View className="bg-white rounded-[32px] border border-gray-100 p-10 items-center justify-center shadow-sm">
-              <View className="w-16 h-16 bg-gray-50 rounded-full items-center justify-center mb-4">
-                <Ionicons name="card-outline" size={32} color="#D1D5DB" />
-              </View>
-              <Text className="text-text font-bold text-base mb-1">Sin pagos aún</Text>
-              <Text className="text-text-hint text-xs text-center">Tus transacciones aparecerán aquí.</Text>
-            </View>
-          ) : (
-            <View className="bg-white rounded-[32px] border border-gray-100 p-2 shadow-sm">
-              {historialPagos.slice(0, 5).map((pago: any, idx: number) => {
-                const esPagador = pago.pagador.id === usuario?.id;
-                return (
-                  <View 
-                    key={pago.id} 
-                    className={`flex-row items-center p-4 ${idx < (historialPagos.length > 5 ? 4 : historialPagos.length - 1) ? 'border-b border-gray-50' : ''}`}
-                  >
-                    <View className={`w-12 h-12 rounded-2xl items-center justify-center mr-4 ${esPagador ? 'bg-red-50' : 'bg-emerald-50'}`}>
-                      <Ionicons 
-                        name={esPagador ? 'arrow-up' : 'arrow-down'} 
-                        size={20} 
-                        color={esPagador ? '#EF4444' : '#10B981'} 
-                      />
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-text font-bold text-sm leading-tight mb-1" numberOfLines={1}>
-                        {esPagador ? `A ${pago.receptor.nombre}` : `De ${pago.pagador.nombre}`}
-                      </Text>
-                      <Text className="text-text-hint text-[10px] font-medium uppercase tracking-widest">
-                        {pago.grupo.nombre} · {pago.metodo || 'Junto'}
-                      </Text>
-                    </View>
-                    <View className="items-end">
-                      <Text className={`font-black text-base tracking-tighter ${esPagador ? 'text-red-500' : 'text-emerald-500'}`}>
-                        {esPagador ? '-' : '+'}S/ {centavosASoles(pago.monto)}
-                      </Text>
-                      <Text className="text-[9px] font-black text-text-hint uppercase tracking-tighter">{pago.estado}</Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-          )}
-
-          <View className="mt-10 items-center">
-            <Text className="text-text-hint text-[10px] font-black uppercase tracking-[4px] mb-2">Junto v1.3.0</Text>
-            <View className="flex-row items-center bg-gray-100 px-3 py-1 rounded-full">
-              <Text className="text-text-hint text-[10px] font-bold">Hecho en Perú 🇵🇪</Text>
-            </View>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    </View>
+          {title}
+        </Label>
+        <Label size={11} color={palette.muted}>
+          {subtitle}
+        </Label>
+      </View>
+      <Ionicons name="chevron-forward" size={17} color={palette.muted} />
+    </Pressable>
   );
 }
-
-function InfoRow({ icon, label, value, last }: { icon: any; label: string; value: string; last?: boolean }) {
+export default function Profile() {
+  const { usuario, logout } = useAuthStore();
+  const show = (title: string, body: string) => Alert.alert(title, body);
+  const openPublic = async (url: string | undefined, title: string) => {
+    if (!url?.startsWith("https://")) { show(title, "Este canal todavía no está configurado en esta versión de pruebas. No se ha enviado ninguna solicitud. Debe quedar operativo antes de publicar JUNTO."); return; }
+    try { await Linking.openURL(url); } catch { show(title, "No pudimos abrir el enlace. Revisa tu conexión y vuelve a intentarlo."); }
+  };
+  function exit() {
+    Alert.alert(
+      "¿Cerrar sesión?",
+      "Tus grupos y gastos seguirán guardados en tu cuenta.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Cerrar sesión",
+          style: "destructive",
+          onPress: async () => {
+            await logout();
+            router.replace("/(auth)/login");
+          },
+        },
+      ],
+    );
+  }
   return (
-    <View className={`flex-row items-center p-4 ${!last ? 'border-b border-gray-50' : ''}`}>
-      <View className="w-10 h-10 bg-primary/5 rounded-xl items-center justify-center mr-4 border border-primary/10">
-        <Ionicons name={icon} size={20} color="#6366F1" />
-      </View>
-      <View className="flex-1">
-        <Text className="text-text-hint font-bold text-[10px] uppercase tracking-wider mb-0.5">{label}</Text>
-        <Text className="text-text font-bold text-base">{value}</Text>
-      </View>
-    </View>
+    <Screen title="Perfil y ajustes">
+      <Card style={{ flexDirection: "row", alignItems: "center", padding: 15 }}>
+        <Avatar
+          name={usuario?.nombre || "Tú"}
+          photo={usuario?.fotoUrl}
+          size={72}
+        />
+        <View style={{ flex: 1, gap: 5 }}>
+          <Label size={20} weight="extra">
+            {usuario?.nombre}
+          </Label>
+          <Label size={11} color={palette.muted}>
+            {usuario?.email}
+          </Label>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/(app)/perfil/editar")}
+            style={{
+              alignSelf: "flex-start",
+              backgroundColor: palette.mint,
+              padding: 8,
+              borderRadius: 20,
+            }}
+          >
+            <Label size={12} color="#078B70" weight="bold">
+              ✎ Editar perfil
+            </Label>
+          </Pressable>
+        </View>
+      </Card>
+      <Card style={{ padding: 12, gap: 0 }}>
+        <Label weight="extra" size={14}>
+          Datos personales
+        </Label>
+        <Row
+          icon="person-outline"
+          title="Información personal"
+          subtitle="Nombre, correo y teléfono"
+          onPress={() => router.push("/(app)/perfil/editar")}
+        />
+        <View style={{ height: 1, backgroundColor: palette.line }} />
+        <Row
+          icon="location-outline"
+          title="Ubicación"
+          subtitle="Perú · Sin seguimiento de ubicación"
+          color={palette.primary}
+          bg={palette.mint}
+          onPress={() =>
+            show(
+              "Tu ubicación es privada",
+              "JUNTO no necesita conocer tu ubicación para dividir gastos. No rastreamos viajes ni solicitamos acceso al GPS. El formato de moneda de esta versión es el de Perú.",
+            )
+          }
+        />
+      </Card>
+      <Card style={{ padding: 12, gap: 0 }}>
+        <Label weight="extra" size={14}>
+          Preferencias
+        </Label>
+        <Row
+          icon="options-outline"
+          title="Moneda y formato"
+          subtitle="S/ (PEN), español"
+          onPress={() =>
+            show(
+              "Soles, sin redondeos ocultos",
+              "Esta versión trabaja en soles peruanos. Cada importe se guarda en céntimos enteros. Si una división no es exacta, distribuimos los céntimos restantes y mostramos las partes antes de guardar. No hacemos conversiones automáticas de moneda.",
+            )
+          }
+        />
+        <View style={{ height: 1, backgroundColor: palette.line }} />
+        <Row
+          icon="color-palette-outline"
+          title="Apariencia"
+          subtitle="Tema claro · Esmeralda y lila"
+          color={palette.coral}
+          bg={palette.blush}
+          onPress={() =>
+            show(
+              "Diseñado para cuentas claras",
+              "El tema claro es el diseño de esta versión. Verde significa que te deben, coral que debes y amarillo que un pago aún está pendiente. También mostramos texto para que no tengas que depender solo de los colores.",
+            )
+          }
+        />
+      </Card>
+      <Card style={{ padding: 12, gap: 0 }}>
+        <Label weight="extra" size={14}>
+          Notificaciones
+        </Label>
+        <Row
+          icon="notifications-outline"
+          title="Notificaciones"
+          subtitle="Gastos, invitaciones y recordatorios"
+          color="#DB9700"
+          bg={palette.yellow}
+          onPress={() =>
+            Alert.alert(
+              "Notificaciones",
+              "Puedes revisar los permisos de JUNTO en los ajustes de tu dispositivo. La actividad y los pagos pendientes siguen disponibles dentro de la app.",
+              [
+                { text: "Cancelar", style: "cancel" },
+                {
+                  text: "Abrir ajustes",
+                  onPress: () => Linking.openSettings(),
+                },
+              ],
+            )
+          }
+        />
+      </Card>
+      <ReferenceHero
+        title="Tus grupos son privados."
+        subtitle="Solo los miembros pueden verlos."
+        image={art.assistant}
+        height={100}
+        titleSize={14}
+      />
+      <Card style={{ padding: 12, gap: 0 }}>
+        <Label weight="extra" size={14}>
+          Ayuda
+        </Label>
+        <Row
+          icon="help-circle-outline"
+          title="Centro de ayuda"
+          subtitle="Guías y preguntas frecuentes"
+          color="#398BE5"
+          bg="#E7F4FF"
+          onPress={() =>
+            show(
+              "¿Cómo funciona JUNTO?",
+              "Para una salida: Inicio → Dividir una cuenta. Escribe el total o revisa la lectura de una boleta, añade personas y marca a los invitados. Revisa y guarda el reparto. Comparte el mensaje o la imagen; tú confirmas los aportes recibidos, incluso parciales. No necesitan registrarse.\n\nPara gastos continuos: Organizar un grupo. Invita a quienes comparten contigo, registra quién pagó y para quién fue. Tus cuentas explicadas muestra cada cálculo. Un pago externo reduce la deuda solo cuando el receptor confirma.\n\nLas cuentas puntuales y las deudas de grupos no se mezclan. JUNTO no guarda ni transfiere dinero.",
+            )
+          }
+        />
+        <View style={{ height: 1, backgroundColor: palette.line }} />
+        <Row
+          icon="chatbubble-outline"
+          title="Ver un ejemplo"
+          subtitle="Cena de S/ 120 y taxi de S/ 60"
+          color={palette.primary}
+          bg={palette.mint}
+          onPress={() => router.push("/(app)/ejemplo")}
+        />
+      </Card>
+      <Card style={{ padding: 12, gap: 0 }}>
+        <Label weight="extra" size={14}>
+          Privacidad
+        </Label>
+        <Row
+          icon="shield-checkmark-outline"
+          title="Privacidad y seguridad"
+          subtitle="Verificación del correo y permisos"
+          onPress={() =>
+            show(
+              "Protege tu cuenta",
+              `Tu correo ${usuario?.emailVerificado ? "está verificado" : "aún no está verificado"}.\n\nNunca compartas contraseñas ni códigos de correo. JUNTO no pide claves bancarias ni mueve dinero. Los pagos externos requieren confirmación del receptor.\n\nPara recuperar tu contraseña, utiliza “¿Olvidaste tu contraseña?” en la pantalla de inicio de sesión.`,
+            )
+          }
+        />
+      </Card>
+      <Card style={{ padding: 12, gap: 0 }}>
+        <Label weight="extra" size={14}>
+          Acerca de JUNTO
+        </Label>
+        <Row
+          icon="information-circle-outline"
+          title="Acerca de JUNTO"
+          subtitle="Versión 1.0.0 · Cuentas claras"
+          color={palette.coral}
+          bg={palette.blush}
+          onPress={() =>
+            show(
+              "JUNTO",
+              "Las cuentas claras. Los buenos momentos, juntos.\n\nUna app para registrar y dividir gastos con amigos, pareja y roommates. JUNTO no es un banco ni una billetera: no guarda ni transfiere dinero.",
+            )
+          }
+        />
+      </Card>
+      <Card style={{ padding: 12, gap: 0 }}>
+        <Row
+          icon="log-out-outline"
+          title="Cerrar sesión"
+          subtitle="Salir de tu cuenta en este dispositivo"
+          color={palette.coral}
+          bg={palette.blush}
+          onPress={exit}
+        />
+      </Card>
+      <Card style={{ padding: 12, gap: 0 }}>
+        <Row icon="mail-outline" title="Contactar soporte" subtitle="Ayuda con tu cuenta y tus repartos" onPress={async () => {
+          const email = process.env.EXPO_PUBLIC_SUPPORT_EMAIL;
+          if (!email) { show("Soporte", "El correo de soporte aún no está configurado en esta versión de pruebas. No se enviará ningún mensaje."); return; }
+          try { await Linking.openURL(`mailto:${email}?subject=${encodeURIComponent("Ayuda con JUNTO")}`); } catch { show("Contactar soporte", `Puedes escribir a ${email}. No incluyas contraseñas ni códigos de verificación.`); }
+        }} />
+        <Row icon="document-text-outline" title="Política de privacidad" subtitle="Cómo se usan y conservan tus datos" onPress={() => openPublic(process.env.EXPO_PUBLIC_PRIVACY_URL, "Política de privacidad")} />
+        <Row icon="trash-outline" title="Solicitar eliminación de cuenta" subtitle="Abrir el canal de eliminación y revisar qué se conserva" color={palette.coral} bg={palette.blush} onPress={() => openPublic(process.env.EXPO_PUBLIC_DELETE_ACCOUNT_URL, "Eliminar cuenta")} />
+      </Card>
+    </Screen>
   );
 }

@@ -6,10 +6,10 @@ module.exports = {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#6366F1', // Indigo-500
-          dark: '#4F46E5',   // Indigo-600
-          light: '#818CF8',  // Indigo-400
-          50: '#F5F3FF',
+          DEFAULT: '#16A36A',
+          dark: '#147A51',
+          light: '#45C98C',
+          50: '#E9F8F0',
         },
         accent: {
           DEFAULT: '#8B5CF6', // Violet-500
@@ -18,11 +18,11 @@ module.exports = {
         success: '#10B981',   // Emerald-500
         danger: '#EF4444',    // Red-500
         warning: '#F59E0B',   // Amber-500
-        background: '#F9FAFB', // Slate-50
+        background: '#F7F8F5',
         surface: '#FFFFFF',
         text: {
-          DEFAULT: '#111827', // Gray-900
-          muted: '#6B7280',   // Gray-500
+          DEFAULT: '#10243E',
+          muted: '#607087',
           hint: '#9CA3AF',    // Gray-400
         },
       },

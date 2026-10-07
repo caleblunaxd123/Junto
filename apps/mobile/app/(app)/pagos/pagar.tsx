@@ -1,234 +1,457 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, StatusBar, ActivityIndicator } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useAuthStore } from '../../../src/store/auth.store';
-import { api } from '../../../src/lib/api';
-import { GradientButton } from '../../../src/components/ui/GradientButton';
-import { Input } from '../../../src/components/ui/Input';
-import { GlassCard } from '../../../src/components/ui/GlassCard';
-import { centavosASoles } from '../../../src/types';
-
-type MetodoPago = 'yape' | 'plin' | 'tarjeta';
-
-const METODOS = [
-  { value: 'yape' as const, label: 'Yape', emoji: '💜', desc: 'Pago rápido con código OTP', color: '#7422B2' },
-  { value: 'plin' as const, label: 'Plin', emoji: '💙', desc: 'Transferencia bancaria directa', color: '#10B981' },
-  { value: 'tarjeta' as const, label: 'Tarjeta', emoji: '💳', desc: 'Visa / Mastercard via Culqi', color: '#6366F1' },
+import React, { useEffect, useState } from "react";
+import { useIsFocused } from "@react-navigation/native";
+import { TextInput, View, Pressable, Image } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useQuery } from "@tanstack/react-query";
+import { useLocalSearchParams, router } from "expo-router";
+import { api } from "../../../src/lib/api";
+import { queryClient } from "../../../src/lib/queryClient";
+import { useGrupo } from "../../../src/hooks/useGrupos";
+import { useAuthStore } from "../../../src/store/auth.store";
+import {
+  Screen,
+  Card,
+  Label,
+  Button,
+  ErrorBox,
+  Avatar,
+  palette,
+  design,
+} from "../../../src/components/ui/Design";
+import {
+  ReferenceHero,
+  IconBubble,
+} from "../../../src/components/ui/Reference";
+import { art, groupCover } from "../../../src/components/ui/Artwork";
+import { centavosASoles, MetodoPago, Pago } from "../../../src/types";
+import { parseMoney } from "../../../src/lib/expensePreview";
+const methods: {
+  id: MetodoPago;
+  name: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+}[] = [
+  { id: "yape", name: "Yape", icon: "phone-portrait", color: "#7821AF" },
+  { id: "plin", name: "Plin", icon: "phone-portrait", color: "#00BACB" },
+  { id: "efectivo", name: "Efectivo", icon: "cash", color: "#23BC8D" },
+  {
+    id: "transferencia",
+    name: "Transferencia",
+    icon: "business",
+    color: "#398BE5",
+  },
 ];
-
-export default function PagarScreen() {
-  const { deudorId, acreedorId, monto, grupoId, nombre } = useLocalSearchParams<{
-    deudorId: string; acreedorId: string; monto: string; grupoId: string; nombre: string;
+export default function Payment() {
+  const { acreedorId, grupoId, nombre, monto } = useLocalSearchParams<{
+    acreedorId: string;
+    grupoId: string;
+    nombre: string;
+    monto: string;
   }>();
-  const { usuario } = useAuthStore();
-
-  const montoNum = parseInt(monto || '0');
-  const feejunto = Math.round(montoNum * 0.01);
-  const montoTotal = montoNum + feejunto;
-
-  const [metodo, setMetodo] = useState<MetodoPago>('yape');
-  const [celular, setCelular] = useState('');
-  const [otp, setOtp] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [pagadoExitoso, setPagadoExitoso] = useState(false);
-
-  const handlePagar = async () => {
-    if (metodo === 'yape' || metodo === 'plin') {
-      if (!celular || !/^9\d{8}$/.test(celular)) return Alert.alert('Error', 'Ingresa tu número celular (9XXXXXXXX)');
-      if (!otp || otp.length !== 6) return Alert.alert('Error', 'Ingresa el código OTP de 6 dígitos');
-    }
-    setIsProcessing(true);
-    try {
-      await api.post('/pagos/procesar', {
-        tokenId: `tok_test_${Date.now()}`,
-        deudorId, acreedorId, grupoId,
-        monto: montoNum, metodo,
-        email: usuario?.email,
-      });
-      setPagadoExitoso(true);
-    } catch (err: unknown) {
-      const e = err as { response?: { data?: { error?: string } } };
-      Alert.alert('Pago rechazado', e?.response?.data?.error || 'No se pudo procesar el pago. Intenta de nuevo.');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  if (pagadoExitoso) {
-    return (
-      <View className="flex-1 bg-success">
-        <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-        <SafeAreaView className="flex-1 items-center justify-center p-8">
-          <View className="w-28 h-28 bg-white/20 rounded-[40px] items-center justify-center mb-8 border border-white/30">
-            <Ionicons name="checkmark-done" size={60} color="white" />
-          </View>
-          <Text className="text-white text-4xl font-black text-center mb-2">¡Pago listo!</Text>
-          <Text className="text-white/80 text-lg font-medium text-center mb-10">
-            Pagaste S/ {centavosASoles(montoNum)} a {nombre}
-          </Text>
-          
-          <GlassCard className="p-6 w-full mb-10 border border-white/30" intensity={1.5}>
-            <Text className="text-white/70 text-xs font-bold uppercase tracking-widest text-center mb-2">Confirmación</Text>
-            <Text className="text-white text-center font-medium leading-6">
-              El grupo ha sido actualizado y {nombre} recibirá una notificación inmediata.
-            </Text>
-          </GlassCard>
-
-          <TouchableOpacity 
-            onPress={() => router.replace(`/(app)/grupos/${grupoId}`)}
-            className="w-full h-16 bg-white rounded-2xl items-center justify-center shadow-premium"
-          >
-            <Text className="text-success font-black text-lg">Volver al grupo</Text>
-          </TouchableOpacity>
-        </SafeAreaView>
-      </View>
+  const { data: group } = useGrupo(grupoId);
+  const focused = useIsFocused();
+  const user = useAuthStore((s) => s.usuario);
+  const requestedLimit = Number(monto);
+  const limit =
+    group?.saldos.find(
+      (s) => s.deudorId === user?.id && s.acreedorId === acreedorId,
+    )?.monto || 0;
+  const validParams =
+    !!acreedorId &&
+    !!grupoId &&
+    Number.isSafeInteger(requestedLimit) &&
+    requestedLimit > 0;
+  const [amount, setAmount] = useState(
+    validParams ? centavosASoles(requestedLimit) : "",
+  );
+  const [method, setMethod] = useState<MetodoPago>("yape");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [reportedId, setReportedId] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    setAmount(
+      Number.isSafeInteger(Number(monto)) && Number(monto) > 0
+        ? centavosASoles(Number(monto))
+        : "",
     );
+    setReportedId("");
+    setNote("");
+    setError("");
+    setMethod("yape");
+  }, [grupoId, acreedorId, monto]);
+  const value = parseMoney(amount) || 0;
+  const history = useQuery<Pago[]>({
+    queryKey: ["pagos"],
+    queryFn: () => api.get("/pagos/historial").then((r) => r.data),
+    enabled: focused && validParams,
+    refetchInterval: (query) =>
+      focused &&
+      query.state.data?.some(
+        (p) =>
+          p.grupoId === grupoId &&
+          p.pagadorId === user?.id &&
+          p.receptorId === acreedorId &&
+          p.estado === "reportado",
+      )
+        ? 10000
+        : false,
+  });
+  const payment =
+    history.data?.find((p) => p.id === reportedId) ||
+    history.data?.find(
+      (p) =>
+        p.grupoId === grupoId &&
+        p.pagadorId === user?.id &&
+        p.receptorId === acreedorId &&
+        p.estado === "reportado",
+    );
+  const hasReport = !!reportedId || !!payment;
+  const recordedValue = payment?.monto || value;
+  const recordedMethod = payment?.metodo || method;
+  const confirmed = payment?.estado === "exitoso";
+  const rejected = payment?.estado === "rechazado";
+  async function submit() {
+    if (
+      busy ||
+      hasReport ||
+      !validParams ||
+      !group ||
+      history.isPending ||
+      history.isError ||
+      value <= 0 ||
+      value > limit
+    )
+      return;
+    try {
+      setBusy(true);
+      setError("");
+      const { data } = await api.post<Pago>("/pagos/reportar", {
+        receptorId: acreedorId,
+        grupoId,
+        monto: value,
+        metodo: method,
+        nota: note.trim() || undefined,
+      });
+      setReportedId(data.id);
+      await queryClient.invalidateQueries({ queryKey: ["pagos"] });
+      await queryClient.invalidateQueries({ queryKey: ["actividad"] });
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      setError(
+        e.response?.data?.error || "No pudimos registrar el pago. Reintenta.",
+      );
+    } finally {
+      setBusy(false);
+    }
   }
-
   return (
-    <View className="flex-1 bg-background">
-      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-      
-      <LinearGradient
-        colors={['#6366F1', '#4F46E5']}
-        className="h-80 w-full absolute top-0"
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+    <Screen title="Registrar pago" back resetOnFocus>
+      <ReferenceHero
+        title="JUNTO no mueve dinero."
+        subtitle="Solo registra y confirma pagos hechos por fuera. Tú pagas por Yape, Plin, efectivo o transferencia."
+        image={art.assistant}
+        imageSide="left"
+        tint={palette.lilac}
+        height={124}
+        titleSize={16}
       />
-
-      <SafeAreaView className="flex-1" edges={['top']}>
-        {/* Header */}
-        <View className="px-6 pt-4 pb-6 flex-row items-center justify-between">
-          <TouchableOpacity 
-            onPress={() => router.back()}
-            className="w-10 h-10 bg-white/20 rounded-xl items-center justify-center border border-white/30"
-          >
-            <Ionicons name="arrow-back" size={24} color="white" />
-          </TouchableOpacity>
-          <Text className="text-white text-xl font-black">Pagar Deuda</Text>
-          <View className="w-10" />
-        </View>
-
-        <ScrollView 
-          className="flex-1" 
-          contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Summary Card */}
-          <GlassCard className="p-6 mb-8 border border-white/30" intensity={1.2}>
-            <Text className="text-white/70 text-xs font-bold uppercase tracking-widest mb-1">Pagando a</Text>
-            <Text className="text-white text-3xl font-black mb-6">{nombre}</Text>
-            
-            <View className="space-y-3">
-              <View className="flex-row justify-between items-center">
-                <Text className="text-white/70 font-medium">Deuda original</Text>
-                <Text className="text-white font-bold text-lg">S/ {centavosASoles(montoNum)}</Text>
-              </View>
-              <View className="flex-row justify-between items-center">
-                <Text className="text-white/70 font-medium">Comisión Junto (1%)</Text>
-                <Text className="text-white font-bold">S/ {centavosASoles(feejunto)}</Text>
-              </View>
-              <View className="h-[1px] bg-white/20 my-2" />
-              <View className="flex-row justify-between items-center">
-                <Text className="text-white text-lg font-black tracking-tight">Total a pagar</Text>
-                <Text className="text-white text-2xl font-black tracking-tighter">S/ {centavosASoles(montoTotal)}</Text>
-              </View>
+      {group && (
+        <Card style={{ padding: 12 }}>
+          <View style={design.row}>
+            <Image
+              source={groupCover(group.tipo)}
+              style={{ width: 60, height: 52, borderRadius: 12 }}
+              resizeMode="cover"
+            />
+            <View style={{ flex: 1 }}>
+              <Label size={18} weight="extra">
+                {group.nombre}
+              </Label>
+              <Label size={12} color={palette.muted}>
+                {group.miembros.length} miembros ·{" "}
+                {group.resumen.cantidadGastos} gastos
+              </Label>
             </View>
-          </GlassCard>
-
-          <Text className="text-text font-extrabold text-lg mb-4 tracking-tight">Método de pago</Text>
-          <View className="space-y-3 mb-8">
-            {METODOS.map((m) => {
-              const sel = metodo === m.value;
-              return (
-                <TouchableOpacity
-                  key={m.value}
-                  onPress={() => setMetodo(m.value)}
-                  className={`flex-row items-center p-4 rounded-3xl border-2 ${
-                    sel ? 'bg-white border-primary shadow-premium' : 'bg-white border-gray-100'
-                  }`}
-                >
-                  <View 
-                    style={{ backgroundColor: `${m.color}10` }}
-                    className="w-14 h-14 rounded-2xl items-center justify-center mr-4"
-                  >
-                    <Text className="text-3xl">{m.emoji}</Text>
-                  </View>
-                  <View className="flex-1">
-                    <Text className={`text-base font-bold ${sel ? 'text-primary' : 'text-text'}`}>{m.label}</Text>
-                    <Text className="text-text-hint text-xs mt-0.5">{m.desc}</Text>
-                  </View>
-                  <View className={`w-6 h-6 rounded-full border-2 items-center justify-center ${sel ? 'border-primary' : 'border-gray-200'}`}>
-                    {sel && <View className="w-3 h-3 rounded-full bg-primary" />}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push(`/(app)/grupos/${grupoId}`)}
+            >
+              <Label size={12} weight="bold">
+                Ver grupo ›
+              </Label>
+            </Pressable>
           </View>
-
-          {/* Form based on method */}
-          {(metodo === 'yape' || metodo === 'plin') && (
-            <View className="bg-white rounded-[32px] p-6 border border-gray-100 mb-8 shadow-sm">
-              <Text className="text-text font-black text-lg mb-6 leading-tight">
-                Datos de tu {metodo === 'yape' ? 'Yape' : 'Plin'}
-              </Text>
-              
-              <View className="mb-6">
-                <Input
-                  label="Número de celular"
-                  value={celular}
-                  onChangeText={setCelular}
-                  placeholder="9XXXXXXXX"
-                  keyboardType="phone-pad"
-                  maxLength={9}
-                  leftIcon={<Ionicons name="phone-portrait-outline" size={20} color="#6366F1" />}
-                />
-              </View>
-
-              <View className="bg-primary/5 p-5 rounded-2xl mb-6 border border-primary/10">
-                <View className="flex-row items-center mb-3">
-                  <Ionicons name="help-circle" size={20} color="#6366F1" />
-                  <Text className="text-primary font-black text-sm ml-2">¿Cómo obtener el código?</Text>
+        </Card>
+      )}
+      {!validParams ? (
+        <ErrorBox message="Abre el pago desde las cuentas de tu grupo para elegir la persona y el saldo correctos." />
+      ) : (
+        <>
+          <Card style={{ backgroundColor: palette.mint, padding: 14 }}>
+            <View style={design.row}>
+              <View style={{ flex: 1, gap: 8 }}>
+                <Label size={13} weight="bold">
+                  Tú pagas a
+                </Label>
+                <View style={design.row}>
+                  <Avatar name={nombre || "Persona"} size={46} />
+                  <View style={{ flex: 1 }}>
+                    <Label size={15} weight="extra">
+                      {nombre}
+                    </Label>
+                    <Label size={11} color={palette.muted}>
+                      Le debes S/ {centavosASoles(limit)}
+                    </Label>
+                  </View>
                 </View>
-                <Text className="text-primary/80 text-xs font-medium leading-5">
-                  1. Abre tu app de {metodo === 'yape' ? 'Yape' : 'Plin'}{"\n"}
-                  2. Ve a <Text className="font-bold">Cobrar → Código de pago</Text>{"\n"}
-                  3. Ingresa el código de 6 dígitos aquí
-                </Text>
               </View>
-
-              <Input
-                label="Código OTP de 6 dígitos"
-                value={otp}
-                onChangeText={setOtp}
-                placeholder="000 000"
-                keyboardType="numeric"
-                maxLength={6}
-                leftIcon={<Ionicons name="key-outline" size={20} color="#6366F1" />}
+              <Ionicons name="arrow-forward" size={22} color={palette.muted} />
+              <View style={{ flex: 1, gap: 8 }}>
+                <Label size={12} weight="bold">
+                  Monto del pago
+                </Label>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    backgroundColor: "white",
+                    borderRadius: 16,
+                    paddingHorizontal: 9,
+                  }}
+                >
+                  <Label color="#00997D" size={24} weight="extra">
+                    S/
+                  </Label>
+                  <TextInput
+                    accessibilityLabel="Monto del pago en soles"
+                    value={payment ? centavosASoles(payment.monto) : amount}
+                    onChangeText={setAmount}
+                    editable={!hasReport}
+                    keyboardType="decimal-pad"
+                    style={{
+                      flex: 1,
+                      minHeight: 58,
+                      fontFamily: "JakartaExtra",
+                      color: "#00997D",
+                      fontSize: 27,
+                    }}
+                  />
+                </View>
+              </View>
+            </View>
+          </Card>
+          {!hasReport ? (
+            <>
+              <Label size={14} weight="bold">
+                Método de pago (por fuera de JUNTO)
+              </Label>
+              <View style={{ flexDirection: "row", gap: 6 }}>
+                {methods.map((m) => (
+                  <Pressable
+                    key={m.id}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: method === m.id }}
+                    onPress={() => setMethod(m.id)}
+                    style={{
+                      flex: 1,
+                      minHeight: 99,
+                      backgroundColor:
+                        method === m.id ? palette.lilac : "white",
+                      borderWidth: 1,
+                      borderColor:
+                        method === m.id ? palette.purple : palette.line,
+                      borderRadius: 16,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      gap: 7,
+                    }}
+                  >
+                    <Ionicons name={m.icon} size={32} color={m.color} />
+                    <Label
+                      size={m.id === "transferencia" ? 8 : 12}
+                      weight="bold"
+                    >
+                      {m.name}
+                    </Label>
+                    {method === m.id && (
+                      <Ionicons
+                        name="checkmark-circle"
+                        size={18}
+                        color={palette.purple}
+                        style={{ position: "absolute", right: 4, top: 4 }}
+                      />
+                    )}
+                  </Pressable>
+                ))}
+              </View>
+              <Card style={{ padding: 12, gap: 8 }}>
+                <Label weight="bold" size={14}>
+                  Nota (opcional)
+                </Label>
+                <TextInput
+                  accessibilityLabel="Nota del pago"
+                  value={note}
+                  onChangeText={setNote}
+                  maxLength={100}
+                  placeholder="Ej. Mi parte de la cena en Cusco"
+                  style={design.input}
+                />
+                <Label
+                  size={11}
+                  color={palette.muted}
+                  style={{ textAlign: "right" }}
+                >
+                  {note.length}/100
+                </Label>
+              </Card>
+              {!!error && <ErrorBox message={error} />}
+              {history.isError && (
+                <>
+                  <ErrorBox message="No pudimos comprobar si ya registraste este pago. Reintenta para evitar duplicarlo." />
+                  <Button
+                    title="Reintentar"
+                    secondary
+                    onPress={() => history.refetch()}
+                  />
+                </>
+              )}
+              <Button
+                title="Registrar pago"
+                onPress={submit}
+                loading={busy}
+                disabled={
+                  !group ||
+                  history.isPending ||
+                  history.isError ||
+                  value <= 0 ||
+                  value > limit
+                }
               />
-            </View>
+              <Label
+                size={11}
+                color={value > limit ? palette.coral : palette.muted}
+              >
+                {value > limit
+                  ? "El monto no puede superar tu deuda pendiente."
+                  : "Registra solo dinero que ya pagaste. Puede ser un pago parcial. Nunca ingreses claves ni códigos bancarios."}
+              </Label>
+            </>
+          ) : (
+            <>
+              <Card
+                style={{
+                  backgroundColor: confirmed
+                    ? palette.mint
+                    : rejected
+                      ? palette.blush
+                      : palette.yellow,
+                }}
+              >
+                <View style={design.row}>
+                  <IconBubble
+                    name={
+                      confirmed
+                        ? "checkmark-circle"
+                        : rejected
+                          ? "close-circle"
+                          : "time-outline"
+                    }
+                    background={confirmed ? "#C9F4E4" : palette.yellow}
+                    color={
+                      confirmed
+                        ? palette.primary
+                        : rejected
+                          ? palette.coral
+                          : "#DA9200"
+                    }
+                    size={45}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Label weight="extra" size={20}>
+                      {confirmed
+                        ? "Pago confirmado"
+                        : rejected
+                          ? "Registro rechazado"
+                          : "Pendiente de confirmación"}
+                    </Label>
+                    <Label size={13}>
+                      {confirmed
+                        ? `${nombre} confirmó que recibió S/ ${centavosASoles(recordedValue)}. La deuda se redujo por ese monto.`
+                        : rejected
+                          ? `${nombre} no confirmó el dinero. Tu deuda no ha cambiado.`
+                          : `${nombre} debe revisar y confirmar que recibió el dinero. Tu deuda todavía no cambia.`}
+                    </Label>
+                  </View>
+                </View>
+              </Card>
+              <Card>
+                <Label weight="extra" size={18}>
+                  Estado del pago
+                </Label>
+                {[
+                  {
+                    title: `${user?.nombre.split(" ")[0] || "Tú"} registró el pago`,
+                    copy: `S/ ${centavosASoles(recordedValue)} por ${recordedMethod}, fuera de JUNTO.`,
+                    done: true,
+                  },
+                  {
+                    title: confirmed
+                      ? `${nombre} confirmó que recibió`
+                      : rejected
+                        ? `${nombre} rechazó el registro`
+                        : `${nombre} debe confirmar que recibió`,
+                    copy: confirmed
+                      ? "Solo el receptor puede confirmar."
+                      : "Espera su revisión en el grupo.",
+                    done: confirmed,
+                  },
+                  {
+                    title: confirmed
+                      ? "¡Pago completado!"
+                      : "Se actualizarán las cuentas",
+                    copy: "La deuda se reduce solo por el monto confirmado.",
+                    done: confirmed,
+                  },
+                ].map((step, index) => (
+                  <View key={step.title} style={design.row}>
+                    <IconBubble
+                      name={
+                        step.done
+                          ? "checkmark"
+                          : index === 1
+                            ? "time-outline"
+                            : "ellipse"
+                      }
+                      background={
+                        step.done
+                          ? palette.mint
+                          : index === 1
+                            ? palette.yellow
+                            : "#F2F3F5"
+                      }
+                      color={step.done ? palette.primary : "#D19A29"}
+                      size={32}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Label size={13} weight="bold">
+                        {step.title}
+                      </Label>
+                      <Label size={11} color={palette.muted}>
+                        {step.copy}
+                      </Label>
+                    </View>
+                  </View>
+                ))}
+              </Card>
+              <Button
+                title="Volver al grupo"
+                onPress={() => router.replace(`/(app)/grupos/${grupoId}`)}
+              />
+            </>
           )}
-
-          {metodo === 'tarjeta' && (
-            <View className="bg-amber-50 rounded-2xl p-5 border border-amber-100 flex-row mb-8">
-              <Ionicons name="lock-closed" size={20} color="#D97706" />
-              <Text className="text-amber-800 text-xs font-medium leading-5 ml-3 flex-1">
-                Serás redirigido a la pasarela segura de <Text className="font-bold">Culqi</Text> para procesar tu tarjeta de forma privada y segura.
-              </Text>
-            </View>
-          )}
-
-          <GradientButton
-            title={`Confirmar Pago · S/ ${centavosASoles(montoTotal)}`}
-            onPress={handlePagar}
-            loading={isProcessing}
-          />
-        </ScrollView>
-      </SafeAreaView>
-    </View>
+        </>
+      )}
+    </Screen>
   );
 }

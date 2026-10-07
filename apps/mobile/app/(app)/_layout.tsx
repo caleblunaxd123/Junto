@@ -1,72 +1,72 @@
-import React from 'react';
-import { Redirect, Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { View, Platform } from 'react-native';
-import { useAuthStore } from '../../src/store/auth.store';
-
+import React from "react";
+import { Redirect, Tabs } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAuthStore } from "../../src/store/auth.store";
+import { palette } from "../../src/components/ui/Design";
 export default function AppLayout() {
   const { isAuthenticated } = useAuthStore();
-
-  if (!isAuthenticated) {
-    return <Redirect href="/(auth)/login" />;
-  }
-
+  const insets = useSafeAreaInsets();
+  if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
+  const screens: [string, string, keyof typeof Ionicons.glyphMap][] = [
+    ["index", "Inicio", "home-outline"],
+    ["actividad", "Actividad", "list-outline"],
+    ["asistente", "Asistente", "sparkles-outline"],
+    ["perfil", "Perfil", "person-outline"],
+  ];
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#6366F1',
-        tabBarInactiveTintColor: '#9CA3AF',
+        tabBarHideOnKeyboard: true,
+        tabBarActiveTintColor: palette.primary,
+        tabBarInactiveTintColor: palette.muted,
+        tabBarLabelStyle: { fontFamily: "JakartaBold", fontSize: 11 },
         tabBarStyle: {
-          backgroundColor: '#fff',
-          borderTopWidth: 0,
-          height: Platform.OS === 'ios' ? 88 : 68,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 12,
-          paddingTop: 12,
-          elevation: 20,
-          shadowColor: '#000',
-          shadowOpacity: 0.1,
-          shadowRadius: 20,
-          shadowOffset: { width: 0, height: -4 },
-        },
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium',
-          fontWeight: '700',
-          marginTop: 2,
+          height: 64 + insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 8),
+          paddingTop: 8,
+          borderTopColor: palette.line,
+          backgroundColor: "white",
         },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Grupos',
-          tabBarIcon: ({ color, focused }) => (
-            <View className={`p-1 ${focused ? '' : 'opacity-80'}`}>
-              <Ionicons name={focused ? "people" : "people-outline"} size={24} color={color} />
-            </View>
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="perfil"
-        options={{
-          title: 'Perfil',
-          tabBarIcon: ({ color, focused }) => (
-            <View className={`p-1 ${focused ? '' : 'opacity-80'}`}>
-              <Ionicons name={focused ? "person" : "person-outline"} size={24} color={color} />
-            </View>
-          ),
-        }}
-      />
-      {/* Hide all sub-routes from tab bar */}
-      <Tabs.Screen name="first-action" options={{ href: null }} />
-      <Tabs.Screen name="grupos/[id]" options={{ href: null }} />
-      <Tabs.Screen name="grupos/crear" options={{ href: null }} />
-      <Tabs.Screen name="grupos/agregar-personas" options={{ href: null }} />
-      <Tabs.Screen name="gastos/[id]" options={{ href: null }} />
-      <Tabs.Screen name="gastos/agregar" options={{ href: null }} />
-      <Tabs.Screen name="pagos/pagar" options={{ href: null }} />
+      {screens.map(([name, title, icon]) => (
+        <Tabs.Screen
+          key={name}
+          name={name}
+          options={{
+            title,
+            tabBarIcon: ({ color }) => (
+              <Ionicons name={icon} size={25} color={color} />
+            ),
+          }}
+        />
+      ))}
+      {[
+        "first-action",
+        "ejemplo",
+        "cuentas/[id]",
+        "cuentas/resumen",
+        "cuentas/rapidas",
+        "cuentas/rapida",
+        "cuentas/rapida-detalle",
+        "grupos/[id]",
+        "grupos/crear",
+        "grupos/editar",
+        "grupos/agregar-personas",
+        "gastos/[id]",
+        "gastos/agregar",
+        "gastos/editar",
+        "pagos/pagar",
+        "perfil/editar",
+      ].map((name) => (
+        <Tabs.Screen
+          key={name}
+          name={name}
+          options={{ href: null, tabBarStyle: { display: "none" } }}
+        />
+      ))}
     </Tabs>
   );
 }

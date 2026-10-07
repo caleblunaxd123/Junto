@@ -1,152 +1,199 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Alert, StatusBar, StyleSheet } from 'react-native';
-import { router } from 'expo-router';
-import { useForm, Controller } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { api } from '../../src/lib/api';
-import { Button } from '../../src/components/ui/Button';
-import { Input } from '../../src/components/ui/Input';
-
-const emailSchema = z.object({ email: z.string().email('Email inválido') });
-const otpSchema = z.object({
-  otp: z.string().length(6, 'El código debe tener 6 dígitos'),
-  newPassword: z.string().min(8, 'Mínimo 8 caracteres').regex(/d/, 'Debe incluir al menos un número'),
-});
-
-export default function ForgotPasswordScreen() {
-  const [step, setStep] = useState<'email' | 'otp'>('email');
-  const [email, setEmail] = useState('');
-
-  const emailForm = useForm<z.infer<typeof emailSchema>>({ resolver: zodResolver(emailSchema) });
-  const otpForm = useForm<z.infer<typeof otpSchema>>({ resolver: zodResolver(otpSchema) });
-
-  const sendOTP = async (data: z.infer<typeof emailSchema>) => {
+import React, { useEffect, useState } from "react";
+import { TextInput } from "react-native";
+import { router } from "expo-router";
+import { api } from "../../src/lib/api";
+import {
+  Screen,
+  Card,
+  Label,
+  Button,
+  ErrorBox,
+  palette,
+  design,
+} from "../../src/components/ui/Design";
+export default function Recovery() {
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+  const [seconds, setSeconds] = useState(0);
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    if (seconds <= 0) return;
+    const timer = setTimeout(() => setSeconds((value) => value - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [seconds]);
+  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const validPassword =
+    /^\d{6}$/.test(code) &&
+    password.length >= 8 &&
+    /\d/.test(password) &&
+    password === confirm;
+  async function submit() {
+    if (busy || !validEmail || (sent ? !validPassword : seconds > 0)) return;
     try {
-      await api.post('/auth/forgot-password', { email: data.email });
-      setEmail(data.email);
-      setStep('otp');
-    } catch {
-      Alert.alert('Error', 'No se pudo enviar el código. Inténtalo de nuevo.');
+      setError("");
+      setBusy(true);
+      if (!sent) {
+        await api.post("/auth/forgot-password", {
+          email: email.trim().toLowerCase(),
+        });
+        setSent(true);
+        setSeconds(60);
+      } else {
+        await api.post("/auth/reset-password", {
+          email: email.trim().toLowerCase(),
+          otp: code,
+          newPassword: password,
+        });
+        setDone(true);
+      }
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      setError(
+        e.response?.data?.error ||
+          "No pudimos continuar. Comprueba tu conexión e inténtalo de nuevo.",
+      );
+    } finally {
+      setBusy(false);
     }
-  };
-
-  const resetPassword = async (data: z.infer<typeof otpSchema>) => {
+  }
+  async function resend() {
+    if (busy || seconds > 0 || !validEmail) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
     try {
-      await api.post('/auth/reset-password', { email, otp: data.otp, newPassword: data.newPassword });
-      Alert.alert('Listo!', 'Contraseña actualizada correctamente', [
-        { text: 'Ingresar', onPress: () => router.replace('/(auth)/login') },
-      ]);
-    } catch {
-      Alert.alert('Error', 'Código incorrecto o expirado');
+      await api.post("/auth/forgot-password", {
+        email: email.trim().toLowerCase(),
+      });
+      setCode("");
+      setSeconds(60);
+      setMessage(
+        "Solicitud registrada. Si hay una cuenta con ese correo, enviaremos un nuevo código. Usa el más reciente.",
+      );
+    } catch (err) {
+      const e = err as { response?: { data?: { error?: string } } };
+      setError(
+        e.response?.data?.error ||
+          "No pudimos solicitar otro código. Revisa tu conexión.",
+      );
+    } finally {
+      setBusy(false);
     }
-  };
-
+  }
   return (
-    <View style={s.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#534AB7" />
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={s.header}>
-          <TouchableOpacity onPress={() => (step === 'otp' ? setStep('email') : router.back())} style={s.backBtn}>
-            <Ionicons name="arrow-back" size={22} color="white" />
-          </TouchableOpacity>
-          <Text style={s.headerTitle}>
-            {step === 'email' ? 'Recuperar contraseña' : 'Ingresa el código'}
-          </Text>
-          <Text style={s.headerSub}>
-            {step === 'email'
-              ? 'Te enviaremos un código de 6 dígitos a tu email'
-              : 'Enviamos un código a ' + email}
-          </Text>
-        </View>
-
-        <ScrollView
-          style={s.form}
-          contentContainerStyle={{ padding: 24, paddingBottom: 48 }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {step === 'email' ? (
+    <Screen
+      title="Recupera tu cuenta"
+      subtitle="Solo tú debes conocer tu contraseña."
+      back
+    >
+      {done ? (
+        <Card>
+          <Label weight="bold">Contraseña actualizada</Label>
+          <Label>
+            Ya puedes entrar con tu nueva contraseña. Cerramos las sesiones
+            anteriores para proteger tu cuenta.
+          </Label>
+          <Button
+            title="Ir a iniciar sesión"
+            onPress={() => router.replace("/(auth)/login")}
+          />
+        </Card>
+      ) : (
+        <Card>
+          <Label weight="bold">Correo electrónico</Label>
+          <TextInput
+            accessibilityLabel="Correo para recuperar cuenta"
+            value={email}
+            editable={!sent}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            style={design.input}
+          />
+          {sent && (
             <>
-              <Controller
-                control={emailForm.control}
-                name="email"
-                render={({ field: { onChange, value, ref } }) => (
-                  <Input
-                    ref={ref}
-                    label="Email"
-                    placeholder="tu@email.com"
-                    keyboardType="email-address"
-                    onChangeText={onChange}
-                    value={value}
-                    error={emailForm.formState.errors.email?.message}
-                    leftIcon={<Ionicons name="mail-outline" size={20} color="#534AB7" />}
-                  />
-                )}
+              <Label color={palette.muted}>
+                Si este correo tiene cuenta, recibirás un código de 6 dígitos.
+                Revisa también spam. Caduca en 15 minutos.
+              </Label>
+              <Label weight="bold">Código del correo</Label>
+              <TextInput
+                accessibilityLabel="Código de recuperación"
+                value={code}
+                onChangeText={(v) => setCode(v.replace(/\D/g, ""))}
+                maxLength={6}
+                keyboardType="number-pad"
+                autoComplete="one-time-code"
+                style={design.input}
               />
-              <Button
-                title="Enviar código"
-                onPress={emailForm.handleSubmit(sendOTP)}
-                loading={emailForm.formState.isSubmitting}
-                style={{ marginTop: 8 }}
+              <Label weight="bold">Nueva contraseña</Label>
+              <TextInput
+                accessibilityLabel="Nueva contraseña"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                style={design.input}
               />
-            </>
-          ) : (
-            <>
-              <Controller
-                control={otpForm.control}
-                name="otp"
-                render={({ field: { onChange, value, ref } }) => (
-                  <Input
-                    ref={ref}
-                    label="Código OTP"
-                    placeholder="123456"
-                    keyboardType="numeric"
-                    maxLength={6}
-                    onChangeText={onChange}
-                    value={value}
-                    error={otpForm.formState.errors.otp?.message}
-                    leftIcon={<Ionicons name="key-outline" size={20} color="#534AB7" />}
-                  />
-                )}
-              />
-              <Controller
-                control={otpForm.control}
-                name="newPassword"
-                render={({ field: { onChange, value, ref } }) => (
-                  <Input
-                    ref={ref}
-                    label="Nueva contraseña"
-                    placeholder="••••••••"
-                    secureTextEntry
-                    onChangeText={onChange}
-                    value={value}
-                    error={otpForm.formState.errors.newPassword?.message}
-                    leftIcon={<Ionicons name="lock-closed-outline" size={20} color="#534AB7" />}
-                  />
-                )}
-              />
-              <Button
-                title="Cambiar contraseña"
-                onPress={otpForm.handleSubmit(resetPassword)}
-                loading={otpForm.formState.isSubmitting}
-                style={{ marginTop: 8 }}
+              <Label size={12}>Al menos 8 caracteres y un número.</Label>
+              <Label weight="bold">Repite la contraseña</Label>
+              <TextInput
+                accessibilityLabel="Confirmar nueva contraseña"
+                value={confirm}
+                onChangeText={setConfirm}
+                secureTextEntry
+                autoCapitalize="none"
+                style={design.input}
               />
             </>
           )}
-        </ScrollView>
-      </SafeAreaView>
-    </View>
+          {!!error && <ErrorBox message={error} />}
+          {!!message && (
+            <Label size={12} color={palette.muted}>
+              {message}
+            </Label>
+          )}
+          <Button
+            title={sent ? "Actualizar contraseña" : "Enviar código"}
+            loading={busy}
+            onPress={submit}
+            disabled={sent ? !validPassword : !validEmail || seconds > 0}
+          />
+          {sent && (
+            <Button
+              title={
+                seconds > 0
+                  ? `Reenviar código en ${seconds}s`
+                  : "Reenviar código"
+              }
+              secondary
+              onPress={resend}
+              disabled={busy || seconds > 0}
+            />
+          )}
+          {sent && (
+            <Button
+              title="Cambiar correo"
+              secondary
+              disabled={busy}
+              onPress={() => {
+                setSent(false);
+                setCode("");
+                setError("");
+                setMessage("");
+                setPassword("");
+                setConfirm("");
+              }}
+            />
+          )}
+        </Card>
+      )}
+    </Screen>
   );
 }
-
-const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#534AB7' },
-  header: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 28 },
-  backBtn: { width: 40, height: 40, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  headerTitle: { color: 'white', fontSize: 24, fontWeight: 'bold', marginBottom: 6 },
-  headerSub: { color: 'rgba(255,255,255,0.7)', fontSize: 14, lineHeight: 20 },
-  form: { flex: 1, backgroundColor: 'white', borderTopLeftRadius: 28, borderTopRightRadius: 28 },
-});

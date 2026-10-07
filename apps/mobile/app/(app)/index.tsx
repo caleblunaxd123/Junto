@@ -1,182 +1,385 @@
-import React from 'react';
+import React, { useState, useCallback } from "react";
 import {
   View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  RefreshControl,
+  Image,
+  TextInput,
+  Pressable,
   ActivityIndicator,
-  StatusBar,
-} from 'react-native';
-import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useGrupos } from '../../src/hooks/useGrupos';
-import { useAuthStore } from '../../src/store/auth.store';
-import { GlassCard } from '../../src/components/ui/GlassCard';
-import { SocialPressureWidget } from '../../src/components/SocialPressureWidget';
-import type { GrupoConBalance } from '../../src/types';
-import { centavosASoles } from '../../src/types';
-
-function GrupoCard({ grupo }: { grupo: GrupoConBalance }) {
-  const { neto } = grupo.balanceUsuario;
-  const positivo = neto > 0;
-
-  return (
-    <TouchableOpacity onPress={() => router.push(`/(app)/grupos/${grupo.id}`)} activeOpacity={0.85} className="mb-4">
-      <GlassCard className="p-4" intensity={1.05}>
-        <View className="flex-row items-center">
-          <View className="w-14 h-14 rounded-2xl bg-primary/10 items-center justify-center mr-4">
-            <Text className="text-xl">
-              {grupo.tipo === 'viaje' ? '✈️' : grupo.tipo === 'roomies' ? '🏠' : grupo.tipo === 'amigos' ? '👥' : grupo.tipo === 'trabajo' ? '💼' : '📦'}
-            </Text>
-          </View>
-          <View className="flex-1">
-            <Text className="text-text font-bold text-lg" style={{ letterSpacing: -0.5 }}>{grupo.nombre}</Text>
-            <View className="flex-row items-center mt-1">
-              <Ionicons name="people-outline" size={14} color="#6B7280" />
-              <Text className="text-text-muted text-xs ml-1 font-medium">{grupo.miembros.length} Miembro{grupo.miembros.length !== 1 ? 's' : ''}</Text>
-            </View>
-          </View>
-          <View className="items-end">
-            {neto === 0 ? (
-              <View className="bg-success/10 px-3 py-1.5 rounded-full flex-row items-center border border-success/20">
-                <Ionicons name="checkmark-circle" size={14} color="#10B981" />
-                <Text className="text-success text-xs font-bold ml-1">Al día</Text>
-              </View>
-            ) : (
-              <View className="items-end">
-                <Text className={`text-lg font-extrabold ${positivo ? 'text-success' : 'text-danger'}`}>S/ {centavosASoles(Math.abs(neto))}</Text>
-                <Text className="text-text-hint text-[10px] font-bold uppercase tracking-wider">{positivo ? 'te deben' : 'debes'}</Text>
-              </View>
-            )}
-          </View>
-        </View>
-      </GlassCard>
-    </TouchableOpacity>
-  );
-}
-
-export default function HomeScreen() {
+  ScrollView,
+  RefreshControl,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { router, useFocusEffect } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../../src/lib/api";
+import { useGrupos } from "../../src/hooks/useGrupos";
+import { useAuthStore } from "../../src/store/auth.store";
+import {
+  Avatar,
+  Button,
+  Card,
+  Label,
+  ErrorBox,
+  palette,
+  design,
+} from "../../src/components/ui/Design";
+import {
+  Brand,
+  IconBubble,
+  SectionTitle,
+} from "../../src/components/ui/Reference";
+import { centavosASoles } from "../../src/types";
+import { useQuickBills } from "../../src/hooks/useQuickBills";
+import { groupCover } from "../../src/components/ui/Artwork";
+import { accountSummary } from "../../src/lib/accountSummary";
+type Event = {
+  id: string;
+  titulo: string;
+  detalle: string;
+  monto: number;
+  fecha: string;
+  grupoId: string;
+};
+export default function Home() {
   const { usuario } = useAuthStore();
-  const { data: grupos, isLoading, refetch, isRefetching } = useGrupos();
-
-  const totalTeDeben = grupos?.reduce((acc, g) => acc + g.balanceUsuario.teDeben, 0) ?? 0;
-  const totalDebes = grupos?.reduce((acc, g) => acc + g.balanceUsuario.debes, 0) ?? 0;
-
-  // Mock pressure level for demo
-  const pressureLevel = totalTeDeben > 10000 ? 'high' : totalTeDeben > 5000 ? 'medium' : 'low';
-
+  const {
+    data: groups = [],
+    isLoading,
+    isError,
+    refetch,
+    isRefetching,
+  } = useGrupos();
+  const [search, setSearch] = useState("");
+  const bills = useQuickBills();
+  const refreshBills = bills.refetch;
+  const { data: events = [], isError: eventsError, refetch: refreshEvents } = useQuery<Event[]>({
+    queryKey: ["actividad"],
+    queryFn: () => api.get("/actividad").then((r) => r.data),
+  });
+  const { owed, owes, current } = accountSummary(groups);
+  useFocusEffect(
+    useCallback(() => {
+      refetch();
+      refreshEvents();
+      refreshBills();
+    }, [refetch, refreshEvents, refreshBills]),
+  );
+  const filtered = groups.filter((g) =>
+    g.nombre.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
+  );
   return (
-    <View className="flex-1 bg-background">
-      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-      
-      <LinearGradient
-        colors={['#6366F1', '#4F46E5']}
-        className="h-72 w-full absolute top-0"
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      />
-
-      <SafeAreaView className="flex-1" edges={['top']}>
-        {/* Header */}
-        <View className="px-6 pt-4 pb-6">
-          <View className="flex-row items-center justify-between mb-8">
-            <View>
-              <Text className="text-white/70 text-base font-medium">Hola de nuevo,</Text>
-              <Text className="text-white text-3xl font-extrabold tracking-tight">
-                {usuario?.nombre?.split(' ')[0]} 👋
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => router.push('/(app)/grupos/crear')}
-              className="bg-white/20 w-12 h-12 rounded-2xl items-center justify-center border border-white/30"
-            >
-              <Ionicons name="add" size={28} color="white" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Balance Cards Row */}
-          <View className="flex-row gap-4">
-            <View className="flex-1 bg-white/10 rounded-3xl p-4 border border-white/20">
-              <View className="w-8 h-8 rounded-full bg-success/20 items-center justify-center mb-3">
-                <Ionicons name="arrow-down" size={16} color="#10B981" />
-              </View>
-              <Text className="text-white/60 text-xs font-bold uppercase tracking-widest mb-1">Te deben</Text>
-              <Text className="text-white text-2xl font-black">
-                S/ {centavosASoles(totalTeDeben)}
-              </Text>
-            </View>
-            
-            <View className="flex-1 bg-white/10 rounded-3xl p-4 border border-white/20">
-              <View className="w-8 h-8 rounded-full bg-danger/20 items-center justify-center mb-3">
-                <Ionicons name="arrow-up" size={16} color="#EF4444" />
-              </View>
-              <Text className="text-white/60 text-xs font-bold uppercase tracking-widest mb-1">Debes</Text>
-              <Text className="text-white text-2xl font-black">
-                S/ {centavosASoles(totalDebes)}
-              </Text>
-            </View>
-          </View>
+    <SafeAreaView
+      edges={["top"]}
+      style={{ flex: 1, backgroundColor: palette.background }}
+    >
+      <ScrollView
+        contentContainerStyle={{
+          padding: 16,
+          paddingBottom: 32,
+          gap: 16,
+        }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => {
+              refetch();
+              refreshEvents();
+              refreshBills();
+            }}
+            tintColor={palette.primary}
+          />
+        }
+      >
+        <View style={[design.row, { justifyContent: "space-between" }]}>
+          <Brand compact />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Ver actividad y pagos"
+            onPress={() => router.push("/(app)/actividad")}
+            style={{ marginLeft: "auto", padding: 8 }}
+          >
+            <Ionicons
+              name="notifications-outline"
+              size={24}
+              color={palette.ink}
+            />
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Abrir mi perfil"
+            onPress={() => router.push("/(app)/perfil")}
+          >
+            <Avatar name={usuario?.nombre || "Tú"} />
+          </Pressable>
         </View>
-
-        {/* Content Area */}
-        <FlatList
-          data={grupos || []}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <GrupoCard grupo={item} />}
-          contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
-          className="flex-1"
-          refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#6366F1" />
-          }
-          ListHeaderComponent={
-            <View className="mb-6">
-              {totalTeDeben > 0 && (
-                <View className="mb-8">
-                   <Text className="text-text font-extrabold text-xl mb-4 tracking-tight">Monitor de Cobros</Text>
-                   <SocialPressureWidget level={pressureLevel as any} totalDebt={centavosASoles(totalTeDeben)} />
-                </View>
-              )}
-
-              <View className="flex-row items-center justify-between">
-                <Text className="text-text font-extrabold text-xl tracking-tight">
-                  Tus Grupos
-                </Text>
-                {grupos && grupos.length > 0 && (
-                  <TouchableOpacity>
-                    <Text className="text-primary font-bold">Ver todos</Text>
-                  </TouchableOpacity>
-                )}
+          <View style={{ gap: 7 }}>
+              <Label size={28} weight="extra">
+                Hola, {usuario?.nombre.split(" ")[0] || "amigo"}
+              </Label>
+              <Label size={14} color={palette.muted}>
+                ¿Una cuenta de hoy o gastos que siguen? Elige tu plan.
+              </Label>
+          </View>
+        <Card style={{ backgroundColor: palette.mint }}>
+          <Label size={19} weight="extra">Una cuenta, resuelta en tres pasos</Label>
+          <Label size={13}>Cena, cumpleaños o salida. Foto o total → personas → reparto. Tus invitados no necesitan una cuenta.</Label>
+          <Button title="Dividir una cuenta" onPress={() => router.push("/(app)/cuentas/rapida")} />
+        </Card>
+        <Card style={{ padding: 14 }}><Label size={17} weight="extra">Gastos que comparten seguido</Label><Label size={13}>Pareja, depa o viaje: un grupo conserva quién pagó y quién debe a quién.</Label><Button title="Organizar un grupo" secondary onPress={() => router.push("/(app)/grupos/crear")} /></Card>
+        <SectionTitle title="Tus cuentas puntuales" action="Ver todas" onPress={() => router.push("/(app)/cuentas/rapidas")} />
+        {bills.isLoading ? <ActivityIndicator color={palette.primary} /> : bills.isError ? <><ErrorBox message="No pudimos actualizar tus cuentas puntuales." /><Button title="Actualizar cuentas" secondary onPress={() => refreshBills()} /></> : bills.data?.filter((bill) => !bill.archivada).length ? bills.data.filter((bill) => !bill.archivada).slice(0, 2).map((bill) => <Pressable key={bill.id} accessibilityRole="button" onPress={() => router.push({ pathname: "/(app)/cuentas/rapida-detalle", params: { id: bill.id } })}><Card style={{ padding: 14 }}><Label weight="bold">{bill.datos.nombre}</Label><Label size={13}>Total S/ {centavosASoles(bill.resultado.montoTotal)} · {bill.pendiente ? `S/ ${centavosASoles(bill.pendiente)} por confirmar` : "Todos los aportes confirmados"}</Label></Card></Pressable>) : <Label size={13} color={palette.muted}>Tu primer reparto aparecerá aquí. Se mantiene separado de las deudas de tus grupos.</Label>}
+        {isLoading ? (
+          <ActivityIndicator color={palette.primary} />
+        ) : isError ? (
+          <>
+            <ErrorBox message="No pudimos cargar tus grupos. Revisa tu conexión." />
+            <Button title="Reintentar" onPress={() => refetch()} />
+          </>
+        ) : groups.length === 0 ? (
+          <>
+            <Card><Label weight="bold">Todavía no tienes grupos</Label><Label size={13}>No necesitas uno para dividir la cuenta de hoy. Crea un grupo cuando quieras conservar gastos con las mismas personas.</Label><Button title="Ver un ejemplo explicado" secondary onPress={() => router.push("/(app)/ejemplo")} /></Card>
+          </>
+        ) : (
+          <>
+            <Card>
+              <SectionTitle
+                title="En tus grupos"
+                action="Ver detalle"
+                onPress={() => router.push("/(app)/cuentas/resumen")}
+              />
+              <View style={{ flexDirection: "row", gap: 7 }}>
+                {[
+                  {
+                    label: "Te deben",
+                    value: `S/ ${centavosASoles(owed)}`,
+                    icon: "arrow-up-outline",
+                    color: "#078B70",
+                    bg: palette.mint,
+                    helper: "Dinero que otros te deben.",
+                  },
+                  {
+                    label: "Debes",
+                    value: `S/ ${centavosASoles(owes)}`,
+                    icon: "arrow-down-outline",
+                    color: palette.coral,
+                    bg: palette.blush,
+                    helper: "Dinero que tú debes pagar.",
+                  },
+                  {
+                    label: "Al día",
+                    value: `${current} ${current === 1 ? "grupo" : "grupos"}`,
+                    icon: "checkmark-outline",
+                    color: palette.purple,
+                    bg: palette.lilac,
+                    helper: "Sin deudas en estos grupos.",
+                  },
+                ].map((x) => (
+                  <Pressable
+                    key={x.label}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${x.label}: ${x.value}. Ver explicación de mis cuentas`}
+                    onPress={() => router.push("/(app)/cuentas/resumen")}
+                    style={{
+                      flex: 1,
+                      borderRadius: 15,
+                      backgroundColor: x.bg,
+                      padding: 10,
+                      gap: 3,
+                    }}
+                  >
+                    <Ionicons
+                      name={x.icon as keyof typeof Ionicons.glyphMap}
+                      size={23}
+                      color={x.color}
+                    />
+                    <Label size={13} weight="bold" color={x.color}>
+                      {x.label}
+                    </Label>
+                    <Label size={16} weight="extra" color={x.color}>
+                      {x.value}
+                    </Label>
+                    <Label size={11} color={palette.muted}>
+                      {x.helper}
+                    </Label>
+                  </Pressable>
+                ))}
               </View>
+            </Card>
+            <View style={design.row}>
+              <View
+                style={[
+                  design.input,
+                  {
+                    flex: 1,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    paddingVertical: 0,
+                    gap: 8,
+                  },
+                ]}
+              >
+                <Ionicons name="search" size={20} color={palette.muted} />
+                <TextInput
+                  accessibilityLabel="Buscar grupo"
+                  placeholder="Buscar grupo…"
+                  value={search}
+                  onChangeText={setSearch}
+                  style={{
+                    flex: 1,
+                    fontFamily: "Jakarta",
+                    height: 48,
+                    color: palette.ink,
+                  }}
+                />
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => router.push("/(app)/grupos/crear")}
+                style={{
+                  borderWidth: 1,
+                  borderColor: "#7DAFD4",
+                  backgroundColor: "white",
+                  padding: 13,
+                  borderRadius: 15,
+                }}
+              >
+                <Label size={13} weight="bold">
+                  ⊕ Crear grupo
+                </Label>
+              </Pressable>
             </View>
-          }
-          ListEmptyComponent={
-            isLoading ? (
-              <View className="flex-1 items-center justify-center py-20">
-                <ActivityIndicator size="large" color="#6366F1" />
-              </View>
-            ) : (
-              <View className="items-center py-12">
-                <View className="w-24 h-24 bg-primary/5 rounded-[40px] items-center justify-center mb-6">
-                  <Ionicons name="people-outline" size={48} color="#6366F1" />
-                </View>
-                <Text className="text-text text-xl font-extrabold mb-2">Aún no tienes grupos</Text>
-                <Text className="text-text-muted text-center px-10 leading-6 font-medium">
-                  Crea un grupo e invita a tus amigos para empezar a dividir gastos.
-                </Text>
-                <TouchableOpacity
-                  onPress={() => router.push('/(app)/grupos/crear')}
-                  className="mt-8 bg-primary h-14 px-8 rounded-2xl items-center justify-center shadow-premium"
+            <SectionTitle title="Tus grupos" />
+            <Button title="Agregar gasto a un grupo" secondary onPress={() => router.push("/(app)/gastos/agregar")} />
+            {filtered.map((g) => (
+              <Pressable
+                key={g.id}
+                accessibilityRole="button"
+                onPress={() => router.push(`/(app)/grupos/${g.id}`)}
+              >
+                <Card style={{ padding: 10, borderRadius: 22 }}>
+                  <View style={{ flexDirection: "row", gap: 12 }}>
+                    <Image
+                      source={groupCover(g.tipo)}
+                      style={{
+                        width: 90,
+                        height: 110,
+                        alignSelf: "center",
+                        borderRadius: 16,
+                        backgroundColor:
+                          g.tipo === "viaje" ? "#E7F4FD" : "#FFF2E4",
+                      }}
+                      resizeMode={g.tipo === "viaje" ? "cover" : "contain"}
+                    />
+                    <View style={{ flex: 1, gap: 7 }}>
+                      <Label size={16} weight="extra" numberOfLines={2}>
+                        {g.nombre}
+                      </Label>
+                      <View style={[design.row, { gap: 8 }]}>
+                        <View style={{ flex: 1 }}>
+                          <View style={{ flexDirection: "row", gap: 3 }}>
+                            {g.miembros.slice(0, 3).map((m) => (
+                              <Avatar
+                                key={m.usuarioId}
+                                name={m.usuario.nombre}
+                                size={29}
+                              />
+                            ))}
+                          </View>
+                          <Label size={10} color={palette.muted}>
+                            {g.miembros.length}{" "}
+                            {g.miembros.length === 1 ? "persona" : "personas"}
+                          </Label>
+                        </View>
+                        <View>
+                          <Label size={10} color={palette.muted}>
+                            Total gastado
+                          </Label>
+                          <Label size={17} weight="extra">
+                            S/ {centavosASoles(g.resumen.totalGastado)}
+                          </Label>
+                          <Label size={10} color={palette.muted}>
+                            en {g.resumen.cantidadGastos} gastos
+                          </Label>
+                        </View>
+                      </View>
+                      <View
+                        style={{
+                          padding: 8,
+                          borderRadius: 12,
+                          backgroundColor:
+                            g.balanceUsuario.neto < 0
+                              ? palette.blush
+                              : g.balanceUsuario.neto > 0
+                                ? palette.mint
+                                : palette.lilac,
+                        }}
+                      >
+                        <Label
+                          size={12}
+                          weight="bold"
+                          color={
+                            g.balanceUsuario.neto < 0
+                              ? palette.coral
+                              : g.balanceUsuario.neto > 0
+                                ? "#078B70"
+                                : palette.purple
+                          }
+                        >
+                          {g.balanceUsuario.neto === 0
+                            ? "✓ Estás al día en este grupo"
+                            : `${g.balanceUsuario.neto > 0 ? "↑ Te deben" : "↓ Debes"} S/ ${centavosASoles(Math.abs(g.balanceUsuario.neto))}`}
+                        </Label>
+                      </View>
+                    </View>
+                  </View>
+                </Card>
+              </Pressable>
+            ))}
+            {!filtered.length && (
+              <Label color={palette.muted}>No hay grupos con ese nombre.</Label>
+            )}
+            <SectionTitle
+              title="Actividad reciente"
+              action="Ver todas"
+              onPress={() => router.push("/(app)/actividad")}
+            />
+            {eventsError ? (
+              <>
+                <ErrorBox message="No pudimos actualizar la actividad. Reintenta para ver los últimos gastos y pagos." />
+                <Button title="Actualizar actividad" secondary onPress={() => refreshEvents()} />
+              </>
+            ) : events.length ? (
+              events.slice(0, 2).map((e) => (
+                <Pressable
+                  key={e.id}
+                  onPress={() => router.push(`/(app)/grupos/${e.grupoId}`)}
                 >
-                  <Text className="text-white font-black text-base">Crear mi primer grupo</Text>
-                </TouchableOpacity>
-              </View>
-            )
-          }
-        />
-      </SafeAreaView>
-    </View>
+                  <Card>
+                    <View style={design.row}>
+                      <IconBubble name="receipt-outline" />
+                      <View style={{ flex: 1 }}>
+                        <Label size={13} weight="bold">
+                          {e.titulo}
+                        </Label>
+                        <Label size={11} color={palette.muted}>
+                          {e.detalle}
+                        </Label>
+                      </View>
+                      <Label size={15} weight="bold">
+                        S/ {centavosASoles(e.monto)}
+                      </Label>
+                    </View>
+                  </Card>
+                </Pressable>
+              ))
+            ) : (
+              <Label size={13} color={palette.muted}>
+                El primer gasto aparecerá aquí.
+              </Label>
+            )}
+          </>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }

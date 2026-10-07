@@ -3,7 +3,6 @@ import {
   TouchableOpacity,
   Text,
   ActivityIndicator,
-  View,
   ColorValue,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,7 +23,7 @@ export function GradientButton({
   children,
   onPress,
   loading,
-  colors = ['#6366F1', '#8B5CF6'],
+  colors = ['#16A36A', '#12B879'],
   size = 'lg',
   disabled,
   className = '',

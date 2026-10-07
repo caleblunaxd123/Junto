@@ -1,20 +1,27 @@
-import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
-import { api } from '../lib/api';
-import type { Usuario, AuthResponse } from '../types';
+import { create } from "zustand";
+import * as SecureStore from "expo-secure-store";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { validInvitationCode } from "../lib/invitation";
+import { api, onSessionExpired } from "../lib/api";
+import { queryClient } from "../lib/queryClient";
+import type { Usuario, AuthResponse } from "../types";
 
 interface AuthState {
   usuario: Usuario | null;
   isLoaded: boolean;
   isAuthenticated: boolean;
+  pendingInvitation: string | null;
+  rememberInvitation: (code: string) => Promise<void>;
+  clearInvitation: () => Promise<void>;
 
   login: (email: string, password: string) => Promise<void>;
   register: (data: {
     nombre: string;
     email: string;
-    celular: string;
+    celular?: string;
     password: string;
-  }) => Promise<void>;
+  }) => Promise<{ emailDelivery: boolean }>;
+  completeVerification: (email: string, otp: string) => Promise<void>;
   logout: () => Promise<void>;
   loadFromStorage: () => Promise<void>;
   updateUsuario: (data: Partial<Usuario>) => void;
@@ -24,46 +31,125 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   usuario: null,
   isLoaded: false,
   isAuthenticated: false,
+  pendingInvitation: null,
+  rememberInvitation: async (code) => {
+    if (!validInvitationCode(code))
+      throw new Error("Enlace de invitación inválido.");
+    await AsyncStorage.setItem("pendingInvitation", code);
+    set({ pendingInvitation: code });
+  },
+  clearInvitation: async () => {
+    await AsyncStorage.removeItem("pendingInvitation");
+    set({ pendingInvitation: null });
+  },
 
   loadFromStorage: async () => {
+    const pending = await AsyncStorage.getItem("pendingInvitation").catch(
+      () => null,
+    );
+    set({ pendingInvitation: validInvitationCode(pending) ? pending : null });
     try {
-      const token = await SecureStore.getItemAsync('accessToken');
+      const token = await SecureStore.getItemAsync("accessToken");
       if (!token) {
         set({ isLoaded: true, isAuthenticated: false });
         return;
       }
 
-      const { data } = await api.get<Usuario>('/auth/me');
+      const { data } = await api.get<Usuario>("/auth/me");
+      await SecureStore.setItemAsync("cachedUsuario", JSON.stringify(data));
       set({ usuario: data, isLoaded: true, isAuthenticated: true });
-    } catch {
-      await SecureStore.deleteItemAsync('accessToken');
-      await SecureStore.deleteItemAsync('refreshToken');
-      set({ isLoaded: true, isAuthenticated: false, usuario: null });
+    } catch (err) {
+      const status = (err as { response?: { status?: number } }).response
+        ?.status;
+      if (status === 401 || status === 403) {
+        await Promise.all(
+          ["accessToken", "refreshToken", "cachedUsuario"].map((key) =>
+            SecureStore.deleteItemAsync(key),
+          ),
+        );
+        queryClient.clear();
+        set({ isLoaded: true, isAuthenticated: false, usuario: null });
+      } else {
+        const cached = await SecureStore.getItemAsync("cachedUsuario");
+        let usuario = get().usuario;
+        try {
+          const value = cached ? JSON.parse(cached) : null;
+          if (value?.id && value?.email) usuario = value;
+        } catch {
+          /* A damaged profile cache must not erase the tokens. */
+        }
+        set({ isLoaded: true, isAuthenticated: !!usuario, usuario });
+      }
     }
   },
 
   login: async (email, password) => {
-    const { data } = await api.post<AuthResponse>('/auth/login', { email, password });
-    await SecureStore.setItemAsync('accessToken', data.accessToken);
-    await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+    const { data } = await api.post<AuthResponse>("/auth/login", {
+      email,
+      password,
+    });
+    await SecureStore.setItemAsync("accessToken", data.accessToken);
+    await SecureStore.setItemAsync("refreshToken", data.refreshToken);
+    await SecureStore.setItemAsync(
+      "cachedUsuario",
+      JSON.stringify(data.usuario),
+    );
+    queryClient.clear();
     set({ usuario: data.usuario, isAuthenticated: true });
   },
 
   register: async (formData) => {
-    const { data } = await api.post<AuthResponse>('/auth/register', formData);
-    await SecureStore.setItemAsync('accessToken', data.accessToken);
-    await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+    const { data } = await api.post<{ emailDelivery: boolean }>(
+      "/auth/register",
+      formData,
+    );
+    return data;
+  },
+
+  completeVerification: async (email, otp) => {
+    const { data } = await api.post<AuthResponse>("/auth/verify-email", {
+      email,
+      otp,
+    });
+    await SecureStore.setItemAsync("accessToken", data.accessToken);
+    await SecureStore.setItemAsync("refreshToken", data.refreshToken);
+    await SecureStore.setItemAsync(
+      "cachedUsuario",
+      JSON.stringify(data.usuario),
+    );
+    queryClient.clear();
     set({ usuario: data.usuario, isAuthenticated: true });
   },
 
   logout: async () => {
-    await SecureStore.deleteItemAsync('accessToken');
-    await SecureStore.deleteItemAsync('refreshToken');
+    const refreshToken = await SecureStore.getItemAsync("refreshToken");
+    if (refreshToken) {
+      await api.post("/auth/logout", { refreshToken }).catch(() => undefined);
+    }
+    await SecureStore.deleteItemAsync("accessToken");
+    await SecureStore.deleteItemAsync("refreshToken");
+    await SecureStore.deleteItemAsync("cachedUsuario");
+    await get().clearInvitation();
+    queryClient.clear();
     set({ usuario: null, isAuthenticated: false });
   },
 
   updateUsuario: (data) => {
     const current = get().usuario;
-    if (current) set({ usuario: { ...current, ...data } });
+    if (current) {
+      const usuario = { ...current, ...data };
+      set({ usuario });
+      SecureStore.setItemAsync("cachedUsuario", JSON.stringify(usuario)).catch(
+        () => undefined,
+      );
+    }
   },
 }));
+onSessionExpired(() => {
+  queryClient.clear();
+  useAuthStore.setState({
+    usuario: null,
+    isAuthenticated: false,
+    isLoaded: true,
+  });
+});

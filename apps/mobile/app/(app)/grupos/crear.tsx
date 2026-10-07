@@ -1,241 +1,332 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
-  Text,
-  TouchableOpacity,
+  TextInput,
+  Pressable,
+  Image,
   ScrollView,
-  Switch,
-  Platform,
-  StatusBar,
-  Alert,
-} from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useCrearGrupo } from '../../../src/hooks/useGrupos';
-import { GlassCard } from '../../../src/components/ui/GlassCard';
-import { GradientButton } from '../../../src/components/ui/GradientButton';
-import { Input } from '../../../src/components/ui/Input';
-
-const TIPOS = [
-  { tipo: 'viaje', emoji: '✈️', label: 'Viaje', bg: '#EEEDFE', color: '#6366F1' },
-  { tipo: 'roomies', emoji: '🏠', label: 'Roomies', bg: '#E1F5EE', color: '#10B981' },
-  { tipo: 'amigos', emoji: '👥', label: 'Amigos', bg: '#FAEEDA', color: '#F59E0B' },
-  { tipo: 'trabajo', emoji: '💼', label: 'Trabajo', bg: '#E6F1FB', color: '#3B82F6' },
-  { tipo: 'otro', emoji: '📦', label: 'Otro', bg: '#F3F4F6', color: '#6B7280' },
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
+import { router } from "expo-router";
+import { useCrearGrupo } from "../../../src/hooks/useGrupos";
+import { useAuthStore } from "../../../src/store/auth.store";
+import { api } from "../../../src/lib/api";
+import { queryClient } from "../../../src/lib/queryClient";
+import {
+  Screen,
+  Card,
+  Label,
+  Button,
+  ErrorBox,
+  Avatar,
+  palette,
+  design,
+} from "../../../src/components/ui/Design";
+import {
+  ReferenceHero,
+  IconBubble,
+  SectionTitle,
+  FormField,
+} from "../../../src/components/ui/Reference";
+import { art } from "../../../src/components/ui/Artwork";
+const types = [
+  { id: "viaje", label: "Viaje", image: art.travel },
+  { id: "pareja", label: "Pareja", image: art.couple },
+  { id: "roomies", label: "Departamento", image: art.home },
+  { id: "amigos", label: "Amigos", image: art.group },
+  { id: "otro", label: "Otro", image: art.other },
 ];
-
-function formatDate(d: Date) {
-  return d.toLocaleDateString('es-PE', { day: '2-digit', month: 'short' });
-}
-
-export default function CrearGrupoScreen() {
-  const params = useLocalSearchParams<{ tipo?: string; fromOnboarding?: string }>();
-  const fromOnboarding = params.fromOnboarding === 'true';
-
-  const initialTipo = TIPOS.find((t) => t.tipo === params.tipo) || TIPOS[2];
-  const [tipoSeleccionado, setTipoSeleccionado] = useState(initialTipo.tipo);
-  const [nombre, setNombre] = useState('');
-  const [conFechas, setConFechas] = useState(params.tipo === 'viaje');
-  const [fechaInicio, setFechaInicio] = useState(new Date());
-  const [fechaFin, setFechaFin] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 7);
-    return d;
-  });
-  const [showPickerInicio, setShowPickerInicio] = useState(false);
-  const [showPickerFin, setShowPickerFin] = useState(false);
-
-  const { mutateAsync: crearGrupo, isPending } = useCrearGrupo();
-  const tipoObj = TIPOS.find((t) => t.tipo === tipoSeleccionado) || TIPOS[2];
-  const canSubmit = nombre.trim().length >= 2;
-
-  async function handleCrear() {
-    if (!canSubmit || isPending) return;
+export default function CreateGroup() {
+  const user = useAuthStore((s) => s.usuario);
+  const [name, setName] = useState("");
+  const [type, setType] = useState("viaje");
+  const [error, setError] = useState("");
+  const [identifier, setIdentifier] = useState("");
+  const [people, setPeople] = useState<string[]>([]);
+  const [manual, setManual] = useState(false);
+  const [createdId, setCreatedId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const create = useCrearGrupo();
+  function addPerson() {
+    const value = identifier.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(value) && !/^(?:\+51\s*)?9\d{8}$/.test(value)) {
+      setError("Escribe un correo o un celular peruano de 9 dígitos.");
+      return;
+    }
+    if (value === user?.email || people.includes(value)) {
+      setError("Esta persona ya está en la lista.");
+      return;
+    }
+    setPeople((p) => [...p, value]);
+    setIdentifier("");
+    setError("");
+  }
+  async function submit() {
+    if (busy) return;
+    if (name.trim().length < 2 || name.trim().length > 100) { setError("El nombre del grupo debe tener entre 2 y 100 caracteres."); return; }
+    if (identifier.trim()) {
+      setError("Pulsa Agregar para incluir el correo o celular que escribiste, o borra ese campo para continuar sin esa persona.");
+      return;
+    }
+    let groupId = createdId;
     try {
-      const payload: any = {
-        nombre: nombre.trim(),
-        tipo: tipoSeleccionado,
-      };
-      if (conFechas) {
-        payload.fecha_inicio = fechaInicio.toISOString().split('T')[0];
-        payload.fecha_fin = fechaFin.toISOString().split('T')[0];
+      setBusy(true);
+      setError("");
+      if (!groupId) {
+        const group = await create.mutateAsync({
+          nombre: name.trim(),
+          tipo: type,
+        });
+        groupId = group.id;
+        setCreatedId(groupId);
       }
-      const grupo = await crearGrupo(payload);
-      if (fromOnboarding) {
-        router.replace(
-          `/(app)/grupos/agregar-personas?grupoId=${grupo.id}&grupoNombre=${encodeURIComponent(grupo.nombre)}&fromOnboarding=true`
+      const results = await Promise.all(
+        people.map((identificador) =>
+          api
+            .post(`/grupos/${groupId}/invitar`, { identificador })
+            .then((r) => r.data),
+        ),
+      );
+      await queryClient.invalidateQueries({ queryKey: ["grupos"] });
+      if (results.some((r) => !r.found)) {
+        Alert.alert(
+          "Tu grupo está creado",
+          "Algunas personas aún no tienen cuenta. Comparte el enlace para que se registren y se unan.",
         );
-      } else {
-        router.replace(`/(app)/grupos/${grupo.id}`);
-      }
+        router.replace(`/(app)/grupos/agregar-personas?grupoId=${groupId}`);
+      } else router.replace(`/(app)/grupos/${groupId}`);
     } catch {
-      Alert.alert('Error', 'No se pudo crear el grupo. Intenta de nuevo.');
+      setError(
+        groupId
+          ? "Tu grupo ya está creado. No completamos todas las invitaciones; reintenta sin crear otro grupo."
+          : "No pudimos crear el grupo. Tus datos siguen aquí; reintenta.",
+      );
+    } finally {
+      setBusy(false);
     }
   }
-
   return (
-    <View className="flex-1 bg-background">
-      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
-      
-      <LinearGradient
-        colors={['#6366F1', '#4F46E5']}
-        className="h-64 w-full absolute top-0"
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
+    <Screen
+      title="Crear grupo"
+      subtitle="Organiza tus gastos y vive mejores momentos, juntos."
+      back
+    >
+      <ReferenceHero
+        title="Un grupo para cada plan"
+        subtitle="Comparte gastos con las personas que hacen tus momentos especiales."
+        image={art.group}
+        height={155}
       />
-
-      <SafeAreaView className="flex-1" edges={['top']}>
-        {/* Header */}
-        <View className="px-6 pt-4 pb-6 flex-row items-center justify-between">
-          <TouchableOpacity 
-            onPress={() => router.back()}
-            className="w-10 h-10 bg-white/20 rounded-xl items-center justify-center border border-white/30"
+      <SectionTitle title="Tipo de grupo" />
+      <Label size={12} color={palette.muted}>
+        Elige el tipo que mejor se ajuste a tu plan.
+      </Label>
+      <View style={{ flexDirection: "row", gap: 5 }}>
+        {types.map((t) => (
+          <Pressable
+            key={t.id}
+            accessibilityRole="button"
+            accessibilityState={{ selected: type === t.id }}
+            disabled={!!createdId || busy}
+            onPress={() => setType(t.id)}
+            style={{
+              flex: 1,
+              borderRadius: 16,
+              borderWidth: 1.5,
+              borderColor: type === t.id ? palette.primary : palette.line,
+              backgroundColor: type === t.id ? palette.mint : "white",
+              paddingVertical: 8,
+              alignItems: "center",
+            }}
           >
-            <Ionicons name="close" size={24} color="white" />
-          </TouchableOpacity>
-          <Text className="text-white text-xl font-black">Nuevo Grupo</Text>
-          <View className="w-10" />
-        </View>
-
-        <ScrollView
-          className="flex-1"
-          contentContainerStyle={{ padding: 24, paddingBottom: 100 }}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Card Preview */}
-          <GlassCard className="p-6 mb-8 flex-row items-center border border-white/30" intensity={1.2}>
-            <View 
-              style={{ backgroundColor: tipoObj.bg }} 
-              className="w-20 h-20 rounded-[28px] items-center justify-center mr-6 shadow-sm"
-            >
-              <Text className="text-4xl">{tipoObj.emoji}</Text>
-            </View>
-            <View className="flex-1">
-              <Text className="text-white/70 text-xs font-bold uppercase tracking-widest mb-1">Vista Previa</Text>
-              <Text className="text-white text-2xl font-black" numberOfLines={1}>
-                {nombre.trim() || 'Nombre del Grupo'}
-              </Text>
-              {conFechas && (
-                <Text className="text-white/80 text-sm font-medium mt-1">
-                  {formatDate(fechaInicio)} — {formatDate(fechaFin)}
-                </Text>
-              )}
-            </View>
-          </GlassCard>
-
-          <View className="mb-6">
-            <Input
-              label="Nombre del Grupo"
-              value={nombre}
-              onChangeText={setNombre}
-              placeholder="Ej: Viaje a Cusco 🏔️"
-              autoFocus
-              leftIcon={<Ionicons name="pencil-outline" size={20} color="#6366F1" />}
+            <Image
+              source={t.image}
+              style={{ width: "100%", height: 57 }}
+              resizeMode="contain"
             />
-          </View>
-
-          <View className="mb-6">
-            <Text className="text-text font-extrabold text-lg mb-4 tracking-tight">Tipo de Grupo</Text>
-            <View className="flex-row flex-wrap gap-2">
-              {TIPOS.map((t) => {
-                const selected = tipoSeleccionado === t.tipo;
-                return (
-                  <TouchableOpacity
-                    key={t.tipo}
-                    onPress={() => setTipoSeleccionado(t.tipo)}
-                    className={`px-5 py-3 rounded-2xl border-2 flex-row items-center gap-2 ${
-                      selected ? 'bg-primary/5 border-primary' : 'bg-white border-gray-100'
-                    }`}
-                  >
-                    <Text className="text-xl">{t.emoji}</Text>
-                    <Text className={`font-bold ${selected ? 'text-primary' : 'text-text-hint'}`}>
-                      {t.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
-          {/* Fechas */}
-          <View className="bg-white rounded-3xl p-5 border border-gray-100 mb-8">
-            <View className="flex-row items-center justify-between mb-4">
-              <View>
-                <Text className="text-text font-bold text-base">Definir fechas</Text>
-                <Text className="text-text-muted text-xs">Opcional para organizar mejor</Text>
-              </View>
-              <Switch
-                value={conFechas}
-                onValueChange={setConFechas}
-                trackColor={{ false: '#E5E7EB', true: '#C4C0F6' }}
-                thumbColor={conFechas ? '#6366F1' : '#fff'}
-              />
-            </View>
-
-            {conFechas && (
-              <View className="flex-row items-center gap-3">
-                <TouchableOpacity
-                  className="flex-1 bg-gray-50 p-4 rounded-2xl flex-row items-center border border-gray-100"
-                  onPress={() => {
-                    setShowPickerFin(false);
-                    setShowPickerInicio(true);
-                  }}
-                >
-                  <Ionicons name="calendar-outline" size={18} color="#6366F1" />
-                  <Text className="ml-2 text-text font-bold">{formatDate(fechaInicio)}</Text>
-                </TouchableOpacity>
-                <Ionicons name="arrow-forward" size={16} color="#9CA3AF" />
-                <TouchableOpacity
-                  className="flex-1 bg-gray-50 p-4 rounded-2xl flex-row items-center border border-gray-100"
-                  onPress={() => {
-                    setShowPickerInicio(false);
-                    setShowPickerFin(true);
-                  }}
-                >
-                  <Ionicons name="calendar-outline" size={18} color="#6366F1" />
-                  <Text className="ml-2 text-text font-bold">{formatDate(fechaFin)}</Text>
-                </TouchableOpacity>
+            <Label size={t.id === "roomies" ? 8 : 10} weight="bold">
+              {t.label}
+            </Label>
+            {type === t.id && (
+              <View style={{ position: "absolute", right: 3, top: 3 }}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={18}
+                  color={palette.primary}
+                />
               </View>
             )}
-
-            {showPickerInicio && (
-              <DateTimePicker
-                value={fechaInicio}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(_, date) => {
-                  setShowPickerInicio(Platform.OS === 'ios');
-                  if (date) setFechaInicio(date);
-                }}
-                minimumDate={new Date()}
-              />
-            )}
-            {showPickerFin && (
-              <DateTimePicker
-                value={fechaFin}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                onChange={(_, date) => {
-                  setShowPickerFin(Platform.OS === 'ios');
-                  if (date) setFechaFin(date);
-                }}
-                minimumDate={fechaInicio}
-              />
-            )}
+          </Pressable>
+        ))}
+      </View>
+      <FormField
+        label="Nombre del grupo"
+        icon="people-outline"
+        accessibilityLabel="Nombre del grupo"
+        maxLength={100}
+        value={name}
+        onChangeText={setName}
+        editable={!createdId && !busy}
+        placeholder="Ej. Escapada a Cusco"
+      />
+      <SectionTitle title="Invitar personas" />
+      <Label size={12} color={palette.muted}>
+        Por correo, celular o enlace. No necesitas acceder a tus contactos.
+      </Label>
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() =>
+            Alert.alert(
+              "Compartir enlace",
+              "El enlace estará listo cuando crees el grupo. Podrás copiarlo o compartirlo desde “Invitar personas”.",
+            )
+          }
+          style={{ flex: 1 }}
+        >
+          <Card
+            style={{
+              backgroundColor: palette.mint,
+              padding: 14,
+              minHeight: 135,
+            }}
+          >
+            <IconBubble name="link" size={34} />
+            <Label weight="extra" size={14}>
+              Compartir enlace
+            </Label>
+            <Label size={11} color={palette.muted}>
+              Invita para que se unan al grupo.
+            </Label>
+          </Card>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setManual(true)}
+          style={{ flex: 1 }}
+        >
+          <Card
+            style={{
+              backgroundColor: palette.lilac,
+              padding: 14,
+              minHeight: 135,
+            }}
+          >
+            <IconBubble
+              name="person-add-outline"
+              size={34}
+              color={palette.purple}
+              background="#E3D6FF"
+            />
+            <Label weight="extra" size={14}>
+              Agregar personas manualmente
+            </Label>
+            <Label size={11} color={palette.muted}>
+              Añade por correo o celular.
+            </Label>
+          </Card>
+        </Pressable>
+      </View>
+      <Card
+        style={{
+          padding: 12,
+          backgroundColor: "#EEF6FF",
+          flexDirection: "row",
+          alignItems: "center",
+        }}
+      >
+        <Ionicons name="information-circle-outline" size={24} color="#398BE5" />
+        <Label size={12} color={palette.muted} style={{ flex: 1 }}>
+          Quienes ya tengan cuenta se agregarán al crear el grupo. Para los
+          demás, comparte el enlace de invitación.
+        </Label>
+      </Card>
+      <SectionTitle
+        title={`Tú + ${people.length} ${people.length === 1 ? "invitación" : "invitaciones"}`}
+        action="Agregar más"
+        onPress={() => setManual(true)}
+      />
+      {!people.length && <Label size={12} color={palette.muted}>Puedes crear el grupo ahora e invitar a los demás después.</Label>}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: 8 }}
+      >
+        <View
+          style={[
+            design.row,
+            { backgroundColor: "white", borderRadius: 30, padding: 8 },
+          ]}
+        >
+          <Avatar name={user?.nombre || "Tú"} size={36} />
+          <Label size={12} weight="bold">
+            {user?.nombre.split(" ")[0]} (Tú)
+          </Label>
+        </View>
+        {people.map((p) => (
+          <View
+            key={p}
+            style={[
+              design.row,
+              { backgroundColor: palette.lilac, borderRadius: 30, padding: 8 },
+            ]}
+          >
+            <Ionicons name="person-outline" color={palette.purple} size={22} />
+            <Label size={11}>{p}</Label>
+            <Pressable
+              accessibilityLabel={`Quitar ${p}`}
+              disabled={busy}
+              hitSlop={12}
+              onPress={() => setPeople((items) => items.filter((v) => v !== p))}
+            >
+              <Ionicons name="close" size={20} color={palette.muted} />
+            </Pressable>
           </View>
-
-          <GradientButton
-            title={fromOnboarding ? "Siguiente" : "Crear Grupo"}
-            onPress={handleCrear}
-            loading={isPending}
-            disabled={!canSubmit}
+        ))}
+      </ScrollView>
+      {manual && (
+        <View style={design.row}>
+          <TextInput
+            accessibilityLabel="Correo o celular de la persona"
+            style={[design.input, { flex: 1 }]}
+            value={identifier}
+            onChangeText={setIdentifier}
+            placeholder="Correo o celular"
+            autoCapitalize="none"
+            editable={!busy}
           />
-        </ScrollView>
-      </SafeAreaView>
-    </View>
+          <Pressable
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={addPerson}
+            style={{
+              backgroundColor: palette.mint,
+              borderRadius: 16,
+              padding: 16,
+            }}
+          >
+            <Label color="#078B70" weight="bold" size={12}>
+              Agregar
+            </Label>
+          </Pressable>
+        </View>
+      )}
+      {!!error && <ErrorBox message={error} />}
+      <Button
+        title={createdId ? "Completar invitaciones →" : "Crear grupo →"}
+        onPress={submit}
+        loading={busy}
+        disabled={name.trim().length < 2}
+      />
+      {!!createdId && (
+        <Button
+          title="Abrir mi grupo creado"
+          secondary
+          disabled={busy}
+          onPress={() => router.replace(`/(app)/grupos/${createdId}`)}
+        />
+      )}
+    </Screen>
   );
 }
