@@ -72,6 +72,13 @@ export default function EditProfile() {
           No se cambia desde este formulario para proteger el acceso a tu
           cuenta.
         </Label>
+        {usuario?.conGoogle && (
+          <Label size={12} color={palette.muted}>
+            {usuario.tienePassword === false
+              ? "Entras con Google. Si también quieres entrar con contraseña, usa «¿Olvidaste tu contraseña?» al iniciar sesión."
+              : "Puedes entrar con Google o con tu contraseña."}
+          </Label>
+        )}
       </Card>
       {!!error && <ErrorBox message={error} />}
       <Button

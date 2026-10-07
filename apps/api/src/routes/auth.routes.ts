@@ -8,6 +8,7 @@ router.use((req, res, next) => req.method === 'POST' && !['/refresh', '/logout',
 
 router.post('/register', authController.register);
 router.post('/login', authController.login);
+router.post('/google', authController.google);
 router.post('/refresh', authController.refresh);
 router.post('/logout', authController.logout);
 router.post('/forgot-password', authController.forgotPassword);

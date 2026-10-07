@@ -53,7 +53,7 @@ export default function TryWithoutAccount() {
       subtitle="Sin crear cuenta. No guardamos nada."
       back
       footer={
-        <Button title="Crear cuenta para guardar y cobrar" onPress={() => router.replace("/(auth)/register")} />
+        <Button title="Crear cuenta gratis para guardar y cobrar" onPress={() => router.replace("/(auth)/register")} />
       }
     >
       <Card>

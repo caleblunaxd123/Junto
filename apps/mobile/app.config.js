@@ -15,7 +15,11 @@ module.exports = ({ config }) => {
     ];
   // Firebase config for push notifications, provided as an EAS file secret.
   if (process.env.GOOGLE_SERVICES_JSON) android.googleServicesFile = process.env.GOOGLE_SERVICES_JSON;
+  // Google Sign-In: Android needs no plugin (only the OAuth clients in Google Cloud); iOS needs its URL scheme.
+  const plugins = [...(config.plugins || [])];
+  if (process.env.GOOGLE_IOS_URL_SCHEME)
+    plugins.push(["@react-native-google-signin/google-signin", { iosUrlScheme: process.env.GOOGLE_IOS_URL_SCHEME }]);
   const extra = { ...config.extra };
   if (process.env.EAS_PROJECT_ID) extra.eas = { ...extra.eas, projectId: process.env.EAS_PROJECT_ID };
-  return { ...config, android, extra };
+  return { ...config, android, extra, plugins };
 };

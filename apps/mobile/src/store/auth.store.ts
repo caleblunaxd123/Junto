@@ -2,6 +2,7 @@ import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { validInvitationCode } from "../lib/invitation";
+import { googleSignOut } from "../lib/google";
 import { api, onSessionExpired } from "../lib/api";
 import { queryClient } from "../lib/queryClient";
 import type { Usuario, AuthResponse } from "../types";
@@ -15,6 +16,8 @@ interface AuthState {
   clearInvitation: () => Promise<void>;
 
   login: (email: string, password: string) => Promise<void>;
+  /** Exchanges a Google ID token for a JUNTO session. */
+  loginWithGoogle: (idToken: string) => Promise<{ nuevo: boolean }>;
   register: (data: {
     nombre: string;
     email: string;
@@ -98,6 +101,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ usuario: data.usuario, isAuthenticated: true });
   },
 
+  loginWithGoogle: async (idToken) => {
+    const { data } = await api.post<AuthResponse & { nuevo: boolean }>("/auth/google", { idToken });
+    await SecureStore.setItemAsync("accessToken", data.accessToken);
+    await SecureStore.setItemAsync("refreshToken", data.refreshToken);
+    await SecureStore.setItemAsync("cachedUsuario", JSON.stringify(data.usuario));
+    queryClient.clear();
+    set({ usuario: data.usuario, isAuthenticated: true });
+    return { nuevo: data.nuevo };
+  },
+
   register: async (formData) => {
     const { data } = await api.post<{ emailDelivery: boolean }>(
       "/auth/register",
@@ -129,6 +142,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await SecureStore.deleteItemAsync("accessToken");
     await SecureStore.deleteItemAsync("refreshToken");
     await SecureStore.deleteItemAsync("cachedUsuario");
+    await googleSignOut();
     await get().clearInvitation();
     queryClient.clear();
     set({ usuario: null, isAuthenticated: false });

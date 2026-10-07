@@ -9,6 +9,9 @@ export interface Usuario {
   emailVerificado: boolean;
   fechaRegistro: string;
   expoPushToken?: string | null;
+  /** false for accounts created with Google that never set a password. */
+  tienePassword?: boolean;
+  conGoogle?: boolean;
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────

@@ -16,6 +16,7 @@ type Summary = {
   teDeben: number;
   pagosPorConfirmar: number;
   cuentasPuntuales: number;
+  tienePassword: boolean;
 };
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
 
@@ -55,7 +56,7 @@ export default function DeleteAccount() {
     try {
       setBusy(true);
       setError("");
-      await api.delete("/auth/me", { data: { password } });
+      await api.delete("/auth/me", { data: data?.tienePassword === false ? { confirmacion: password } : { password } });
       await useAuthStore.getState().logout();
       router.replace("/(auth)/login");
       Alert.alert("Cuenta eliminada", "Borramos tus datos personales. Gracias por haber usado JUNTO.");
@@ -107,21 +108,47 @@ export default function DeleteAccount() {
               <Button title="Revisar mis pendientes" secondary compact onPress={() => router.push("/(app)")} />
             </Card>
           )}
-          <Label weight="bold">Escribe tu contraseña para confirmar</Label>
-          <TextInput
-            accessibilityLabel="Contraseña"
-            value={password}
-            onChangeText={(value) => {
-              setPassword(value);
-              setError("");
-            }}
-            secureTextEntry
-            autoCapitalize="none"
-            autoComplete="current-password"
-            style={design.input}
-          />
+          {data.tienePassword ? (
+            <>
+              <Label weight="bold">Escribe tu contraseña para confirmar</Label>
+              <TextInput
+                accessibilityLabel="Contraseña"
+                value={password}
+                onChangeText={(value) => {
+                  setPassword(value);
+                  setError("");
+                }}
+                secureTextEntry
+                autoCapitalize="none"
+                autoComplete="current-password"
+                style={design.input}
+              />
+            </>
+          ) : (
+            <>
+              <Label weight="bold">Entras con Google. Escribe ELIMINAR para confirmar</Label>
+              <TextInput
+                accessibilityLabel="Escribe ELIMINAR para confirmar"
+                value={password}
+                onChangeText={(value) => {
+                  setPassword(value);
+                  setError("");
+                }}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                placeholder="ELIMINAR"
+                placeholderTextColor="#8B98AE"
+                style={design.input}
+              />
+            </>
+          )}
           {!!error && <ErrorBox message={error} />}
-          <Button title="Eliminar mi cuenta" loading={busy} disabled={!password} onPress={confirm} />
+          <Button
+            title="Eliminar mi cuenta"
+            loading={busy}
+            disabled={data.tienePassword ? !password : password.trim().toUpperCase() !== "ELIMINAR"}
+            onPress={confirm}
+          />
         </>
       )}
     </Screen>

@@ -10,6 +10,8 @@ import {
 import type { RegisterInput, LoginInput } from "../schemas/auth.schema";
 import { UserError } from "../domain/errors";
 import { credentialsTag } from "../domain/credentials";
+import { OAuth2Client } from "google-auth-library";
+import { GoogleClaims, googleSignInPlan, nameFromGoogle } from "../domain/googleAccount";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 const JWT_EXPIRY = process.env.JWT_EXPIRY || "15m";
@@ -105,6 +107,8 @@ export async function login(input: LoginInput) {
     throw new UserError("El correo o la contraseña no coinciden.", 401);
   }
   if (!passwordValid) {
+    if (!hasPassword(usuario.passwordHash))
+      throw new UserError("Esta cuenta entra con Google. Toca «Continuar con Google».", 401, "USA_GOOGLE");
     throw new UserError("El correo o la contraseña no coinciden.", 401);
   }
 
@@ -116,15 +120,7 @@ export async function login(input: LoginInput) {
     );
   }
 
-  const {
-    passwordHash: _ph,
-    otpCode: _otp,
-    otpExpires: _otpExp,
-    otpPurpose: _purpose,
-    otpAttempts: _attempts,
-    ...usuarioSafe
-  } = usuario;
-  return { usuario: usuarioSafe, ...(await issueSession(usuario)) };
+  return { usuario: await getMe(usuario.id), ...(await issueSession(usuario)) };
 }
 
 async function issueSession(usuario: {
@@ -405,11 +401,99 @@ export async function getMe(userId: string) {
       emailVerificado: true,
       fechaRegistro: true,
       expoPushToken: true,
+      passwordHash: true,
+      googleId: true,
     },
   });
 
   if (!usuario) throw new Error("Usuario no encontrado");
-  return usuario;
+  const { passwordHash, googleId, ...rest } = usuario;
+  return { ...rest, tienePassword: hasPassword(passwordHash), conGoogle: !!googleId };
+}
+
+// ─── Continuar con Google ────────────────────────────────────────────────────
+
+/** Accounts created with Google (or deleted) have no usable password: their hash is a marker. */
+export function hasPassword(passwordHash: string) {
+  return !passwordHash.startsWith("!");
+}
+
+const googleClient = new OAuth2Client();
+
+/** Verifies signature, expiry, issuer and audience of a Google ID token. */
+export async function verifyGoogleIdToken(idToken: string): Promise<GoogleClaims> {
+  const audience = (process.env.GOOGLE_CLIENT_IDS || "").split(",").map((v) => v.trim()).filter(Boolean);
+  if (!audience.length)
+    throw new UserError("El inicio con Google no está disponible por ahora. Usa tu correo.", 503, "GOOGLE_NO_CONFIGURADO");
+  let payload;
+  try {
+    payload = (await googleClient.verifyIdToken({ idToken, audience })).getPayload();
+  } catch {
+    throw new UserError("No pudimos confirmar tu cuenta de Google. Intenta de nuevo.", 401, "GOOGLE_TOKEN_INVALIDO");
+  }
+  if (!payload?.sub || !payload.email)
+    throw new UserError("Tu cuenta de Google no compartió el correo. Intenta de nuevo.", 400, "GOOGLE_SIN_CORREO");
+  return {
+    sub: payload.sub,
+    email: payload.email.trim().toLowerCase(),
+    emailVerified: payload.email_verified === true,
+    name: payload.name,
+    picture: payload.picture,
+  };
+}
+
+/** Logs in, links or creates the account for an already verified Google identity. */
+export async function signInWithGoogleClaims(claims: GoogleClaims) {
+  const fields = { id: true, activo: true, emailVerificado: true, googleId: true } as const;
+  const [byGoogle, byEmail] = await Promise.all([
+    prisma.usuario.findUnique({ where: { googleId: claims.sub }, select: fields }),
+    prisma.usuario.findUnique({ where: { email: claims.email }, select: fields }),
+  ]);
+  const plan = googleSignInPlan(claims, byGoogle, byEmail);
+  if (plan.action === "reject") throw new UserError(plan.message, plan.status, "GOOGLE_RECHAZADO");
+  const picture = claims.picture && claims.picture.length <= 500 ? claims.picture : null;
+  let userId: string;
+  let nuevo = false;
+  if (plan.action === "create") {
+    const created = await prisma.usuario.create({
+      data: {
+        nombre: nameFromGoogle(claims),
+        email: claims.email,
+        passwordHash: `!google:${crypto.randomBytes(24).toString("hex")}`,
+        emailVerificado: true,
+        googleId: claims.sub,
+        fotoUrl: picture,
+      },
+      select: { id: true },
+    });
+    userId = created.id;
+    nuevo = true;
+  } else if (plan.action === "link") {
+    userId = plan.userId;
+    await prisma.$transaction(async (tx) => {
+      const current = await tx.usuario.findUniqueOrThrow({ where: { id: userId }, select: { fotoUrl: true } });
+      await tx.usuario.update({
+        where: { id: userId },
+        data: {
+          googleId: claims.sub,
+          emailVerificado: true,
+          ...(current.fotoUrl ? {} : { fotoUrl: picture }),
+          ...(plan.resetPassword
+            ? { passwordHash: `!google:${crypto.randomBytes(24).toString("hex")}`, otpCode: null, otpExpires: null, otpPurpose: null, otpAttempts: 0 }
+            : {}),
+        },
+      });
+      if (plan.resetPassword) await tx.refreshToken.updateMany({ where: { usuarioId: userId }, data: { revocado: true } });
+    });
+  } else userId = plan.userId;
+
+  const usuario = await prisma.usuario.findUniqueOrThrow({ where: { id: userId } });
+  if (nuevo) sendWelcomeEmail(usuario.email, usuario.nombre).catch(() => console.error("[Email] Welcome delivery failed"));
+  return { usuario: await getMe(userId), nuevo, ...(await issueSession(usuario)) };
+}
+
+export async function loginWithGoogle(idToken: string) {
+  return signInWithGoogleClaims(await verifyGoogleIdToken(idToken));
 }
 
 export async function updatePushToken(userId: string, expoPushToken: string) {

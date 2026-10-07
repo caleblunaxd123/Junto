@@ -62,7 +62,7 @@ router.get('/privacidad', (_req, res) => {
   page(res, 'Política de privacidad', `<h1>Política de privacidad</h1>
 <p class="muted">Última actualización: 7 de octubre de 2026. Responsable del tratamiento: ${escapeHTML(legalOwner())}.</p>
 <h2>Qué datos usamos</h2>
-<p>Tu nombre, correo, contraseña (guardada solo como hash), y si los agregas, tu celular y foto de perfil. También los grupos a los que perteneces, los gastos y pagos que registras o que otros registran contigo, y las cuentas puntuales que organizas (con los nombres de tus invitados). Si activas las notificaciones guardamos el identificador de notificaciones de tu teléfono.</p>
+<p>Tu nombre, correo, contraseña (guardada solo como hash), y si los agregas, tu celular y foto de perfil. También los grupos a los que perteneces, los gastos y pagos que registras o que otros registran contigo, y las cuentas puntuales que organizas (con los nombres de tus invitados). Si entras con Google, recibimos de Google tu nombre, correo y foto de perfil; nunca tu contraseña de Google. Si activas las notificaciones guardamos el identificador de notificaciones de tu teléfono.</p>
 <h2>Para qué</h2>
 <p>Para crear tu cuenta, verificar tu correo, calcular quién le debe a quién, avisarte de pagos por confirmar y darte soporte. No vendemos tus datos ni mostramos publicidad.</p>
 <h2>Fotos de boletas y textos</h2>

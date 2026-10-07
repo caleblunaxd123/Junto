@@ -202,10 +202,19 @@ export async function deletionSummary(req: Request, res: Response, next: NextFun
 
 export async function deleteAccount(req: Request, res: Response, next: NextFunction) {
   try {
-    const { password } = z.object({ password: z.string().min(1, "Escribe tu contraseña").max(200) }).parse(req.body);
+    const input = z.object({ password: z.string().min(1).max(200).optional(), confirmacion: z.string().max(20).optional() }).parse(req.body);
     const { deleteAccount } = await import("../services/account.service");
-    await deleteAccount(req.user!.userId, password);
+    await deleteAccount(req.user!.userId, input);
     res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function google(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { idToken } = z.object({ idToken: z.string().min(20).max(4096) }).parse(req.body);
+    res.json(await authService.loginWithGoogle(idToken));
   } catch (err) {
     next(err);
   }

@@ -21,8 +21,12 @@ import {
 import { Brand, FormField } from "./Reference";
 import { useAuthStore } from "../../store/auth.store";
 import { authenticatedDestination } from "../../lib/invitation";
+import { googleConfigured } from "../../lib/google";
+import { useGoogleLogin } from "../../hooks/useGoogleLogin";
+import { GoogleButton, OrDivider } from "./GoogleButton";
 export function AuthForm({ register = false }: { register?: boolean }) {
   const auth = useAuthStore();
+  const google = useGoogleLogin();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -151,6 +155,13 @@ export function AuthForm({ register = false }: { register?: boolean }) {
               </Pressable>
             ))}
           </View>
+          {googleConfigured && (
+            <>
+              <GoogleButton onPress={google.start} loading={google.busy} disabled={busy} />
+              {!!google.error && <ErrorBox message={google.error} />}
+              <OrDivider />
+            </>
+          )}
           {register && (
             <FormField
               label="Nombre completo"

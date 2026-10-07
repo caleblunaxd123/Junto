@@ -86,6 +86,7 @@ Fondo crema `#FFFCF7`, logo JUNTO a la izquierda, frase «Las cuentas claras, lo
 | Información financiera: historial de compras/pagos entre usuarios | Sí (gastos y pagos que registras) | No | Funcionalidad | No |
 | Identificadores del dispositivo (token de notificaciones) | Sí | No | Notificaciones | Sí |
 
+- «Continuar con Google» solo recibe nombre, correo y foto; ya están cubiertos en las filas de arriba.
 - Datos cifrados en tránsito: Sí (HTTPS).
 - El usuario puede pedir que se eliminen: Sí, desde la app y en `https://<dominio>/eliminar-cuenta`.
 

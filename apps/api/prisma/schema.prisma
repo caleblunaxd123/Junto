@@ -22,6 +22,8 @@ model Usuario {
   fechaRegistro    DateTime  @default(now()) @map("fecha_registro")
   activo           Boolean   @default(true)
   expoPushToken    String?   @map("expo_push_token") @db.VarChar(200)
+  // Google account ("sub" claim) linked to this user for "Continuar con Google".
+  googleId         String?   @unique @map("google_id") @db.VarChar(64)
   // Set when the person deletes the account: the row is anonymized, never reused.
   fechaEliminacion DateTime? @map("fecha_eliminacion")
 

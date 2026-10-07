@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { prisma } from "../lib/prisma";
 import { UserError } from "../domain/errors";
 import { resumenCuentasGrupo } from "./balance.service";
+import { hasPassword } from "./auth.service";
 
 /** What the person should know before deleting: open balances stay recorded for the others. */
 export async function deletionSummary(userId: string) {
@@ -23,18 +24,24 @@ export async function deletionSummary(userId: string) {
   }
   const pagosPorConfirmar = await prisma.pago.count({ where: { receptorId: userId, estado: "reportado" } });
   const cuentasPuntuales = await prisma.cuentaRapida.count({ where: { creadoPor: userId } });
-  return { grupos: memberships.length, gruposConSaldo, debes, teDeben, pagosPorConfirmar, cuentasPuntuales };
+  const { passwordHash } = await prisma.usuario.findUniqueOrThrow({ where: { id: userId }, select: { passwordHash: true } });
+  return { grupos: memberships.length, gruposConSaldo, debes, teDeben, pagosPorConfirmar, cuentasPuntuales, tienePassword: hasPassword(passwordHash) };
 }
 
 /**
  * Deletes the account by anonymizing it. Expenses and payments shared with other people are kept
  * (under "Usuario eliminado") so nobody else's balance changes; personal data is erased.
  */
-export async function deleteAccount(userId: string, password: string) {
+export async function deleteAccount(userId: string, confirmation: { password?: string; confirmacion?: string }) {
   const usuario = await prisma.usuario.findUnique({ where: { id: userId } });
   if (!usuario || !usuario.activo) throw new UserError("Esta cuenta ya no está activa.", 404);
-  if (!(await bcrypt.compare(password, usuario.passwordHash)))
-    throw new UserError("La contraseña no coincide. Escríbela de nuevo.", 400, "PASSWORD_INCORRECTA");
+  if (hasPassword(usuario.passwordHash)) {
+    if (!confirmation.password || !(await bcrypt.compare(confirmation.password, usuario.passwordHash)))
+      throw new UserError("La contraseña no coincide. Escríbela de nuevo.", 400, "PASSWORD_INCORRECTA");
+  } else if (confirmation.confirmacion?.trim().toUpperCase() !== "ELIMINAR") {
+    // Google-only accounts have no password: an explicit typed confirmation stands in for it.
+    throw new UserError("Escribe ELIMINAR para confirmar.", 400, "CONFIRMACION_REQUERIDA");
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM usuarios WHERE id = ${userId}::uuid FOR UPDATE`;
@@ -69,6 +76,7 @@ export async function deleteAccount(userId: string, password: string) {
         celular: null,
         fotoUrl: null,
         expoPushToken: null,
+        googleId: null,
         passwordHash: `!eliminado:${crypto.randomBytes(24).toString("hex")}`,
         otpCode: null,
         otpExpires: null,
