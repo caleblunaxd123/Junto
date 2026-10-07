@@ -29,6 +29,9 @@ import { groupCover } from "../../src/components/ui/Artwork";
 import { pendingActions } from "../../src/lib/pending";
 import { PendingActions } from "../../src/components/PendingActions";
 import { AddButton, CreateSheet } from "../../src/components/CreateSheet";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AppDialog as Alert } from "../../src/components/ui/AppDialog";
+import { clearTryBill, loadTryBill, tryBillToDraft, type SavedTryBill } from "../../src/lib/tryBillHandoff";
 
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
 
@@ -54,6 +57,25 @@ export default function Home() {
     refreshBills();
   }, [refetch, refetchPayments, refreshBills]);
   useFocusEffect(refreshAll);
+  // A calculation kept from "Probar sin cuenta" (only with consent, only on this phone).
+  const [trial, setTrial] = useState<SavedTryBill | null>(null);
+  useFocusEffect(useCallback(() => { loadTryBill().then(setTrial).catch(() => setTrial(null)); }, []));
+  async function continueTrial() {
+    if (!trial || !usuario) return;
+    const key = `junto.billDraft.v1.${usuario.id}.new`;
+    const write = async () => {
+      await AsyncStorage.setItem(key, JSON.stringify(tryBillToDraft(trial, usuario.nombre)));
+      await clearTryBill();
+      setTrial(null);
+      router.push("/(app)/cuentas/rapida");
+    };
+    if (await AsyncStorage.getItem(key).catch(() => null))
+      Alert.alert("Ya tienes una cuenta sin terminar", "Si continúas con el cálculo de prueba, reemplazará ese borrador. Ninguna cuenta guardada se modifica.", [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Reemplazar borrador", onPress: () => { void write(); } },
+      ]);
+    else await write();
+  }
   const actions = pendingActions(groups, payments.data ?? [], usuario?.id);
   const openBills = bills.data?.filter((bill) => !bill.archivada) ?? [];
   const filtered = groups.filter((g) =>
@@ -81,6 +103,18 @@ export default function Home() {
           Hola, {usuario?.nombre.split(" ")[0] || "amigo"}
         </Label>
 
+        {trial && (
+          <Card style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", gap: 8 }}>
+            <Label weight="bold">Tu cálculo de prueba sigue aquí</Label>
+            <Label size={13}>
+              S/ {centavosASoles(trial.total + trial.extras)} entre {trial.people.length} {trial.people.length === 1 ? "persona" : "personas"}. Revísalo y guárdalo como cuenta de un día para marcar quién ya pagó.
+            </Label>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              <View style={{ flex: 1 }}><Button compact title="Continuar" onPress={() => { void continueTrial(); }} /></View>
+              <View style={{ flex: 1 }}><Button compact secondary title="Descartar" onPress={() => { void clearTryBill(); setTrial(null); }} /></View>
+            </View>
+          </Card>
+        )}
         {empty ? (
           <Card style={{ gap: 14 }}>
             <Label size={19} weight="extra">¿Por dónde empezamos?</Label>

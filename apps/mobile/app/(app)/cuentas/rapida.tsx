@@ -39,6 +39,7 @@ function BillWizard({ id, original, version }: { id?: string; original?: QuickBi
   const [error, setError] = React.useState("");
   const [reading, setReading] = React.useState(false);
   const [receipt, setReceipt] = React.useState<ReceiptProposal>();
+  const [typedBefore, setTypedBefore] = React.useState("");
   const [showText, setShowText] = React.useState(false);
   const [bulkNames, setBulkNames] = React.useState(false);
   const request = React.useRef<AbortController | null>(null);
@@ -70,7 +71,10 @@ function BillWizard({ id, original, version }: { id?: string; original?: QuickBi
       setReceipt(undefined);
       const proposal = await read.mutateAsync({ imagen, signal: controller.signal });
       if (controller.signal.aborted || request.current !== controller) return;
-      setReceipt(proposal); update({ division: "igual", billTotal: proposal.totalPropuesto ? centavosASoles(proposal.totalPropuesto) : "", scanApproved: false });
+      // The reader only proposes: the typed total is kept to go back to, and the chosen split is not touched.
+      const proposed = proposal.totalPropuesto ? centavosASoles(proposal.totalPropuesto) : "";
+      setTypedBefore(d.billTotal.trim() && d.scanApproved && parseMoney(d.billTotal) !== proposal.totalPropuesto ? d.billTotal.trim() : "");
+      setReceipt(proposal); update({ billTotal: proposed, scanApproved: false });
     } catch (err) {
       if (!controller.signal.aborted && request.current === controller) setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "No pudimos leer la foto. Escribe el total para continuar.");
     } finally { if (request.current === controller) { request.current = null; setReading(false); } }
@@ -136,6 +140,7 @@ function BillWizard({ id, original, version }: { id?: string; original?: QuickBi
         </View>
         {reading && <Card><ActivityIndicator color={palette.primary} /><Label>Leyendo el total…</Label><Button title="Cancelar lectura" secondary onPress={cancelScan} /></Card>}
         {receipt && <Card style={{ backgroundColor: palette.yellow }}><Label size={13}>{receipt.advertencia}</Label>{!receipt.totalPropuesto && receipt.candidatos.map((candidate) => <Button key={candidate.monto} title={`Usar S/ ${centavosASoles(candidate.monto)}`} secondary disabled={locked} onPress={() => update({ billTotal: centavosASoles(candidate.monto), scanApproved: false })} />)}<Button title={showText ? "Ocultar texto leído" : "Revisar texto leído"} secondary onPress={() => setShowText(!showText)} />{showText && <Label size={11} selectable>{receipt.texto}</Label>}</Card>}
+        {receipt && !!typedBefore && !d.scanApproved && <Button title={`Volver a mi total: S/ ${typedBefore}`} secondary disabled={locked} onPress={() => { update({ billTotal: typedBefore, scanApproved: true }); setReceipt(undefined); setTypedBefore(""); }} />}
         {!d.scanApproved && <Button title="Revisé el total y la moneda: es correcto" secondary disabled={!parseMoney(d.billTotal) || locked} onPress={() => update({ scanApproved: true })} />}
         <Card style={{ padding: 14, gap: 4 }}>
           <View style={[design.row, { justifyContent: "space-between" }]}>

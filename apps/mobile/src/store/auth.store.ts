@@ -12,6 +12,8 @@ interface AuthState {
   isLoaded: boolean;
   isAuthenticated: boolean;
   pendingInvitation: string | null;
+  /** True when the server ended the session (not a manual logout), so login can explain why. */
+  sessionExpired: boolean;
   rememberInvitation: (code: string) => Promise<void>;
   clearInvitation: () => Promise<void>;
 
@@ -35,6 +37,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoaded: false,
   isAuthenticated: false,
   pendingInvitation: null,
+  sessionExpired: false,
   rememberInvitation: async (code) => {
     if (!validInvitationCode(code))
       throw new Error("Enlace de invitación inválido.");
@@ -71,7 +74,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           ),
         );
         queryClient.clear();
-        set({ isLoaded: true, isAuthenticated: false, usuario: null });
+        set({ isLoaded: true, isAuthenticated: false, usuario: null, sessionExpired: true });
       } else {
         const cached = await SecureStore.getItemAsync("cachedUsuario");
         let usuario = get().usuario;
@@ -98,7 +101,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       JSON.stringify(data.usuario),
     );
     queryClient.clear();
-    set({ usuario: data.usuario, isAuthenticated: true });
+    set({ usuario: data.usuario, isAuthenticated: true, sessionExpired: false });
   },
 
   loginWithGoogle: async (idToken) => {
@@ -107,7 +110,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await SecureStore.setItemAsync("refreshToken", data.refreshToken);
     await SecureStore.setItemAsync("cachedUsuario", JSON.stringify(data.usuario));
     queryClient.clear();
-    set({ usuario: data.usuario, isAuthenticated: true });
+    set({ usuario: data.usuario, isAuthenticated: true, sessionExpired: false });
     return { nuevo: data.nuevo };
   },
 
@@ -131,7 +134,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       JSON.stringify(data.usuario),
     );
     queryClient.clear();
-    set({ usuario: data.usuario, isAuthenticated: true });
+    set({ usuario: data.usuario, isAuthenticated: true, sessionExpired: false });
   },
 
   logout: async () => {
@@ -145,7 +148,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await googleSignOut();
     await get().clearInvitation();
     queryClient.clear();
-    set({ usuario: null, isAuthenticated: false });
+    set({ usuario: null, isAuthenticated: false, sessionExpired: false });
   },
 
   updateUsuario: (data) => {
@@ -165,5 +168,6 @@ onSessionExpired(() => {
     usuario: null,
     isAuthenticated: false,
     isLoaded: true,
+    sessionExpired: true,
   });
 });

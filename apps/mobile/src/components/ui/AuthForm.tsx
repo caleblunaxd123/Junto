@@ -155,6 +155,14 @@ export function AuthForm({ register = false }: { register?: boolean }) {
               </Pressable>
             ))}
           </View>
+          {!register && auth.sessionExpired && (
+            <View accessibilityRole="alert" style={{ flexDirection: "row", gap: 10, padding: 12, borderRadius: 16, backgroundColor: palette.yellow }}>
+              <Ionicons name="time-outline" size={20} color="#8A5B05" />
+              <Label size={13} style={{ flex: 1 }}>
+                Tu sesión terminó por seguridad. Vuelve a entrar: tus grupos y cuentas siguen guardados{auth.pendingInvitation ? " y tu invitación sigue pendiente" : ""}.
+              </Label>
+            </View>
+          )}
           {googleConfigured && (
             <>
               <GoogleButton onPress={google.start} loading={google.busy} disabled={busy} />

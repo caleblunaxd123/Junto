@@ -190,3 +190,25 @@ test("visual bill summary keeps invitees, extras, and confirmed amounts distinct
   assert.equal(preview.rows[0].amount, 3960);
   assert.match(preview.note, /18.00/);
 });
+test("try-without-account accepts names and per-person guests with the same exact cents", () => {
+  const { previewTryBillPeople } = require("../apps/mobile/src/lib/tryBill.ts");
+  const people = [{ nombre: "Jaime", invitado: true }, { nombre: "Ana", invitado: false }, { nombre: "", invitado: false }, { nombre: "Luis", invitado: false }];
+  const { result, error } = previewTryBillPeople("100", people, 0);
+  assert.equal(error, "");
+  assert.deepEqual(result.partes.map((p) => [p.nombre, p.total]), [["Jaime", 0], ["Ana", 3334], ["Persona 3", 3333], ["Luis", 3333]]);
+  assert.match(previewTryBillPeople("100", [{ nombre: "Ana", invitado: false }, { nombre: "ana", invitado: false }], 0).error, /nombre distinto/);
+  assert.match(previewTryBillPeople("100", [{ nombre: "Ana", invitado: true }], 0).error, /no pueden ser todos invitados/);
+  assert.equal(previewTryBillPeople("187.50", people, 10).extras, 1875);
+});
+test("a kept trial calculation becomes a reviewable draft with the same total, people and tip", () => {
+  const { tryBillToDraft } = require("../apps/mobile/src/lib/tryBillHandoff.ts");
+  const { validateQuickBillDraft } = require("../apps/mobile/src/lib/quickBillValidation.ts");
+  const draft = tryBillToDraft({ total: 18750, tip: 10, extras: 1875, people: [{ nombre: "Jaime", invitado: true }, { nombre: "Ana", invitado: false }, { nombre: "", invitado: false }], savedAt: Date.now() }, "Camila");
+  assert.equal(draft.billTotal, "187.50");
+  assert.equal(draft.extras, "18.75");
+  assert.equal(draft.step, 1, "opens at the people step: the total was already reviewed");
+  const check = validateQuickBillDraft({ ...draft, name: "Cuenta QA" });
+  assert.equal(check.valid, true);
+  assert.equal(check.result.montoTotal, 20625);
+  assert.deepEqual(check.result.partes.map((p) => p.total), [0, 10313, 10312]);
+});

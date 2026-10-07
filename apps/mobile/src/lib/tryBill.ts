@@ -17,3 +17,21 @@ export function previewTryBill(text: string, people: number, guests: number, tip
 }
 
 export { quickBillSharePreview, tryBillShareMessage } from "@junto/shared/share";
+
+export type TryPerson = { nombre: string; invitado: boolean };
+
+/** Same as previewTryBill, with optional names and guests marked person by person. */
+export function previewTryBillPeople(text: string, people: TryPerson[], tip: number): { input?: QuickBillInput; result?: QuickBillResult; extras: number; error: string } {
+  if (!Array.isArray(people) || people.length < 1 || people.length > 30 || ![0, 5, 10, 15].includes(tip))
+    return { extras: 0, error: "Revisa las personas: entre 1 y 30." };
+  if (people.every((p) => p.invitado)) return { extras: 0, error: "Al menos una persona debe aportar: no pueden ser todos invitados." };
+  if (!text.trim()) return { extras: 0, error: "" };
+  const cents = parseMoney(text);
+  if (cents === null) return { extras: 0, error: "Escribe un monto en soles, con hasta 2 decimales y máximo S/ 9,999,999.99." };
+  if (!cents) return { extras: 0, error: "La cuenta debe ser mayor que S/ 0.00." };
+  const extras = Math.round(cents * tip / 100);
+  const input: QuickBillInput = { nombre: "Cuenta", cobrarA: "", instrucciones: "", division: "igual", totalCuenta: cents, extras,
+    participantes: people.map((p, i) => ({ id: `p${i}`, nombre: p.nombre.trim() || `Persona ${i + 1}`, consumo: 0, invitado: p.invitado })) };
+  try { return { input, result: calculateQuickBill(input), extras, error: "" }; }
+  catch (error) { return { extras, error: (error as Error).message }; }
+}

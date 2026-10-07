@@ -44,8 +44,7 @@ app.use(
 );
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-// Body parsing — raw for Culqi webhook, json for everything else
-app.use('/api/pagos/webhook', express.raw({ type: 'application/json' }));
+// Body parsing
 app.use(express.json({ limit: '10mb' }));
 
 // Routes
