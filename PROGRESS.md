@@ -1,6 +1,6 @@
 # JUNTO — estado real
 
-Actualizado el 8 de octubre de 2026 contrastando el código de `main` + esta rama, no el plan original por semanas (que estaba desactualizado: marcaba como pendiente casi todo lo que ya existe).
+Actualizado el 8 de octubre de 2026 contrastando el código de `main` + esta rama, no el plan original por semanas (que estaba desactualizado: marcaba como pendiente casi todo lo que ya existe). Comprobantes, aprobación y comentarios se añadieron en la ronda siguiente.
 
 Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = funciona con límites conocidos · **Pendiente** = no existe o necesita algo externo.
 
@@ -24,6 +24,11 @@ Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = fu
 | Notificaciones push | Pendiente externo | Código listo; requiere proyecto EAS y Firebase del propietario |
 | Eliminar cuenta (app y web) | Hecho | `ops/test-account-deletion.cjs` |
 | Cobros integrados (Culqi/Yape) | Retirado | JUNTO no cobra. Se quitó el webhook y el cobro heredados, que no estaban habilitados |
+| Comprobantes Yape/Plin leídos por OCR | Hecho en código | Lector probado con textos ficticios y con una captura ficticia vía API (`voucher.test.ts`, `ops/test-vouchers-comments.cjs`). Falta probar capturas reales de cada banco |
+| Aprobación por quien recibe o por la administración | Hecho | Permisos, carrera de dos aprobadores, «No me llegó» y ajuste por grupo (`ops/test-vouchers-comments.cjs`, `ops/e2e-vouchers.cjs`) |
+| Comentarios en gastos y pagos | Hecho | Límites, duplicados, eliminar y reportar; falta el proceso humano de revisión de reportes |
+| Compartir una captura a JUNTO (Android) | Parcial | Configurado y verificado con `expo prebuild`; falta probarlo en una build EAS |
+| Verificar pagos con Yape/Plin automáticamente | No disponible | No existe API pública de transferencias entre personas; solo integraciones para comercios |
 
 ## Plataforma
 

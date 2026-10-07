@@ -21,6 +21,7 @@ jobs:
       - run: node --test ops/test-email.cjs
       - run: node --test ops/test-money-scenarios.cjs
       - run: node --test ops/test-ui-patterns.cjs
+      - run: node --test ops/test-payment-ux.cjs
       - run: npm run build:api
       - run: npm run typecheck --workspace=apps/mobile
       - run: npm run lint --workspace=apps/mobile
@@ -67,3 +68,4 @@ jobs:
           node ops/test-google-sign-in.cjs || (cat api.log && exit 1)
           node ops/test-expense-idempotency.cjs || (cat api.log && exit 1)
           node ops/test-share-email-api.cjs || (cat api.log && exit 1)
+          node ops/test-vouchers-comments.cjs || (cat api.log && exit 1)

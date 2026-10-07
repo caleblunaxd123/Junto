@@ -20,6 +20,10 @@
 | Precisión | Escenarios A–E automatizados; gastos idempotentes (`solicitud_id`); aportes «recibí ahora» con acumulado calculado y corrección separada; el resumen del grupo cuenta todos sus pagos por confirmar. | `ops/test-money-scenarios.cjs`, `ops/test-expense-idempotency.cjs` |
 | Logs | Errores registrados por tipo/código/estado; nunca el objeto de Axios (con la API key y el OTP). Sin proveedor no se imprime el correo salvo `EMAIL_DEV_LOG=true`. | `apps/api/src/domain/logSafe.test.ts` |
 | Pagos heredados | Retirados el webhook y el cobro con Culqi, que no estaban habilitados. | — |
+| Comprobantes de pago | Captura de Yape/Plin/transferencia leída por OCR local; propone monto, app, operación, destinatario, fecha y código de seguridad; bloquea comprobantes ya usados; imagen visible solo para pagador, receptor y administradores que aprueban; borradores borrados a las 24 h e imágenes a los 180 días. | `apps/api/src/domain/voucher.test.ts`, `ops/test-vouchers-comments.cjs` (en CI) |
+| Aprobación por administrador | Ajuste por grupo: aprueba solo quien recibe o también la administración; nunca quien pagó; «No me llegó» para quien recibe. Grupos existentes quedan en «solo quien recibe». | `ops/test-vouchers-comments.cjs`, `ops/e2e-vouchers.cjs` |
+| Comentarios | En gastos y pagos, solo para integrantes activos, 500 caracteres, límite de 30 cada 10 minutos, sin duplicados por doble toque, eliminar (autor o administración) y reportar. | `ops/test-vouchers-comments.cjs` |
+| Compartir a JUNTO (Android) | `expo-share-intent` 5.1.1 (SDK 54) solo para imágenes; iOS desactivado. `expo prebuild` genera el filtro `SEND image/*` junto a los App Links. | Prebuild local; falta probar en una build EAS |
 
 ## Necesita al propietario (no se puede hacer desde el código)
 
@@ -35,7 +39,8 @@
    2. *Credenciales → Crear ID de cliente → Aplicación web*. Ese ID va en `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` (variables de EAS) y en `GOOGLE_CLIENT_IDS` (API).
    3. *Crear ID de cliente → Android*, paquete `com.junto.app`, uno por cada certificado: la huella SHA-1 de «Firma de apps de Google Play» (Play Console → Integridad de la app) y la de las builds de prueba (`eas credentials`). No hay que copiar estos IDs a ningún lado, pero sin ellos Google responde DEVELOPER_ERROR.
    4. Probar en una build EAS (en Expo Go el botón avisa que funciona en la app instalada).
-9. **Asistente IA**: configurar `JUNTO_AI_BASE_URL`/`JUNTO_AI_API_KEY` en producción antes de volver a mostrarlo como pestaña. Sin él, las frases simples («Pagué 120 por la cena con Ana») siguen funcionando con reglas locales.
+9. **Comentarios y comprobantes (políticas de Play)**: los comentarios son contenido generado por usuarios. Antes de publicar: reglas de uso que digan qué no se permite (y que se acepten), un responsable que revise la tabla `reportes_comentarios` (la API solo registra el id en el log) y un plazo de respuesta. En Data Safety declarar «Fotos» (comprobantes, para la funcionalidad de la app, no compartidas) y «Otro contenido generado por usuarios» (comentarios). Si se pide bloquear a una persona, hoy se resuelve sacándola del grupo; no hay bloqueo individual.
+10. **Asistente IA**: configurar `JUNTO_AI_BASE_URL`/`JUNTO_AI_API_KEY` en producción antes de volver a mostrarlo como pestaña. Sin él, las frases simples («Pagué 120 por la cena con Ana») siguen funcionando con reglas locales.
 
 ## Pruebas pendientes en dispositivos y servicios reales
 
@@ -49,7 +54,11 @@ Nada de esto se ejecutó en este entorno (sin emulador, sin cuentas reales). Cad
 6. **Lector de boletas** con 10 boletas reales (térmicas, arrugadas, con propina incluida) y una foto que no sea boleta: siempre debe pedir revisión y nunca perder el total escrito a mano.
 7. **TalkBack y letra grande** en Inicio, «+», probar sin cuenta (interruptor «Paga/Invitado»), aporte de una persona y correo.
 8. **Sin conexión**: guardar un gasto en modo avión y al volver la señal tocar Guardar de nuevo (debe quedar uno solo, como en la prueba web).
-9. **Notificaciones** con FCM: pago reportado, confirmado y recordatorio.
+9. **Notificaciones** con FCM: pago reportado, confirmado y recordatorio; comentario nuevo; pago por revisar (administración) y «aprobaron un pago para ti». Tocar cada una debe abrir el pago o el gasto exacto.
+10. **Comprobantes reales**: capturas de Yape (con y sin modo oscuro), Plin desde BCP, Interbank, BBVA y Scotiabank, y una transferencia. Anotar qué campos lee bien y cuáles no; nunca debe registrar sin revisión ni bloquear si no lee nada (se escribe el monto a mano).
+11. **«Compartir → JUNTO»** en una build EAS: desde WhatsApp (imagen recibida), desde la app de Yape (botón compartir del comprobante) y desde la galería; con la app cerrada y abierta; sin sesión iniciada (debe pedir login y luego seguir). Una captura de más de 3 MB debe pedir elegirla desde la galería.
+12. **Cámara y galería**: «Tomar foto» de un comprobante impreso, permiso denegado, y captura larga de un teléfono de gama baja (compresión a JPEG).
+13. **Aprobación en dos o tres teléfonos**: administrador que no es parte del pago aprueba; quien recibe marca «No me llegó»; dos personas aprueban a la vez (solo una decisión queda).
 
 ## Probar en dispositivos antes de la prueba cerrada
 

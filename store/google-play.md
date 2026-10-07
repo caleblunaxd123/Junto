@@ -83,6 +83,8 @@ Fondo crema `#FFFCF7`, logo JUNTO a la izquierda, frase «Las cuentas claras, lo
 | Correo | Sí | No | Cuenta, verificación | No |
 | Número de teléfono | Sí | No | Que te encuentren para invitarte | Sí |
 | Fotos (boletas) | Se procesan, no se guardan | No | Leer el total | Sí |
+| Fotos (comprobantes de pago) | Sí: se guardan con el pago (borradores 24 h, imagen hasta 180 días tras resolverlo) | No (solo las ven quien pagó, quien recibe y la administración que aprueba) | Que alguien apruebe el pago | Sí |
+| Otro contenido generado por usuarios (comentarios) | Sí | No (lo ven los integrantes del grupo) | Funcionalidad | Sí |
 | Información financiera: historial de compras/pagos entre usuarios | Sí (gastos y pagos que registras) | No | Funcionalidad | No |
 | Identificadores del dispositivo (token de notificaciones) | Sí | No | Notificaciones | Sí |
 
@@ -92,4 +94,4 @@ Fondo crema `#FFFCF7`, logo JUNTO a la izquierda, frase «Las cuentas claras, lo
 
 ## Clasificación de contenido
 
-Sin violencia, sin contenido para adultos, sin apuestas, sin compras dentro de la app. Interacción entre usuarios: sí (grupos privados, sin chat abierto).
+Sin violencia, sin contenido para adultos, sin apuestas, sin compras dentro de la app. Interacción entre usuarios: sí (grupos privados por invitación; comentarios en gastos y pagos con eliminar y reportar, sin chat abierto ni perfiles públicos).

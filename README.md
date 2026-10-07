@@ -65,7 +65,8 @@ junto/
 2. **Grupos** — Crear grupos, invitar miembros, calcular saldos
 3. **Gastos** — Registrar gastos, dividir en partes iguales/exactas/porcentajes
 4. **Cuentas puntuales** — Total manual o foto revisada, nombres sin registro, invitados, reparto exacto en céntimos, aportes parciales, historial, archivo y exportación de texto/imagen.
-5. **Pagos externos** — Registra pagos realizados por Yape, Plin, efectivo o transferencia; el receptor confirma los pagos de grupo. No hay cobro automático ni conexión bancaria.
+5. **Pagos con comprobante** — Cada integrante sube la captura de su Yape, Plin o transferencia; JUNTO la lee (monto, app, operación, destinatario, fecha) y la registra como su pago. Lo aprueba quien recibe o, si el grupo lo permite, la administración. No hay cobro automático ni conexión bancaria.
+6. **Comentarios** — En cada gasto y pago, visibles para el grupo, con eliminar y reportar.
 
 ## Validación y estado de publicación
 
@@ -107,6 +108,22 @@ Para comprobar las plantillas y el protocolo SMTP sin enviar a nadie: `node --te
 
 Para una prueba real con Gmail, crea tú una contraseña de aplicación y configúrala en el archivo privado `apps/api/.env.smtp.local` (no en Git ni en el chat). Después de compilar, desde la raíz: `node --env-file=apps/api/.env.smtp.local apps/api/dist/scripts/send-test-email.js calebluna41@gmail.com`. Verifica la bandeja y spam: el servidor solo puede certificar que el proveedor aceptó el correo, no que el destinatario lo leyó.
 
+## Comprobantes de pago y aprobación
+
+**¿Por qué no se conecta a Yape o Plin?** Ninguno ofrece una API pública para que una app verifique transferencias entre personas. Lo que existe es para comercios: Yape tiene integraciones para negocios (QR y pasarelas) y una herramienta para que empresas *envíen* pagos a usuarios mediante socios como Kashio, Prontopaga o Monnet; Plin se integra a comercios a través de pasarelas (Niubiz, Izipay, Culqi, Mercado Pago, Bamboo Payment). Ninguna de esas vías sirve para confirmar que Luis le yapeó a Ana. Por eso JUNTO **lee** la captura y una persona la **aprueba**. Fuentes: [integrar Yape y Plin (comercios)](https://kom.pe/integrar-yape-plin-woocommerce/), [Yape: pagos de empresas a usuarios](https://www.peru-retail.com/yape-anuncia-nueva-solucion-para-que-empresas-realicen-pagos-directos-a-usuarios/), [dispersión de pagos de Yape](https://www.latamfintech.co/articles/neobanco-peruano-yape-lanza-una-nueva-herramienta-de-dispersion-de-pagos-para-empresas-que-necesitan-enviar-dinero-a-sus-usuarios), [Plin vía Bamboo Payment](https://docs.bamboopayment.com/docs/plin), [Prontopaga integrará Plin](https://www.descubre.vc/noticia/prontopaga-integrar-plin-y-busca-procesar-us-1-200-millones-en-per-2026-03-30), [código de seguridad de Yape](https://www.peru-retail.com/yape-lanza-codigo-de-seguridad-para-evitar-yapeos-falsos-como-funciona/).
+
+Cómo funciona:
+
+1. Quien debe toca **«Subir comprobante»** en el grupo (o comparte la captura a JUNTO desde WhatsApp/Yape en Android). La imagen se sube a la API (`POST /api/pagos/comprobantes`), el OCR local (Tesseract, sin enviarla a terceros) propone monto, app, número de operación, destinatario, fecha y el código de seguridad de Yape, y sugiere a quién se pagó si el nombre coincide con alguien del grupo.
+2. La persona revisa y envía. Se avisa si el comprobante ya respalda otro pago (misma imagen o mismo número de operación), si supera lo que se debe o si parece ser para otra persona. El pago queda «por aprobar» y **no** baja la deuda.
+3. Lo aprueba quien recibe el dinero o, si el grupo lo activó («Yo también apruebo los pagos» al crearlo, o Editar grupo), cualquier administrador. Nadie aprueba su propio pago. Si un administrador aprobó algo que no llegó, quien debía recibirlo puede marcar **«No me llegó»** (30 días) y la deuda vuelve.
+
+Privacidad: la imagen solo la ven quien pagó, quien recibe y los administradores que pueden aprobar (`GET /api/pagos/:id/comprobante`, sin caché). Los borradores no enviados se borran en 24 horas y la imagen de un pago resuelto a los 180 días (quedan monto y operación). Al eliminar la cuenta se borran sus capturas y el texto de sus comentarios. Una captura puede editarse: la aprobación humana es la garantía, no el OCR.
+
+Los datos de idioma del OCR vienen en `@tesseract.js-data/spa` (dependencia de la API), así la lectura no depende de un CDN; `OCR_LANG_PATH` permite usar otra carpeta.
+
+Pruebas: `node --test -r ts-node/register apps/api/src/domain/voucher.test.ts` (lector con textos ficticios de Yape, Plin y bancos), `node --test ops/test-payment-ux.cjs` (avisos y tarjetas de la app) y, con la API local, `node ops/test-vouchers-comments.cjs` (OCR real sobre `ops/qa-voucher.png`, duplicados, permisos, aprobación concurrente, «No me llegó», comentarios, purga y eliminación de cuenta). `python3 ops/create-voucher-fixture.py` regenera el comprobante ficticio.
+
 ## Pruebas de interfaz en web
 
 `ops/e2e-web.cjs` recorre en un navegador del tamaño de un teléfono: invitación pendiente tras iniciar sesión, sesión expirada, corte de red al guardar un gasto (debe quedar uno solo), volver atrás y reabrir un borrador. Necesita la API en `:3005` con una base de pruebas, Expo web en `:8081` y Chromium con `playwright-core`; esas dependencias web no forman parte del proyecto:
@@ -116,6 +133,8 @@ npm install --no-save react-native-web@~0.21.0 react-dom@19.1.0 @expo/metro-runt
 EXPO_PUBLIC_API_URL=http://localhost:3005 npx expo start --web --offline   # en apps/mobile
 DATABASE_URL=postgresql://…localhost…/<base de pruebas> node ops/e2e-web.cjs
 ```
+
+`ops/e2e-vouchers.cjs` recorre comprobantes: Luis sube la captura, Ana (administradora) la revisa y aprueba, Marta ve quién aprobó y todos comentan. Genera un comprobante ficticio único con `python3` + Pillow; `QA_SCREENSHOTS=<carpeta>` guarda capturas (las de `ops/screenshots/comprobantes/` salieron de ahí).
 
 En web `expo-secure-store` no existe y zustand usa `import.meta`; para correrlo localmente se usó un reemplazo temporal en `node_modules` y `unstable_transformImportMeta` en babel, **sin** subir esos cambios. La web no sustituye pruebas nativas de teclado, Google, adjuntos o navegación de Android/iOS.
 
