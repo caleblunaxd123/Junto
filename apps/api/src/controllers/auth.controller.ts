@@ -190,3 +190,23 @@ export async function verificarCelulares(
     next(err);
   }
 }
+
+export async function deletionSummary(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { deletionSummary } = await import("../services/account.service");
+    res.json(await deletionSummary(req.user!.userId));
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function deleteAccount(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { password } = z.object({ password: z.string().min(1, "Escribe tu contraseña").max(200) }).parse(req.body);
+    const { deleteAccount } = await import("../services/account.service");
+    await deleteAccount(req.user!.userId, password);
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+}

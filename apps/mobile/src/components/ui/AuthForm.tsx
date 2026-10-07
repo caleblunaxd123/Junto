@@ -142,6 +142,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
             ].map(([title, isRegister]) => (
               <Pressable
                 key={String(title)}
+                accessibilityRole="link"
                 onPress={() =>
                   router.replace(
                     isRegister ? "/(auth)/register" : "/(auth)/login",
@@ -256,6 +257,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
             </>
           ) : (
             <Pressable
+              accessibilityRole="link"
               onPress={() => router.push("/(auth)/forgot-password")}
               style={{
                 alignSelf: "flex-end",

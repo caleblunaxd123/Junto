@@ -92,6 +92,8 @@ export default function Verify() {
           </View>
         </View>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Escribir el código de 6 dígitos"
           onPress={() => input.current?.focus()}
           style={{ height: 60, position: "relative" }}
         >

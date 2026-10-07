@@ -4,6 +4,9 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGrupo } from "../../../src/hooks/useGrupos";
 import { api } from "../../../src/lib/api";
+import { invitationUrl } from "../../../src/lib/invitation";
+import { memberLabels, meFirst } from "../../../src/lib/people";
+import { useAuthStore } from "../../../src/store/auth.store";
 import {
   Screen,
   Card,
@@ -18,6 +21,8 @@ export default function Invite() {
   const { grupoId } = useLocalSearchParams<{ grupoId: string }>();
   const { data: group, refetch } = useGrupo(grupoId);
   const qc = useQueryClient();
+  const meId = useAuthStore((s) => s.usuario?.id);
+  const labels = memberLabels(group?.miembros.map((m) => ({ ...m.usuario, id: m.usuarioId })) ?? [], meId);
   const [identifier, setIdentifier] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -54,7 +59,7 @@ export default function Invite() {
       setError("");
       const { data } = await api.post(`/grupos/${grupoId}/invitar`, {});
       await Share.share({
-        message: `Únete a ${group?.nombre || "mi grupo"} en JUNTO: junto://unirse/${data.linkCode}`,
+        message: `Únete a «${group?.nombre || "mi grupo"}» en JUNTO para llevar las cuentas juntos: ${invitationUrl(data.linkCode)}`,
       });
     } catch {
       setError("No pudimos preparar el enlace. Reintenta.");
@@ -96,11 +101,17 @@ export default function Invite() {
       <Label size={20} weight="extra">
         Miembros ({group?.miembros.length || 0})
       </Label>
-      {group?.miembros.map((m) => (
-        <Card key={m.usuarioId}>
+      {group && meFirst(group.miembros, (m) => m.usuarioId, meId).map((m) => (
+        <Card key={m.usuarioId} style={{ padding: 12 }}>
           <View style={design.row}>
-            <Avatar name={m.usuario.nombre} />
-            <Label weight="bold">{m.usuario.nombre}</Label>
+            <Avatar name={m.usuario.nombre} photo={m.usuario.fotoUrl} seed={m.usuarioId} />
+            <View style={{ flex: 1 }}>
+              <Label weight="bold">{m.usuarioId === meId ? `${m.usuario.nombre} (Tú)` : m.usuario.nombre}</Label>
+              {labels.get(m.usuarioId) !== m.usuario.nombre.split(" ")[0] && m.usuarioId !== meId && (
+                <Label size={12} color={palette.muted}>Aparece como «{labels.get(m.usuarioId)}»</Label>
+              )}
+            </View>
+            {m.rol === "admin" && <Label size={12} color={palette.muted}>Admin</Label>}
           </View>
         </Card>
       ))}

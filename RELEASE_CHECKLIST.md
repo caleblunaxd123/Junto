@@ -1,30 +1,34 @@
 # JUNTO — controles previos a publicación
 
-## Implementado y verificable localmente
+## Resuelto en código (verificable en este repositorio)
 
-- Inicio distingue cuentas puntuales sin registro de invitados y grupos con cuentas personales.
-- Reparto guiado en tres pasos, moneda PEN, enteros en céntimos, confirmación humana de OCR y cancelación/manual.
-- Aportes acumulados parciales, protección de partes, historial de cambios y archivo solo sin pendientes.
-- Reintentos de creación idempotentes y borradores por cuenta/usuario; ningún mensaje ni movimiento financiero automático.
-- Mensaje breve y tabla PNG, previa revisión. Para más de diez personas se exportan páginas separadas.
-- Icono 1024, foreground adaptativo, splash y notificación monocromática reales, derivados del logo existente.
-- Perfiles EAS APK/AAB y rechazo de distribución sin configuración pública HTTPS/soporte.
+| Tema | Qué hay ahora | Cómo comprobarlo |
+| --- | --- | --- |
+| Invitaciones fuera de la app | Se comparte `https://<dominio>/unirse/CODE`. La API sirve esa página: abre la app si está instalada y si no lleva a Google Play. `app.config.js` declara App Links (`autoVerify`) para ese dominio y la API publica `/.well-known/assetlinks.json`. En la app, «+» → «Unirme con un enlace» acepta el enlace o el código pegado. | `node ops/test-release-config.cjs`, `node ops/test-mobile-ux.cjs` |
+| Correo | Resend (`RESEND_API_KEY`) o SMTP (Amazon SES u otro). Sin proveedor en desarrollo, los códigos salen en la consola; en producción la API avisa al arrancar y `/health` muestra `email`. | `npm run build && npm run email:test -- tu@correo.com` (en `apps/api`) |
+| Eliminar cuenta | `DELETE /api/auth/me` con contraseña: anonimiza a la persona, borra datos personales, cuentas de un día, recordatorios y sesiones; pasa la administración del grupo; cancela pagos que esperaban su confirmación. Los gastos compartidos quedan como «Usuario eliminado» y los saldos de los demás no cambian. Flujo en Perfil → Eliminar mi cuenta, con resumen previo. Página web `/eliminar-cuenta` para Play Store. | `ops/test-account-deletion.cjs` (corre en CI con Postgres) |
+| Migraciones | `prisma/migrations` versionado, `prisma migrate deploy` en CI y verificación de que el schema no se desfase. | Job `database` de CI; `apps/api/prisma/MIGRATIONS.md` |
+| Errores | Sentry opcional en la API (`SENTRY_DSN`, sin cuerpos ni cabeceras). La app muestra una pantalla «Algo salió mal» con Reintentar en lugar de quedar en blanco. | — |
+| Privacidad | Página `/privacidad` con los datos que realmente se usan. | Revisar el texto con quien sea responsable legal |
+| UX | Inicio con «Pendientes» (confirmar pagos, pagar, recordar), un solo botón «+», «Tú» siempre visible y primero, nombres repetidos distinguidos, avatares de iniciales con color por persona, detalle de grupo con frase de estado, formulario de gasto con el monto primero, actividad en segunda persona, texto legal en «¿Cómo funciona?», nombre opcional en cuentas de un día, aviso sin conexión. La pestaña Asistente sale de la barra (sigue en Perfil → Ayuda y en «Agregar gasto»). | `node ops/test-mobile-ux.cjs` |
 
-## No publicar hasta resolver
+## Necesita al propietario (no se puede hacer desde el código)
 
-1. Decidir responsable del tratamiento, dominio, correo de soporte y política de conservación. La eliminación de cuenta debe tener una implementación real y un canal web operativo; los accesos del perfil no sustituyen ese proceso.
-2. Definir cómo anonimizar o conservar registros compartidos sin alterar deudas de terceros, y transferencia de administración cuando se elimina una cuenta. No ejecutar un borrado masivo improvisado.
-3. Configurar SMTP sin exponer secretos y probar registro/verificación/recuperación con un correo real, incluyendo spam y reenvíos. Las pruebas locales no prueban entregabilidad.
-4. Respaldar la base de producción, revisar/aplicar las migraciones nuevas y generar Prisma/build del backend. No se ha aplicado ninguna de estas migraciones al servidor remoto.
-5. Revisar CORS, TLS, límites de requests distribuidos si hay varias instancias, gestión de secretos, backups/restauración y monitorización. Resolver o documentar con evidencia cada hallazgo de npm audit; no usar actualizaciones forzadas de Expo sin validar compatibilidad.
-6. Compilar e instalar APK de distribución firmado y producir AAB con credenciales EAS/Android. Validar API objetivo vigente, permisos reales, soporte de páginas 16KB y todas las bibliotecas nativas en el artefacto resultante. Expo Go no valida estos puntos.
-7. Probar dos dispositivos reales: invitación, registro, gastos, pago parcial, confirmación concurrente, recuperación de sesión, cierres/interrupciones, imagen compartida, accesibilidad TalkBack y fuente grande. Probar borradores de formularios de grupo/gasto, todavía no cubiertos por el nuevo borrador de cuenta puntual.
-8. Publicar política de privacidad y formulario de eliminación, completar Data Safety y declaraciones financieras según el comportamiento real. Verificar requisitos de prueba cerrada aplicables a la cuenta de Play Console.
+1. **Dominio**: apuntar `junto.pe` (o el que elijas) a la API y configurar `PUBLIC_WEB_URL` en la API y `EXPO_PUBLIC_WEB_URL` en EAS. Sin dominio, se usa la URL https de la API.
+2. **Firma Android**: copiar la huella SHA-256 del certificado de firma de Play Console (Integridad de la app) a `ANDROID_SHA256_CERT_FINGERPRINTS`. Comprobar con `https://<dominio>/.well-known/assetlinks.json` y, tras instalar, `adb shell pm get-app-links com.junto.app`.
+3. **Correo**: crear la cuenta en Resend o SES, verificar el dominio (SPF, DKIM, DMARC), poner `RESEND_API_KEY`/`EMAIL_FROM` y enviar `email:test` a Gmail y Outlook revisando spam.
+4. **Base de producción**: respaldo y línea base única según `apps/api/prisma/MIGRATIONS.md`; luego `npm run start:migrate` como comando de inicio.
+5. **EAS y notificaciones**: `eas init` (da `EAS_PROJECT_ID`), proyecto Firebase con app Android `com.junto.app`, subir `google-services.json` como secreto de archivo `GOOGLE_SERVICES_JSON` y las credenciales FCM v1 en expo.dev.
+6. **Sentry**: crear proyecto y poner `SENTRY_DSN` en la API. (Para la app se puede añadir `@sentry/react-native` cuando haya una build EAS donde probarlo.)
+7. **Legal y soporte**: `LEGAL_OWNER` (responsable del tratamiento), `SUPPORT_EMAIL`/`EXPO_PUBLIC_SUPPORT_EMAIL`, `EXPO_PUBLIC_PRIVACY_URL=https://<dominio>/privacidad` y `EXPO_PUBLIC_DELETE_ACCOUNT_URL=https://<dominio>/eliminar-cuenta`. Completar Data Safety en Play Console según `/privacidad`.
+8. **Asistente IA**: configurar `JUNTO_AI_BASE_URL`/`JUNTO_AI_API_KEY` en producción antes de volver a mostrarlo como pestaña. Sin él, las frases simples («Pagué 120 por la cena con Ana») siguen funcionando con reglas locales.
 
-## Datos necesarios del propietario
+## Probar en dispositivos antes de la prueba cerrada
 
-- Dominio público y correo de soporte.
-- Responsable/identidad de JUNTO y decisiones de conservación de datos.
-- Acceso/configuración EAS y publicación Android; no pegar contraseñas en el chat.
+- Dos teléfonos reales: invitación por WhatsApp (con y sin la app instalada), registro con correo real, gasto, pago parcial, confirmación desde Inicio, eliminación de cuenta.
+- TalkBack: recorrer Inicio, «+», detalle de grupo, agregar gasto y confirmar un pago solo con gestos.
+- Letra grande (Ajustes → Tamaño de fuente al máximo): ningún texto cortado en Inicio, grupo y formulario.
+- Modo avión: aparece el aviso «Sin conexión», los datos cargados siguen visibles y guardar muestra error sin perder lo escrito.
+- Prueba cerrada en Play Console con los testers que exija la cuenta.
 
-Guías oficiales a revisar al publicar: https://support.google.com/googleplay/android-developer/answer/11926878, https://support.google.com/googleplay/android-developer/answer/13327111, https://support.google.com/googleplay/android-developer/answer/10787469 y https://support.google.com/googleplay/android-developer/answer/14151465.
+Guías oficiales: https://support.google.com/googleplay/android-developer/answer/13327111 (eliminar cuenta), https://support.google.com/googleplay/android-developer/answer/10787469 (Data Safety), https://developer.android.com/training/app-links/verify-android-applinks (App Links).

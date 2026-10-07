@@ -60,7 +60,7 @@ export default function Profile() {
   const { usuario, logout } = useAuthStore();
   const show = (title: string, body: string) => Alert.alert(title, body);
   const openPublic = async (url: string | undefined, title: string) => {
-    if (!url?.startsWith("https://")) { show(title, "Este canal todavía no está configurado en esta versión de pruebas. No se ha enviado ninguna solicitud. Debe quedar operativo antes de publicar JUNTO."); return; }
+    if (!url?.startsWith("https://")) { show(title, "Esta página todavía no está publicada en esta versión de pruebas."); return; }
     try { await Linking.openURL(url); } catch { show(title, "No pudimos abrir el enlace. Revisa tu conexión y vuelve a intentarlo."); }
   };
   function exit() {
@@ -86,6 +86,7 @@ export default function Profile() {
         <Avatar
           name={usuario?.nombre || "Tú"}
           photo={usuario?.fotoUrl}
+          seed={usuario?.id}
           size={72}
         />
         <View style={{ flex: 1, gap: 5 }}>
@@ -211,7 +212,7 @@ export default function Profile() {
           onPress={() =>
             show(
               "¿Cómo funciona JUNTO?",
-              "Para una salida: Inicio → Dividir una cuenta. Escribe el total o revisa la lectura de una boleta, añade personas y marca a los invitados. Revisa y guarda el reparto. Comparte el mensaje o la imagen; tú confirmas los aportes recibidos, incluso parciales. No necesitan registrarse.\n\nPara gastos continuos: Organizar un grupo. Invita a quienes comparten contigo, registra quién pagó y para quién fue. Tus cuentas explicadas muestra cada cálculo. Un pago externo reduce la deuda solo cuando el receptor confirma.\n\nLas cuentas puntuales y las deudas de grupos no se mezclan. JUNTO no guarda ni transfiere dinero.",
+              "Para una salida: toca «+» en Inicio → Una cuenta de hoy. Escribe el total o revisa la lectura de una boleta, añade personas y marca a los invitados. Revisa y guarda el reparto. Comparte el mensaje o la imagen; tú confirmas los aportes recibidos, incluso parciales. No necesitan registrarse.\n\nPara gastos continuos: «+» → Un grupo nuevo. Invita a quienes comparten contigo, registra quién pagó y para quién fue. Tus cuentas explicadas muestra cada cálculo. Un pago externo reduce la deuda solo cuando el receptor confirma.\n\nLas cuentas puntuales y las deudas de grupos no se mezclan. JUNTO no guarda ni transfiere dinero.",
             )
           }
         />
@@ -223,6 +224,13 @@ export default function Profile() {
           color={palette.primary}
           bg={palette.mint}
           onPress={() => router.push("/(app)/ejemplo")}
+        />
+        <View style={{ height: 1, backgroundColor: palette.line }} />
+        <Row
+          icon="sparkles-outline"
+          title="Preguntar al asistente"
+          subtitle="Quién debe a quién, en palabras simples"
+          onPress={() => router.push("/(app)/asistente")}
         />
       </Card>
       <Card style={{ padding: 12, gap: 0 }}>
@@ -276,7 +284,7 @@ export default function Profile() {
           try { await Linking.openURL(`mailto:${email}?subject=${encodeURIComponent("Ayuda con JUNTO")}`); } catch { show("Contactar soporte", `Puedes escribir a ${email}. No incluyas contraseñas ni códigos de verificación.`); }
         }} />
         <Row icon="document-text-outline" title="Política de privacidad" subtitle="Cómo se usan y conservan tus datos" onPress={() => openPublic(process.env.EXPO_PUBLIC_PRIVACY_URL, "Política de privacidad")} />
-        <Row icon="trash-outline" title="Solicitar eliminación de cuenta" subtitle="Abrir el canal de eliminación y revisar qué se conserva" color={palette.coral} bg={palette.blush} onPress={() => openPublic(process.env.EXPO_PUBLIC_DELETE_ACCOUNT_URL, "Eliminar cuenta")} />
+        <Row icon="trash-outline" title="Eliminar mi cuenta" subtitle="Borra tus datos personales de forma permanente" color={palette.coral} bg={palette.blush} onPress={() => router.push("/(app)/perfil/eliminar")} />
       </Card>
     </Screen>
   );

@@ -275,6 +275,7 @@ export default function CreateGroup() {
             <Ionicons name="person-outline" color={palette.purple} size={22} />
             <Label size={11}>{p}</Label>
             <Pressable
+              accessibilityRole="button"
               accessibilityLabel={`Quitar ${p}`}
               disabled={busy}
               hitSlop={12}

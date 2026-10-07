@@ -18,7 +18,6 @@ export default function AppLayout() {
   const screens: [string, string, keyof typeof Ionicons.glyphMap][] = [
     ["index", "Inicio", "home-outline"],
     ["actividad", "Actividad", "list-outline"],
-    ["asistente", "Asistente", "sparkles-outline"],
     ["perfil", "Perfil", "person-outline"],
   ];
   return (
@@ -51,6 +50,9 @@ export default function AppLayout() {
         />
       ))}
       {[
+        // The assistant stays reachable from "Agregar gasto"; it is not a main tab until the AI service is live.
+        "asistente",
+        "unirme",
         "first-action",
         "ejemplo",
         "cuentas/[id]",
@@ -67,6 +69,7 @@ export default function AppLayout() {
         "gastos/editar",
         "pagos/pagar",
         "perfil/editar",
+        "perfil/eliminar",
       ].map((name) => (
         <Tabs.Screen
           key={name}

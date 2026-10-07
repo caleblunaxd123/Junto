@@ -62,7 +62,7 @@ export default function Assistant() {
     );
   }
   return (
-    <Screen title="Asistente JUNTO" subtitle="Tus cuentas, sin enredos." refreshing={groups.isRefetching} onRefresh={() => { setReply(""); refetch(); }}>
+    <Screen back title="Asistente JUNTO" subtitle="Tus cuentas, sin enredos." refreshing={groups.isRefetching} onRefresh={() => { setReply(""); refetch(); }}>
       <View style={{ alignItems: "center" }}>
         <Image
           source={art.assistant}

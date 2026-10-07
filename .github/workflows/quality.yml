@@ -19,3 +19,42 @@ jobs:
       - run: npm run build:api
       - run: npm run typecheck --workspace=apps/mobile
       - run: npm run lint --workspace=apps/mobile
+
+  database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: junto
+          POSTGRES_PASSWORD: junto
+          POSTGRES_DB: junto_db
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U junto" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://junto:junto@localhost:5432/junto_db
+      JWT_SECRET: ci_only_secret_for_integration_tests_0123456789
+      PORT: 3005
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate --schema apps/api/prisma/schema.prisma
+      # Production must be reproducible from the versioned migrations alone.
+      - run: npx prisma migrate deploy --schema apps/api/prisma/schema.prisma
+      - name: Schema and migrations agree
+        run: |
+          drift=$(npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel apps/api/prisma/schema.prisma --script)
+          echo "$drift"
+          echo "$drift" | grep -q "This is an empty migration" || (echo "schema.prisma changed without a migration" && exit 1)
+      - run: npm run build:api
+      - name: Account deletion end to end
+        run: |
+          node apps/api/dist/index.js > api.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf localhost:3005/health && break; sleep 1; done
+          node ops/test-account-deletion.cjs || (cat api.log && exit 1)

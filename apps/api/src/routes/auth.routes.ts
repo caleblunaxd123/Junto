@@ -16,6 +16,8 @@ router.post('/verify-email', authController.verifyEmail);
 router.post('/resend-verification', authController.resendVerification);
 router.get('/me', authMiddleware, authController.me);
 router.patch('/me', authMiddleware, authController.updateProfile);
+router.get('/me/eliminacion', authMiddleware, authController.deletionSummary);
+router.delete('/me', authMiddleware, authRateLimit, authController.deleteAccount);
 router.put('/push-token', authMiddleware, authController.updatePushToken);
 
 router.post('/verificar-celulares', authMiddleware, authController.verificarCelulares);

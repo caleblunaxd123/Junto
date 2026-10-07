@@ -85,3 +85,50 @@ test("invitation survives authentication without accepting arbitrary redirects",
     assert.equal(validInvitationCode(value), false);
   assert.equal(authenticatedDestination(null), "/(app)");
 });
+const { memberLabels, meFirst, initials, avatarColors } = require("../apps/mobile/src/lib/people.ts");
+const { pendingActions } = require("../apps/mobile/src/lib/pending.ts");
+const { invitationUrl, extractInvitationCode } = require("../apps/mobile/src/lib/invitation.ts");
+test("the viewer is always «Tú» and namesakes are told apart", () => {
+  const people = [
+    { id: "me", nombre: "Usuario Nuevo QA", email: "qa1@x.pe" },
+    { id: "b", nombre: "Usuario Nuevo QA", email: "qa2@x.pe" },
+    { id: "c", nombre: "Juan Pérez" },
+    { id: "d", nombre: "Juan Quispe" },
+    { id: "e", nombre: "Ana" },
+    { id: "f", nombre: "Luis Rojas", email: "luis@x.pe" },
+    { id: "g", nombre: "Luis Rojas", email: "lr@x.pe" },
+  ];
+  const labels = memberLabels(people, "me");
+  assert.equal(labels.get("me"), "Tú");
+  assert.equal(labels.get("b"), "Usuario");
+  assert.equal(labels.get("c"), "Juan P.");
+  assert.equal(labels.get("d"), "Juan Q.");
+  assert.equal(labels.get("e"), "Ana");
+  assert.equal(labels.get("f"), "Luis Rojas (luis)");
+  assert.equal(labels.get("g"), "Luis Rojas (lr)");
+  assert.equal(new Set([...labels.values()]).size, people.length);
+  assert.deepEqual(meFirst(people, (p) => p.id, "f").map((p) => p.id)[0], "f");
+  assert.equal(initials("ana maría  López"), "AL");
+  assert.equal(initials("  "), "?");
+  assert.notDeepEqual(avatarColors("b"), avatarColors("me"));
+});
+test("pending actions put the payment to confirm first and keep groups apart", () => {
+  const member = (id, nombre) => ({ usuarioId: id, usuario: { id, nombre } });
+  const groups = [
+    { id: "g1", nombre: "Depa", miembros: [member("me", "Caleb"), member("luis", "Luis Rojas")], resumen: { saldos: [{ deudorId: "luis", deudorNombre: "Luis Rojas", acreedorId: "me", acreedorNombre: "Caleb", monto: 6000 }] } },
+    { id: "g2", nombre: "Viaje", miembros: [member("me", "Caleb"), member("ana", "Ana")], resumen: { saldos: [{ deudorId: "me", deudorNombre: "Caleb", acreedorId: "ana", acreedorNombre: "Ana", monto: 4000 }] } },
+  ];
+  const payments = [{ id: "p1", grupoId: "g1", pagadorId: "luis", receptorId: "me", monto: 6000, estado: "reportado" }];
+  const actions = pendingActions(groups, payments, "me");
+  assert.deepEqual(actions.map((a) => [a.kind, a.persona, a.monto]), [["confirmar", "Luis", 6000], ["pagar", "Ana", 4000], ["cobrar", "Luis", 6000]]);
+  assert.equal(actions[2].porConfirmar, true);
+  assert.deepEqual(pendingActions(groups, payments, null), []);
+});
+test("invitation links are https web links and pasted links or codes are accepted", () => {
+  assert.equal(invitationUrl("QA-invite_1234", "https://junto.pe/"), "https://junto.pe/unirse/QA-invite_1234");
+  assert.equal(invitationUrl("QA-invite_1234", ""), "junto://unirse/QA-invite_1234");
+  assert.equal(extractInvitationCode("Únete en JUNTO: https://junto.pe/unirse/QA-invite_1234 "), "QA-invite_1234");
+  assert.equal(extractInvitationCode("junto://unirse/QA-invite_1234"), "QA-invite_1234");
+  assert.equal(extractInvitationCode(" QA-invite_1234 "), "QA-invite_1234");
+  assert.equal(extractInvitationCode("hola"), null);
+});

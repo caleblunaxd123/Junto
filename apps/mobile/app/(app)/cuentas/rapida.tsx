@@ -14,6 +14,7 @@ import { centavosASoles } from "../../../src/types";
 import { Screen, Card, Label, Button, ErrorBox, palette, design } from "../../../src/components/ui/Design";
 import { FormField } from "../../../src/components/ui/Reference";
 import { BillTotal } from "../../../src/components/ui/BillTotal";
+import { HowItWorks } from "../../../src/components/ui/HowItWorks";
 const person = (nombre: string) => ({ id: `p${Date.now()}${Math.random().toString(36).slice(2, 8)}`, nombre, consumo: "", invitado: false });
 const titles = ["¿Cuánto fue la cuenta?", "¿Quiénes participan?", "Así queda el reparto"];
 export default function QuickBillForm() {
@@ -29,7 +30,7 @@ function BillWizard({ id, original, version }: { id?: string; original?: QuickBi
   const user = useAuthStore((s) => s.usuario);
   const save = useSaveQuickBill(id);
   const read = useReadReceipt();
-  const initial: BillDraft = { step: 0, name: original?.nombre || `Cuenta del ${new Date().toLocaleDateString("es-PE", { timeZone: "America/Lima" })}`, people: original?.participantes.map((p) => ({ ...p, consumo: centavosASoles(p.consumo) })) || [person("Persona 1"), person("Persona 2"), person("Persona 3")], extras: original ? centavosASoles(original.extras) : "0", recipient: original?.cobrarA ?? user?.nombre ?? "", instructions: original?.instrucciones || "", names: "", commonAmount: "", division: original?.division || (original ? "consumos" : "igual"), billTotal: original ? centavosASoles(original.totalCuenta ?? original.participantes.reduce((sum, p) => sum + p.consumo, 0)) : "", scanApproved: true, requestId: `bill_${Date.now()}_${Math.random().toString(36).slice(2)}` };
+  const initial: BillDraft = { step: 0, name: original?.nombre || "", people: original?.participantes.map((p) => ({ ...p, consumo: centavosASoles(p.consumo) })) || [person("Persona 1"), person("Persona 2"), person("Persona 3")], extras: original ? centavosASoles(original.extras) : "0", recipient: original?.cobrarA ?? user?.nombre ?? "", instructions: original?.instrucciones || "", names: "", commonAmount: "", division: original?.division || (original ? "consumos" : "igual"), billTotal: original ? centavosASoles(original.totalCuenta ?? original.participantes.reduce((sum, p) => sum + p.consumo, 0)) : "", scanApproved: true, requestId: `bill_${Date.now()}_${Math.random().toString(36).slice(2)}` };
   initial.baseVersion = version;
   const draft = useBillDraft(user?.id, id, initial);
   const d = draft.state;
@@ -47,7 +48,9 @@ function BillWizard({ id, original, version }: { id?: string; original?: QuickBi
   const cancelScan = React.useCallback(() => { request.current?.abort(); request.current = null; setReading(false); }, []);
   React.useEffect(() => { if (!focused) cancelScan(); }, [focused, cancelScan]);
   React.useEffect(() => () => request.current?.abort(), []);
-  const check = validateQuickBillDraft(d);
+  // The name is optional: an empty one becomes "Cuenta del 7/10/2026" when saving.
+  const defaultName = `Cuenta del ${new Date().toLocaleDateString("es-PE", { timeZone: "America/Lima" })}`;
+  const check = validateQuickBillDraft({ ...d, name: d.name.trim() || defaultName });
   const { input, result, fields } = check;
   const leave = React.useCallback(() => {
     if (save.isPending) return;
@@ -116,22 +119,20 @@ function BillWizard({ id, original, version }: { id?: string; original?: QuickBi
     {d.step > 0 && check.total !== null && <BillTotal total={check.total} extras={check.extras || 0} difference={check.difference} consumptionMode={d.division === "consumos"} />}
     <Button title={d.pending ? "Reintentar guardado sin duplicar" : d.step === 2 ? "Guardar reparto" : d.step === 0 ? "Continuar con las personas →" : "Revisar reparto →"} loading={save.isPending} disabled={reading || (!d.pending && !!check.stepErrors[d.step])} onPress={d.step === 2 || d.pending ? submit : next} />
     {!d.pending && !!check.stepErrors[d.step] && <Label size={11} color={palette.coral}>{d.step === 0 ? "Completa y revisa el total para continuar." : fields.reconciliation === check.stepErrors[d.step] ? "Ajusta los consumos para que coincidan con tu cuenta." : d.step === 1 ? "Corrige los campos marcados antes de revisar el reparto." : "Revisa los datos: el reparto aún no se puede guardar."}</Label>}
-    <Label size={11} color={palette.muted}>Guardar no cobra ni envía mensajes.</Label>
   </>}>
     {!draft.ready ? <ActivityIndicator /> : <>
       <View style={[design.row, { gap: 6 }]}>{["Cuenta", "Personas", "Reparto"].map((label, index) => <View key={label} style={{ flex: 1, gap: 4 }}><View style={{ height: 4, borderRadius: 2, backgroundColor: index <= d.step ? palette.primary : palette.line }} /><Label size={11} weight={index === d.step ? "bold" : "regular"}>{index + 1}. {label}</Label></View>)}</View>
       <Label weight="extra" size={23}>{titles[d.step]}</Label>
       {!!check.stepErrors[d.step] && !(d.step === 1 && check.stepErrors[d.step] === fields.reconciliation) && (d.step > 0 || !!d.billTotal.trim() || !d.scanApproved) && <ErrorBox message={check.stepErrors[d.step]} />}
-      {draft.storageError ? <ErrorBox message="No pudimos proteger el borrador. No cierres la app hasta guardar." /> : <Label size={11} color={palette.muted}>{d.pending ? "Pendiente de confirmar en el servidor" : draft.restored ? "Borrador recuperado · solo en este dispositivo hasta guardar" : "Borrador en este dispositivo · puedes continuar después"}</Label>}
+      {draft.storageError ? <ErrorBox message="No pudimos proteger el borrador. No cierres la app hasta guardar." /> : (d.pending || draft.restored) ? <Label size={12} color={palette.muted}>{d.pending ? "Pendiente de confirmar en el servidor" : "Seguimos donde lo dejaste"}</Label> : null}
       {d.pending && <Card style={{ backgroundColor: palette.yellow }}><Label size={13}>No sabemos todavía si el servidor guardó esta cuenta. Reintenta antes de cambiar montos; así evitamos duplicados.</Label></Card>}
       {recovered.data && <Button title="Abrir cuenta que ya se guardó" secondary onPress={async () => { try { await draft.clear(); router.replace({ pathname: "/(app)/cuentas/rapida-detalle", params: { id: recovered.data!.id } }); } catch { setError("No pudimos retirar el borrador. Reintenta."); } }} />}
       {id && d.pending && <Button title="Abrir cuenta guardada y revisar conflicto" secondary disabled={save.isPending} onPress={() => Alert.alert("¿Revisar la versión guardada?", "Se descartará este borrador local de corrección. El reparto del servidor no se modifica.", [{ text: "Cancelar", style: "cancel" }, { text: "Revisar cuenta", onPress: async () => { try { await draft.clear(); router.replace({ pathname: "/(app)/cuentas/rapida-detalle", params: { id } }); } catch { setError("No pudimos retirar el borrador. Reintenta."); } } }])} />}
-      {draft.restored && !d.pending && <Pressable accessibilityRole="button" accessibilityLabel="Descartar borrador local" style={{ minHeight: 44, justifyContent: "center" }} disabled={locked} onPress={() => Alert.alert("¿Descartar borrador local?", "Se quitará solo este borrador del dispositivo. No se borra ninguna cuenta guardada.", [{ text: "Cancelar", style: "cancel" }, { text: "Descartar", style: "destructive", onPress: async () => { try { await draft.clear(); router.replace("/(app)/cuentas/rapidas"); } catch { setError("No pudimos retirar el borrador."); } } }])}><Label size={12} color={palette.muted}>Opciones del borrador · empezar de nuevo</Label></Pressable>}
+      {draft.restored && !d.pending && <Button compact secondary title="Empezar de nuevo" accessibilityHint="Descarta este borrador del dispositivo" disabled={locked} onPress={() => Alert.alert("¿Descartar borrador local?", "Se quitará solo este borrador del dispositivo. No se borra ninguna cuenta guardada.", [{ text: "Cancelar", style: "cancel" }, { text: "Descartar", style: "destructive", onPress: async () => { try { await draft.clear(); router.replace("/(app)/cuentas/rapidas"); } catch { setError("No pudimos retirar el borrador."); } } }])} />}
       {d.step === 0 && <>
-        <Card style={{ backgroundColor: palette.mint }}><Label weight="bold">Escribe el total o usa una foto</Label><Label size={13}>Para una cena, un cumpleaños o una salida. Nadie más necesita registrarse.</Label><FormField label="Total de la cuenta (S/)" accessibilityLabel="Total de la cuenta" value={d.billTotal} error={d.billTotal.trim() ? fields.total : undefined} maxLength={10} onChangeText={(billTotal) => { cancelScan(); update({ billTotal, scanApproved: receipt ? false : d.scanApproved }); }} keyboardType="decimal-pad" editable={!locked} placeholder="180.00" /><Label size={12} color={palette.muted}>Este total se conserva también en el reparto por consumos. No vuelvas a añadir la propina si ya está incluida.</Label></Card>
+        <Card style={{ backgroundColor: palette.mint }}><Label weight="bold">Escribe el total o usa una foto</Label><Label size={13}>Nadie más necesita la app.</Label><FormField label="Total de la cuenta (S/)" accessibilityLabel="Total de la cuenta" value={d.billTotal} error={d.billTotal.trim() ? fields.total : undefined} maxLength={10} onChangeText={(billTotal) => { cancelScan(); update({ billTotal, scanApproved: receipt ? false : d.scanApproved }); }} keyboardType="decimal-pad" editable={!locked} placeholder="180.00" /></Card>
         <Button title="Escanear boleta con cámara" secondary disabled={reading || locked} onPress={() => scan(true)} />
         <Button title="Elegir foto de la boleta" secondary disabled={reading || locked} onPress={() => scan(false)} />
-        <Label size={11} color={palette.muted}>JPG/PNG en soles. La foto se procesa en el servidor de JUNTO y no se conserva como comprobante. El lector puede equivocarse: siempre revisas el total.</Label>
         {reading && <Card><ActivityIndicator color={palette.primary} /><Label>Leyendo el total…</Label><Button title="Cancelar lectura" secondary onPress={cancelScan} /></Card>}
         {receipt && <Card style={{ backgroundColor: palette.yellow }}><Label size={13}>{receipt.advertencia}</Label>{!receipt.totalPropuesto && receipt.candidatos.map((candidate) => <Button key={candidate.monto} title={`Usar S/ ${centavosASoles(candidate.monto)}`} secondary disabled={locked} onPress={() => update({ billTotal: centavosASoles(candidate.monto), scanApproved: false })} />)}<Button title={showText ? "Ocultar texto leído" : "Revisar texto leído"} secondary onPress={() => setShowText(!showText)} />{showText && <Label size={11} selectable>{receipt.texto}</Label>}</Card>}
         {!d.scanApproved && <Button title="Revisé el total y la moneda: es correcto" secondary disabled={!parseMoney(d.billTotal) || locked} onPress={() => update({ scanApproved: true })} />}
@@ -150,11 +151,17 @@ function BillWizard({ id, original, version }: { id?: string; original?: QuickBi
       </>}
       {d.step === 2 && <>
         {result ? <Card style={{ backgroundColor: palette.mint }}><Label size={13}>Total entre {result.cantidadPagadores} que aportan</Label><Label weight="extra" size={30}>S/ {centavosASoles(result.montoTotal)}</Label><Label size={12}>Cuenta original S/ {centavosASoles(check.total || 0)} + extras S/ {centavosASoles(check.extras || 0)}</Label>{result.partes.map((p) => <View key={p.id} style={{ gap: 3 }}><View style={[design.row, { justifyContent: "space-between" }]}><Label weight="bold" style={{ flex: 1 }}>{p.nombre}</Label><Label weight="bold">S/ {centavosASoles(p.total)}</Label></View><Label size={11} color={palette.muted}>{p.invitado ? "Invitado: no paga; los demás cubren su parte." : d.division === "igual" ? `Parte ${centavosASoles(p.consumo)} + extras ${centavosASoles(p.extras)}` : `Consumo ${centavosASoles(p.consumo)} + invitados ${centavosASoles(p.invitados)} + extras ${centavosASoles(p.extras)}`}</Label></View>)}<Label size={12}>✓ {d.division === "consumos" ? "Los consumos coinciden con la cuenta original y las partes con el total final." : "Las partes suman el total original más los extras."}</Label></Card> : <><ErrorBox message={check.stepErrors[2] || "Revisa el reparto."} /><Button title="Volver a corregir los consumos" secondary onPress={() => update({ step: 1 })} /></>}
-        <FormField label="Nombre de esta cuenta" value={d.name} error={fields.name} onChangeText={(name) => update({ name })} editable={!locked} maxLength={100} />
+        <FormField label="Nombre (opcional)" value={d.name} error={d.name.trim() ? fields.name : undefined} onChangeText={(name) => update({ name })} editable={!locked} maxLength={100} placeholder="Ej. Cumple de Ana" />
         <FormField label="¿Quién recibe los aportes? (opcional)" value={d.recipient} error={fields.recipient} onChangeText={(recipient) => update({ recipient })} editable={!locked} maxLength={100} />
         <FormField label="Cómo pagar (opcional)" value={d.instructions} error={fields.instructions} onChangeText={(instructions) => update({ instructions })} editable={!locked} multiline maxLength={500} placeholder="Pueden yapear al número que compartiré por privado." />
-        <Label size={12} color={palette.muted}>Si adelantaste toda la boleta, confirma tu propia parte desde el detalle. Los demás aportan a quien adelantó el dinero. Nada se confirma automáticamente.</Label>
       </>}
+      <HowItWorks points={[
+        "Guardar no cobra a nadie ni envía mensajes: tú decides qué compartir.",
+        "La foto de la boleta se procesa en el servidor de JUNTO solo para leer el total y no se guarda. El lector puede equivocarse: siempre confirmas el total.",
+        "Si la propina ya está en la boleta, no la vuelvas a sumar como extra.",
+        "Los invitados no pagan: su parte se reparte entre los demás.",
+        "Si adelantaste toda la boleta, marca tu propia parte como recibida desde el detalle. Nada se confirma solo.",
+      ]} />
     </>}
   </Screen>;
 }

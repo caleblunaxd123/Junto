@@ -11,7 +11,8 @@
     "dev:mobile": "npm run start --workspace=apps/mobile",
     "build:api": "npm run build --workspace=apps/api",
     "db:migrate": "npm run prisma:migrate --workspace=apps/api",
-    "db:studio": "npm run prisma:studio --workspace=apps/api"
+    "db:studio": "npm run prisma:studio --workspace=apps/api",
+    "db:deploy": "npm run prisma:deploy --workspace=apps/api"
   },
   "engines": {
     "node": ">=20.0.0"

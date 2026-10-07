@@ -18,8 +18,6 @@ build/
 apps/mobile/.expo/
 apps/mobile/expo-env.d.ts
 
-# Prisma
-apps/api/prisma/migrations/
 
 # Logs
 *.log

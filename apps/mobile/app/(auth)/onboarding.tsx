@@ -24,7 +24,7 @@ export default function Onboarding() {
     },
     {
       title: "Anota lo que pagaron",
-      copy: "Registra quién pagó, cuánto y en qué. Puedes completar el formulario o pedir una propuesta al asistente.",
+      copy: "Registra quién pagó, cuánto y en qué. Escribe el monto o descríbelo en una frase: tú revisas antes de guardar.",
       image: art.receipt,
     },
     {

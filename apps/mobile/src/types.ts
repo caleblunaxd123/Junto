@@ -63,6 +63,7 @@ export interface GrupoConBalance extends Grupo {
       pagosRecibidos: number;
       neto: number;
     }[];
+    saldos?: Saldo[];
   };
   balanceUsuario: {
     teDeben: number; // en centavos
@@ -136,7 +137,7 @@ export interface Saldo {
 // ─── Payments ─────────────────────────────────────────────────────────────────
 
 export type MetodoPago = "yape" | "plin" | "transferencia" | "efectivo";
-export type EstadoPago = "reportado" | "exitoso" | "rechazado" | "fallido";
+export type EstadoPago = "reportado" | "exitoso" | "rechazado" | "fallido" | "cancelado";
 
 export interface Pago {
   nota?: string | null;
@@ -173,6 +174,22 @@ export interface Recordatorio {
   leido: boolean;
   fechaEnvio: string;
   fechaLectura?: string | null;
+}
+
+// ─── Activity ─────────────────────────────────────────────────────────────────
+
+export interface ActividadEvento {
+  id: string;
+  tipo: "gasto" | "pago";
+  titulo: string;
+  detalle: string;
+  monto: number;
+  fecha: string;
+  grupoId: string;
+  gastoId: string | null;
+  pagoId: string | null;
+  estado?: EstadoPago;
+  requiereAccion: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

@@ -34,6 +34,7 @@ import {
 import { centavosASoles, TipoDivision, Gasto } from "../../../src/types";
 import { parseMoney, parsePercentage, allocatePreview } from "../../../src/lib/expensePreview";
 import { groupCover } from "../../../src/components/ui/Artwork";
+import { memberLabels, meFirst } from "../../../src/lib/people";
 function Field({
   label,
   children,
@@ -68,6 +69,11 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   });
   const { data: groups = [] } = useGrupos();
   const [groupId, setGroupId] = useState(params.grupoId || "");
+  // With a single group there is nothing to choose.
+  useEffect(() => {
+    if (!groupId && !params.gastoId && groups.length === 1) setGroupId(groups[0].id);
+  }, [groupId, groups, params.gastoId]);
+  const fixedGroup = !!params.grupoId || !!params.gastoId;
   const { data: group, isLoading } = useGrupo(groupId);
   const user = useAuthStore((s) => s.usuario);
   const create = useCrearGasto(groupId, params.gastoId);
@@ -112,6 +118,13 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   const [notes, setNotes] = useState("");
   const [detail, setDetail] = useState(false);
   const [picker, setPicker] = useState<"grupo" | "pagador" | null>(null);
+  const [writeIt, setWriteIt] = useState(!!params.texto);
+  useEffect(() => {
+    if (params.texto) setWriteIt(true);
+  }, [params.texto]);
+  const labels = memberLabels(group?.miembros.map((m) => ({ ...m.usuario, id: m.usuarioId })) ?? [], user?.id);
+  const nameOf = (id: string) => labels.get(id) ?? "?";
+  const orderedMembers = group ? meFirst(group.miembros, (m) => m.usuarioId, user?.id) : [];
   useEffect(() => {
     if (!params.gastoId && group && initializedGroup.current !== group.id) {
       initializedGroup.current = group.id;
@@ -278,7 +291,9 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       subtitle={
         params.gastoId
           ? "Se actualizará el gasto existente, no se creará otro."
-          : undefined
+          : fixedGroup && group
+            ? `En ${group.nombre}`
+            : undefined
       }
       back
     >
@@ -313,78 +328,54 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
         <ErrorBox message="No pudimos cargar este grupo. Vuelve y reintenta." />
       ) : (
         <>
-          <Card style={{ backgroundColor: palette.lilac, padding: 12 }}>
-            <View style={{ flexDirection: "row", gap: 9 }}>
-              <Image
-                source={require("../../../assets/illustrations/assistant-reference.png")}
-                resizeMode="cover"
-                style={{
-                  width: 112,
-                  height: 145,
-                  alignSelf: "flex-end",
-                  borderRadius: 12,
+          {!params.gastoId && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: writeIt }}
+              onPress={() => setWriteIt((v) => !v)}
+              style={[design.row, { minHeight: 44, gap: 8 }]}
+            >
+              <Ionicons name="sparkles-outline" size={18} color={palette.purple} />
+              <Label size={13} weight="bold" color={palette.purple} style={{ flex: 1 }}>
+                {writeIt ? "Ocultar" : "¿Prefieres escribirlo en una frase?"}
+              </Label>
+            </Pressable>
+          )}
+          {writeIt && !params.gastoId && (
+            <Card style={{ backgroundColor: palette.lilac, padding: 12, gap: 8 }}>
+              <TextInput
+                accessibilityLabel="Describe el gasto en una frase"
+                value={text}
+                onChangeText={(value) => {
+                  cancelProposal();
+                  setText(value);
                 }}
+                placeholder="Pagué 120 por la cena con Ana y Luis"
+                placeholderTextColor={palette.muted}
+                multiline
+                maxLength={500}
+                style={[design.input, { fontSize: 14, minHeight: 56, borderColor: "white" }]}
               />
-              <View style={{ flex: 1, gap: 7 }}>
-                <Label size={17} weight="extra" color={palette.purple}>
-                  Cuéntanos el gasto
-                </Label>
-                <TextInput
-                  accessibilityLabel="Describir gasto al asistente"
-                  value={text}
-                  onChangeText={(value) => {
-                    cancelProposal();
-                    setText(value);
-                  }}
-                  placeholder="“Pagué 120 por una cena con Ana y Luis”"
-                  multiline
-                  maxLength={500}
-                  style={[
-                    design.input,
-                    {
-                      fontSize: 13,
-                      minHeight: 58,
-                      padding: 10,
-                      borderColor: "white",
-                      borderRadius: 19,
-                    },
-                  ]}
-                />
-                <Pressable
-                  onPress={prepare}
-                  disabled={preparing || text.trim().length < 3}
-                  style={{ padding: 7 }}
-                >
-                  <Label weight="bold" size={12} color={palette.purple}>
-                    {preparing ? "Preparando…" : "Preparar propuesta →"}
-                  </Label>
+              <Button
+                compact
+                secondary
+                title={preparing ? "Preparando…" : "Completar el formulario"}
+                disabled={preparing || text.trim().length < 3}
+                onPress={prepare}
+              />
+              {preparing && (
+                <Pressable accessibilityRole="button" onPress={cancelProposal} style={{ minHeight: 44, justifyContent: "center" }}>
+                  <Label size={13} weight="bold" color={palette.muted}>Cancelar y llenarlo a mano</Label>
                 </Pressable>
-                {preparing && (
-                  <Button
-                    title="Continuar manualmente"
-                    secondary
-                    onPress={cancelProposal}
-                  />
-                )}
-              </View>
-            </View>
-            {!!proposal && (
-              <View
-                style={{
-                  backgroundColor: palette.mint,
-                  borderRadius: 17,
-                  padding: 11,
-                }}
-              >
-                <Label weight="bold" size={13} color="#078B70">
-                  Revisa el reparto antes de guardar
-                </Label>
-                <Label size={11}>
-                  {proposal} Revisa los detalles y confírmalo.
-                </Label>
-              </View>
-            )}
-          </Card>
+              )}
+            </Card>
+          )}
+          {!!proposal && (
+            <Card style={{ backgroundColor: palette.mint, padding: 12, gap: 4 }}>
+              <Label weight="bold" size={13} color="#078B70">Revisa antes de guardar</Label>
+              <Label size={12}>{proposal}</Label>
+            </Card>
+          )}
           <Card style={{ gap: 12, padding: 12 }}>
             <Field label="Monto">
               <View
@@ -412,6 +403,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                   }}
                   keyboardType="decimal-pad"
                   placeholder="0.00"
+                  placeholderTextColor="#94A3B8"
+                  autoFocus={!params.gastoId}
                   style={{
                     flex: 1,
                     fontSize: 31,
@@ -445,7 +438,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                     cancelProposal();
                     setDescription(value);
                   }}
-                  placeholder="Cena"
+                  placeholder="Ej. Cena, taxi, luz"
+                  placeholderTextColor="#94A3B8"
                   maxLength={200}
                   style={{
                     flex: 1,
@@ -458,6 +452,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
             </Field>
             <Field label="Fecha">
               <Pressable
+                accessibilityRole="button"
                 accessibilityLabel="Elegir fecha del gasto"
                 onPress={() => setDatePicker(true)}
                 style={[design.input, design.row]}
@@ -488,10 +483,12 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                 }}
               />
             )}
+            {!fixedGroup && (
             <Field label="Grupo">
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Grupo: ${group.nombre}. Cambiar`}
                 onPress={() => setPicker("grupo")}
-                disabled={!!params.gastoId}
                 style={[design.input, design.row, { paddingVertical: 8 }]}
               >
                 <Image
@@ -509,17 +506,21 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                 <Ionicons name="chevron-down" size={17} color={palette.muted} />
               </Pressable>
             </Field>
+            )}
             <Field label="Pagó">
               <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Pagó: ${selectedPayer ? nameOf(selectedPayer.usuarioId) : "elige"}. Cambiar`}
                 onPress={() => setPicker("pagador")}
                 style={[design.input, design.row, { paddingVertical: 8 }]}
               >
                 <Avatar
                   name={selectedPayer?.usuario.nombre || "Tú"}
+                  seed={selectedPayer?.usuarioId}
                   size={34}
                 />
                 <Label size={14} weight="bold" style={{ flex: 1 }}>
-                  {selectedPayer?.usuario.nombre}
+                  {selectedPayer ? nameOf(selectedPayer.usuarioId) : "Elige quién pagó"}
                 </Label>
                 <Ionicons name="chevron-down" size={17} color={palette.muted} />
               </Pressable>
@@ -536,14 +537,14 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                 }}
               >
                 <View style={{ flexDirection: "row", gap: 12 }}>
-                  {group.miembros.map((m) => (
+                  {orderedMembers.map((m) => (
                     <Pressable
                       key={m.usuarioId}
                       accessibilityRole="checkbox"
                       accessibilityState={{
                         checked: ids.includes(m.usuarioId),
                       }}
-                      accessibilityLabel={m.usuario.nombre}
+                      accessibilityLabel={nameOf(m.usuarioId) === "Tú" ? "Tú" : m.usuario.nombre}
                       onPress={() => {
                         cancelProposal();
                         setIds((current) =>
@@ -561,11 +562,12 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                       style={{
                         alignItems: "center",
                         opacity: ids.includes(m.usuarioId) ? 1 : 0.4,
-                        width: 57,
+                        width: 64,
+                        minHeight: 48,
                       }}
                     >
                       <View>
-                        <Avatar name={m.usuario.nombre} size={38} />
+                        <Avatar name={m.usuario.nombre} photo={m.usuario.fotoUrl} seed={m.usuarioId} size={38} />
                         {ids.includes(m.usuarioId) && (
                           <Ionicons
                             name="checkmark-circle"
@@ -581,8 +583,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                           />
                         )}
                       </View>
-                      <Label size={10} numberOfLines={1}>
-                        {m.usuario.nombre.split(" ")[0]}
+                      <Label size={11} numberOfLines={1}>
+                        {nameOf(m.usuarioId)}
                       </Label>
                     </Pressable>
                   ))}
@@ -602,6 +604,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
               ).map(([m, title]) => (
                 <Pressable
                   key={m}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: mode === m }}
                   onPress={() => changeMode(m)}
                   style={{
                     flex: 1,
@@ -660,19 +664,16 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                           group.miembros.find((m) => m.usuarioId === id)
                             ?.usuario.nombre || "?"
                         }
+                        seed={id}
                         size={28}
                       />
                       <Label size={11} weight="bold" numberOfLines={1}>
-                        {
-                          group.miembros
-                            .find((m) => m.usuarioId === id)
-                            ?.usuario.nombre.split(" ")[0]
-                        }
+                        {nameOf(id)}
                       </Label>
                     </View>
                     {mode !== "igual" && (
                       <TextInput
-                        accessibilityLabel={`Parte de ${group.miembros.find((m) => m.usuarioId === id)?.usuario.nombre}`}
+                        accessibilityLabel={`Parte de ${nameOf(id)}`}
                         value={values[id] || ""}
                         onChangeText={(v) => {
                           cancelProposal();
@@ -692,9 +693,9 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                   </View>
                 ))}
               </View>
-              <Label size={11} color={valid ? "#078B70" : palette.coral}>
+              <Label size={12} color={total === 0 ? palette.muted : valid ? "#078B70" : palette.coral}>
                 {total === 0
-                  ? "Ingresa el monto para ver las partes."
+                  ? "Escribe el monto y verás la parte de cada uno."
                   : valid
                     ? "✓ La suma coincide hasta el último céntimo."
                     : mode === "porcentaje"
@@ -704,8 +705,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
             </View>
           </Card>
           {mode === "porcentaje" && parsedPct.some((value) => value === null) && <ErrorBox message="Completa cada porcentaje: entre 0 y 100, con máximo 2 decimales. Usa 0 explícitamente si no participa en el costo." />}
-          <Pressable onPress={() => setDetail((v) => !v)}>
-            <Label color={palette.muted} size={12}>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: detail }} onPress={() => setDetail((v) => !v)} style={{ minHeight: 44, justifyContent: "center" }}>
+            <Label color={palette.muted} size={13}>
               {detail ? "Ocultar detalles" : "＋ Categoría y nota (opcional)"}
             </Label>
           </Pressable>
@@ -785,6 +786,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                     ? groups.map((g) => (
                         <Pressable
                           key={g.id}
+                          accessibilityRole="button"
                           onPress={() => {
                             cancelProposal();
                             setGroupId(g.id);
@@ -795,18 +797,26 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                           <Label weight="bold">{g.nombre}</Label>
                         </Pressable>
                       ))
-                    : group.miembros.map((m) => (
+                    : orderedMembers.map((m) => (
                         <Pressable
                           key={m.usuarioId}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: payer === m.usuarioId }}
                           onPress={() => {
                             cancelProposal();
                             setPayer(m.usuarioId);
                             setPicker(null);
                           }}
-                          style={[design.row, { padding: 12 }]}
+                          style={[design.row, { padding: 12, minHeight: 56 }]}
                         >
-                          <Avatar name={m.usuario.nombre} />
-                          <Label weight="bold">{m.usuario.nombre}</Label>
+                          <Avatar name={m.usuario.nombre} photo={m.usuario.fotoUrl} seed={m.usuarioId} />
+                          <View style={{ flex: 1 }}>
+                            <Label weight="bold">{nameOf(m.usuarioId)}</Label>
+                            {nameOf(m.usuarioId) !== m.usuario.nombre && (
+                              <Label size={12} color={palette.muted}>{m.usuario.nombre}</Label>
+                            )}
+                          </View>
+                          {payer === m.usuarioId && <Ionicons name="checkmark-circle" size={22} color={palette.primary} />}
                         </Pressable>
                       ))}
                 </ScrollView>
