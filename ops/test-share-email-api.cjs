@@ -8,7 +8,7 @@ const { spawn } = require("node:child_process");
 const path = require("node:path");
 const { PrismaClient } = require("@prisma/client");
 const { quickBillShareMessage, groupShareMessage, expenseShareMessage, shareFingerprint } = require("../packages/shared/share.js");
-if (!/@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL || "")) throw new Error("Local JUNTO database required");
+require("./local-qa.cjs").localQa();
 const db = new PrismaClient();
 const suffix = Date.now();
 const inbox = [];
@@ -185,6 +185,21 @@ async function run() {
     assert.equal(timedOut.data.estado, "incierto");
     assert.match(timedOut.data.mensaje, /No sabemos si se envió/);
     assert.equal((await send(slow, rosa.accessToken)).data.estado, "incierto");
+    assert.equal((await send({ ...slow, solicitudId: `${slow.solicitudId}_new` }, rosa.accessToken)).data.code, "YA_ENVIADO", "an unknown provider outcome cannot be resent with a new key immediately");
+
+    smtpMode = "ok";
+    const parallelSender = await account("Pablo QA");
+    const parallelBillResponse = await api("/cuentas-rapidas", parallelSender.accessToken, "POST", { nombre: "QA concurrencia correo", cobrarA: "", instrucciones: "", division: "igual", totalCuenta: 10000, extras: 0, participantes: [{ id: "p1", nombre: "Pablo", consumo: 0, invitado: false }] });
+    assert.equal(parallelBillResponse.status, 201, JSON.stringify(parallelBillResponse.data));
+    const parallelBill = parallelBillResponse.data;
+    const parallelBase = { recurso: { tipo: "cuenta_rapida", id: parallelBill.id }, destinatario: "doble@example.invalid", huella: shareFingerprint(reviewed(parallelBill)) };
+    const beforeParallel = received.length;
+    const sameAddress = await Promise.all([0, 1].map((i) => send({ ...parallelBase, solicitudId: `mail_${suffix}_parallel_same_${i}` }, parallelSender.accessToken)));
+    assert.deepEqual(sameAddress.map((r) => r.status).sort(), [202, 409], "different keys cannot send the same summary to the same address twice");
+    const burst = await Promise.all(Array.from({ length: 8 }, (_, i) => send({ ...parallelBase, destinatario: `burst${i}@example.invalid`, solicitudId: `mail_${suffix}_burst_${i}` }, parallelSender.accessToken)));
+    assert.equal(burst.filter((r) => r.status === 202).length, 4, "concurrent sends cannot exceed five slots including the first mail");
+    assert.equal(burst.filter((r) => r.status === 429).length, 4);
+    assert.equal(received.length - beforeParallel, 5);
 
     // Logs never carry the e-mail body, amounts or the recipient.
     for (const secret of ["amiga@example.invalid", "S/ 36.00", "Yape <a"]) assert.ok(!withMail.log().includes(secret), secret);

@@ -2,10 +2,8 @@
 const assert = require("node:assert/strict");
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
-if (!process.env.DATABASE_URL?.includes("localhost:5433/junto_db"))
-  throw new Error("Local JUNTO database required");
+const origin = require("./local-qa.cjs").localQa();
 const db = new PrismaClient();
-const origin = "http://localhost:3005/api";
 const suffix = Date.now();
 const password = `JuntoQA${suffix}!`;
 async function call(path, token, method = "GET", body) {

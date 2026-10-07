@@ -85,7 +85,13 @@ async function gastoPorSolicitud(grupoId: string, input: CrearGastoInput, creado
     },
   });
   if (!previo) return null;
-  if (previo.grupoId !== grupoId || previo.montoTotal !== input.montoTotal || previo.descripcion !== input.descripcion || previo.pagadoPor !== input.pagadoPor)
+  const allocation = calcularParticipantes(input);
+  const sameParts = previo.participantes.length === allocation.length && allocation.every((part) =>
+    previo.participantes.some((saved) => saved.usuarioId === part.usuarioId && saved.montoAsignado === part.montoAsignado),
+  );
+  if (!previo.activo || previo.grupoId !== grupoId || previo.montoTotal !== input.montoTotal || previo.descripcion !== input.descripcion || previo.pagadoPor !== input.pagadoPor ||
+    previo.categoria !== input.categoria || (previo.notas ?? "") !== (input.notas ?? "") ||
+    (input.fecha !== undefined && previo.fecha.getTime() !== new Date(input.fecha).getTime()) || !sameParts)
     throw new Error("Este envío ya guardó un gasto distinto. Revisa los gastos del grupo antes de volver a guardar.", 409);
   return previo;
 }

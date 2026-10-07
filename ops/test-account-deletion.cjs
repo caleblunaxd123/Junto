@@ -2,9 +2,8 @@
 // Usage: JUNTO_QA_API=http://localhost:3005/api DATABASE_URL=postgresql://…localhost… node ops/test-account-deletion.cjs
 const assert = require("node:assert/strict");
 const { PrismaClient } = require("@prisma/client");
-if (!/@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL || "")) throw new Error("Local JUNTO database required");
+const origin = require("./local-qa.cjs").localQa();
 const db = new PrismaClient();
-const origin = process.env.JUNTO_QA_API || "http://localhost:3005/api";
 const suffix = Date.now();
 const password = `JuntoQA${suffix}!`;
 async function request(path, token, method = "GET", body, status = 200) {

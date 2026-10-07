@@ -14,6 +14,7 @@ import { prisma } from "../lib/prisma";
 import { UserError } from "../domain/errors";
 import { deliverWithReceipt, emailProvider } from "../lib/email";
 import { describeError } from "../lib/logSafe";
+import { transactionLock } from "../lib/transactionLock";
 import { quickBillReadSchema } from "../schemas/quickBill.schema";
 import { getGrupoDetalle } from "./grupos.service";
 import { getGastoDetalle } from "./gastos.service";
@@ -118,33 +119,33 @@ export async function sendShareEmail(
   // 3. Limits per person (shared across API instances because they live in the database).
   const hash = recipientHash(to);
   const now = Date.now();
-  const recent = await prisma.correoCompartido.findMany({
-    where: { usuarioId: userId, fechaCreacion: { gt: new Date(now - 24 * 60 * 60_000) } },
-    select: { destinatarioHash: true, recursoTipo: true, recursoId: true, estado: true, fechaCreacion: true },
-  });
-  if (recent.some((r) => r.destinatarioHash === hash && r.recursoId === input.recurso.id && r.estado === "aceptado" && now - r.fechaCreacion.getTime() < SHARE_EMAIL_LIMITS.sameRecipientMinutes * 60_000))
-    throw new UserError("Ya enviaste este resumen a ese correo hace unos minutos.", 409, "YA_ENVIADO");
-  if (recent.filter((r) => now - r.fechaCreacion.getTime() < 10 * 60_000).length >= SHARE_EMAIL_LIMITS.per10Minutes)
-    throw new UserError("Enviaste varios correos seguidos. Espera unos minutos o compártelo desde tu app de correo.", 429, "LIMITE_CORREOS");
-  if (recent.length >= SHARE_EMAIL_LIMITS.perDay)
-    throw new UserError("Llegaste al límite de correos de hoy. Puedes compartirlo desde tu app de correo.", 429, "LIMITE_CORREOS");
-  const recipients = new Set(recent.map((r) => r.destinatarioHash));
-  if (!recipients.has(hash) && recipients.size >= SHARE_EMAIL_LIMITS.recipientsPerDay)
-    throw new UserError("Hoy ya enviaste resúmenes a muchas direcciones distintas. Puedes compartirlo desde tu app de correo.", 429, "LIMITE_DESTINATARIOS");
+  const claim = await prisma.$transaction(async (tx) => {
+    // Different request ids can race too. Serialize the check-and-reserve per sender across instances.
+    await transactionLock(tx, `share-email:${userId}`);
+    const duplicate = await tx.correoCompartido.findUnique({ where: { usuarioId_solicitudId: { usuarioId: userId, solicitudId: input.solicitudId } } });
+    if (duplicate) return { row: duplicate, repeated: true };
+    const recent = await tx.correoCompartido.findMany({
+      where: { usuarioId: userId, fechaCreacion: { gt: new Date(now - 24 * 60 * 60_000) } },
+      select: { destinatarioHash: true, recursoTipo: true, recursoId: true, estado: true, fechaCreacion: true },
+    });
+    if (recent.some((r) => r.destinatarioHash === hash && r.recursoTipo === input.recurso.tipo && r.recursoId === input.recurso.id && ["aceptado", "enviando", "incierto"].includes(r.estado) && now - r.fechaCreacion.getTime() < SHARE_EMAIL_LIMITS.sameRecipientMinutes * 60_000))
+      throw new UserError("Ya hay un envío reciente de este resumen a ese correo. Revisa su resultado antes de repetirlo.", 409, "YA_ENVIADO");
+    if (recent.filter((r) => now - r.fechaCreacion.getTime() < 10 * 60_000).length >= SHARE_EMAIL_LIMITS.per10Minutes)
+      throw new UserError("Enviaste varios correos seguidos. Espera unos minutos o compártelo desde tu app de correo.", 429, "LIMITE_CORREOS");
+    if (recent.length >= SHARE_EMAIL_LIMITS.perDay)
+      throw new UserError("Llegaste al límite de correos de hoy. Puedes compartirlo desde tu app de correo.", 429, "LIMITE_CORREOS");
+    const recipients = new Set(recent.map((r) => r.destinatarioHash));
+    if (!recipients.has(hash) && recipients.size >= SHARE_EMAIL_LIMITS.recipientsPerDay)
+      throw new UserError("Hoy ya enviaste resúmenes a muchas direcciones distintas. Puedes compartirlo desde tu app de correo.", 429, "LIMITE_DESTINATARIOS");
 
-  // 4. Claim the request id before sending: a concurrent duplicate hits the unique key.
-  let row;
-  try {
-    row = await prisma.correoCompartido.create({
+    // 4. Reserve the rate-limit slot before sending; no provider I/O while the lock is held.
+    const row = await tx.correoCompartido.create({
       data: { usuarioId: userId, solicitudId: input.solicitudId, recursoTipo: input.recurso.tipo, recursoId: input.recurso.id, destinatarioHash: hash, destinatarioMascara: maskEmail(to), estado: "enviando" },
     });
-  } catch (error) {
-    if ((error as { code?: string }).code === "P2002") {
-      const winner = await prisma.correoCompartido.findUnique({ where: { usuarioId_solicitudId: { usuarioId: userId, solicitudId: input.solicitudId } } });
-      if (winner) return present(await settled(winner.id));
-    }
-    throw error;
-  }
+    return { row, repeated: false };
+  });
+  if (claim.repeated) return present(await settled(claim.row.id));
+  const row = claim.row;
 
   const sender = await prisma.usuario.findUniqueOrThrow({ where: { id: userId }, select: { nombre: true, email: true } });
   const sentBy = sender.nombre.replace(/[\r\n\u0000-\u001f]/g, " ").trim().slice(0, 60);

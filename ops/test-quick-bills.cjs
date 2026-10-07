@@ -3,9 +3,8 @@ const assert = require("node:assert/strict");
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 const fs = require("node:fs");
-if (!process.env.DATABASE_URL?.includes("localhost:5433/junto_db")) throw new Error("Local JUNTO database required");
+const origin = require("./local-qa.cjs").localQa();
 const db = new PrismaClient();
-const origin = "http://localhost:3005/api";
 async function request(path, token, method = "GET", body, status = 200) {
   const response = await fetch(origin + path, { method, headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
   const data = await response.json();

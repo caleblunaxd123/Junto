@@ -6,9 +6,8 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { PrismaClient } = require("@prisma/client");
-if (!/@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL || "")) throw new Error("Local JUNTO database required");
+const origin = require("./local-qa.cjs").localQa();
 const db = new PrismaClient();
-const origin = process.env.JUNTO_QA_API || "http://localhost:3005/api";
 const suffix = Date.now();
 const voucher = fs.readFileSync(path.join(__dirname, "qa-voucher.png")).toString("base64");
 
@@ -150,6 +149,10 @@ async function run() {
   // A retry right after (double tap, lost answer) returns the same comment.
   const repeated = await ok("/comentarios", luis.accessToken, "POST", { ...target, texto: "¿Incluye la gaseosa?" }, 200);
   assert.equal(repeated.id, comment.id);
+  const simultaneous = await Promise.all(Array.from({ length: 5 }, () => call("/comentarios", luis.accessToken, "POST", { ...target, texto: "Comentario simultáneo QA" })));
+  assert.equal(simultaneous.filter((r) => r.status === 201).length, 1);
+  assert.equal(new Set(simultaneous.map((r) => r.data.id)).size, 1, "simultaneous comments share one stored record");
+  assert.equal(await db.comentario.count({ where: { gastoId: expense.id, texto: "Comentario simultáneo QA" } }), 1);
   const reply = await ok("/comentarios", marta.accessToken, "POST", { ...target, texto: "Sí, todo incluido <b>ok</b>" }, 201);
   let thread = await ok(`/comentarios?gastoId=${expense.id}`, pedro.accessToken);
   assert.ok(thread.some((c) => c.texto === "¿Incluye la gaseosa?"));
@@ -183,6 +186,20 @@ async function run() {
   await ok("/pagos/comprobantes", pedro.accessToken, "POST", { grupoId: group.id, imagen: voucher }, 201);
   assert.equal(await db.comprobante.count({ where: { id: stale.comprobanteId } }), 0);
   assert.equal(await db.comprobanteImagen.count({ where: { comprobanteId: stale.comprobanteId } }), 0);
+
+  // A group lock is insufficient: the same operation can be submitted in two groups at once.
+  for (const same of ["operation", "image"]) {
+    const duplicateDrafts = [];
+    for (let i = 0; i < 2; i++) {
+      const separate = await ok("/grupos", ana.accessToken, "POST", { nombre: `QA carrera ${same} ${suffix} ${i}`, tipo: "amigos" }, 201);
+      await ok(`/grupos/${separate.id}/invitar`, ana.accessToken, "POST", { identificador: pedro.email });
+      await ok(`/grupos/${separate.id}/gastos`, pedro.accessToken, "POST", { descripcion: "QA carrera", montoTotal: 5000, pagadoPor: pedro.usuario.id, participantes: [ana, pedro].map((p) => ({ usuarioId: p.usuario.id })) }, 201);
+      const draft = await db.comprobante.create({ data: { grupoId: separate.id, subidoPor: ana.usuario.id, hash: same === "image" ? `qa-image-${suffix}` : `qa-operation-${suffix}-${i}`, app: "yape", operacion: same === "operation" ? `QA${suffix}` : null } });
+      duplicateDrafts.push({ grupoId: separate.id, receptorId: pedro.usuario.id, monto: 2500, metodo: "yape", comprobanteId: draft.id });
+    }
+    const crossGroupRace = await Promise.all(duplicateDrafts.map((body) => call("/pagos/reportar", ana.accessToken, "POST", body)));
+    assert.deepEqual(crossGroupRace.map((r) => r.status).sort(), [201, 409], `${same} must be reserved across groups`);
+  }
 
   // Deleting Luis's account erases his voucher images, read names and comment texts.
   await ok("/auth/me", luis.accessToken, "DELETE", { password: luis.password }, 204);

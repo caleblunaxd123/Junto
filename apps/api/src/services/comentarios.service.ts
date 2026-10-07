@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma";
 import { UserError } from "../domain/errors";
 import { sendPushNotification } from "../lib/firebase";
+import { transactionLock } from "../lib/transactionLock";
 
 export const COMMENT_LIMITS = { per10Minutes: 30, maxLength: 500 };
 export type CommentTarget = { gastoId: string; pagoId?: undefined } | { pagoId: string; gastoId?: undefined };
@@ -58,12 +59,17 @@ export async function createComment(userId: string, input: CommentTarget & { tex
   const target = await resolveTarget(userId, input);
   const where = input.gastoId ? { gastoId: input.gastoId } : { pagoId: input.pagoId };
   // A double tap or a retry right after sending returns the same comment, never a copy.
-  const repeated = await prisma.comentario.findFirst({ where: { ...where, autorId: userId, texto, eliminado: false, fechaCreacion: { gte: new Date(Date.now() - 15_000) } }, select: { id: true } });
-  if (repeated) return { id: repeated.id, repetido: true };
-  const recent = await prisma.comentario.count({ where: { autorId: userId, fechaCreacion: { gte: new Date(Date.now() - 10 * 60_000) } } });
-  if (recent >= COMMENT_LIMITS.per10Minutes) throw new UserError("Escribiste muchos comentarios seguidos. Espera unos minutos.", 429);
-
-  const created = await prisma.comentario.create({ data: { ...where, grupoId: target.grupoId, autorId: userId, texto }, select: { id: true, autor: { select: { nombre: true } } } });
+  const result = await prisma.$transaction(async (tx) => {
+    await transactionLock(tx, `comments:${userId}`);
+    const repeated = await tx.comentario.findFirst({ where: { ...where, autorId: userId, texto, eliminado: false, fechaCreacion: { gte: new Date(Date.now() - 15_000) } }, select: { id: true } });
+    if (repeated) return { id: repeated.id, repetido: true as const };
+    const recent = await tx.comentario.count({ where: { autorId: userId, fechaCreacion: { gte: new Date(Date.now() - 10 * 60_000) } } });
+    if (recent >= COMMENT_LIMITS.per10Minutes) throw new UserError("Escribiste muchos comentarios seguidos. Espera unos minutos.", 429);
+    const created = await tx.comentario.create({ data: { ...where, grupoId: target.grupoId, autorId: userId, texto }, select: { id: true, autor: { select: { nombre: true } } } });
+    return { ...created, repetido: false as const };
+  });
+  if (result.repetido) return result;
+  const created = result;
 
   // The people involved and whoever already commented hear about it (never the author).
   const previous = await prisma.comentario.findMany({ where: { ...where, eliminado: false }, select: { autorId: true }, distinct: ["autorId"] });

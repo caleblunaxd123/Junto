@@ -3,10 +3,9 @@
 // to the same service the endpoint uses, and check the HTTP endpoint rejects forged tokens.
 // Usage: JUNTO_QA_API=http://localhost:3005/api DATABASE_URL=… JWT_SECRET=<same as the API> node ops/test-google-sign-in.cjs
 const assert = require("node:assert/strict");
-if (!/@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL || "")) throw new Error("Local JUNTO database required");
+const origin = require("./local-qa.cjs").localQa();
 const { signInWithGoogleClaims } = require("../apps/api/dist/services/auth.service");
 const { prisma } = require("../apps/api/dist/lib/prisma");
-const origin = process.env.JUNTO_QA_API || "http://localhost:3005/api";
 const suffix = Date.now();
 async function request(path, token, method = "GET", body, status = 200) {
   const response = await fetch(origin + path, {

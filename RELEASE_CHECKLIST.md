@@ -44,7 +44,7 @@
 
 ## Pruebas pendientes en dispositivos y servicios reales
 
-Nada de esto se ejecutó en este entorno (sin emulador, sin cuentas reales). Cada punto indica qué confirmar:
+Estos recorridos no quedan acreditados por las pruebas cloud ni por el arranque local en emulador. Ver `ops/QA-2026-10-07-sync.md` para la validación posterior. Cada punto indica qué confirmar en dispositivos y servicios reales:
 
 1. **Correo desde la API con proveedor real** (Resend o SES con dominio verificado): enviar un resumen de cuenta de un día, uno de grupo y uno de gasto a Gmail y a Outlook. Confirmar bandeja/spam, que tablas y colores se ven bien en web y en las apps móviles de Gmail/Outlook, que «Responder» va a quien compartió y que el texto alternativo se lee completo. Revisar el panel del proveedor: el estado «aceptado» de JUNTO debe coincidir con «sent/delivered» del proveedor.
 2. **Correo abierto en la app del teléfono (Android)**: la imagen adjunta del resumen sigue disponible si se guarda el borrador, se cierra JUNTO y se vuelve a abrir Gmail más tarde. Probar con un reparto de 30 personas (captura larga) en un teléfono de gama baja.
@@ -59,6 +59,7 @@ Nada de esto se ejecutó en este entorno (sin emulador, sin cuentas reales). Cad
 11. **«Compartir → JUNTO»** en una build EAS: desde WhatsApp (imagen recibida), desde la app de Yape (botón compartir del comprobante) y desde la galería; con la app cerrada y abierta; sin sesión iniciada (debe pedir login y luego seguir). Una captura de más de 3 MB debe pedir elegirla desde la galería.
 12. **Cámara y galería**: «Tomar foto» de un comprobante impreso, permiso denegado, y captura larga de un teléfono de gama baja (compresión a JPEG).
 13. **Aprobación en dos o tres teléfonos**: administrador que no es parte del pago aprueba; quien recibe marca «No me llegó»; dos personas aprueban a la vez (solo una decisión queda).
+14. **Dependencias y seguridad**: revisar los avisos de `npm audit`, distinguir herramientas de desarrollo de código distribuido y corregir o documentar el alcance de cada aviso antes de publicar. No actualizar Expo/React Native ni forzar cambios incompatibles sin volver a compilar y probar los flujos nativos.
 
 ## Probar en dispositivos antes de la prueba cerrada
 

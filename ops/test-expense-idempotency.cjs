@@ -2,9 +2,8 @@
 // Usage: JUNTO_QA_API=http://localhost:3005/api DATABASE_URL=<local test db> node ops/test-expense-idempotency.cjs
 const assert = require("node:assert/strict");
 const { PrismaClient } = require("@prisma/client");
-if (!/@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL || "")) throw new Error("Local JUNTO database required");
+const origin = require("./local-qa.cjs").localQa();
 const db = new PrismaClient();
-const origin = process.env.JUNTO_QA_API || "http://localhost:3005/api";
 const suffix = Date.now();
 async function call(path, token, method = "GET", body) {
   const response = await fetch(origin + path, { method, headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
@@ -34,6 +33,13 @@ async function run() {
   // The same key with different content is a conflict, not a silent overwrite.
   const changed = await call(`/grupos/${group.id}/gastos`, ana.accessToken, "POST", { ...body, montoTotal: 9000 });
   assert.equal(changed.status, 409);
+  for (const patch of [
+    { tipoDivision: "exacto", participantes: [{ usuarioId: ana.usuario.id, monto: 1000 }, { usuarioId: luis.usuario.id, monto: 5000 }] },
+    { participantes: [{ usuarioId: ana.usuario.id }] },
+    { categoria: "transporte" },
+    { notas: "Otra nota" },
+    { fecha: "2025-01-01T00:00:00.000Z" },
+  ]) assert.equal((await call(`/grupos/${group.id}/gastos`, ana.accessToken, "POST", { ...body, ...patch })).status, 409, "changed allocation or metadata is never silently treated as a retry");
   // Another person's key never collides with yours.
   const other = await call(`/grupos/${group.id}/gastos`, luis.accessToken, "POST", { ...body, pagadoPor: luis.usuario.id });
   assert.equal(other.status, 201);

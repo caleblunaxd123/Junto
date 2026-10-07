@@ -3,6 +3,7 @@ import { UserError as Error } from "../domain/errors";
 import { calcularSaldosGrupo } from "./balance.service";
 import { sendPushNotification } from "../lib/firebase";
 import { voucherInUse } from "./vouchers.service";
+import { transactionLock } from "../lib/transactionLock";
 import type { ReportarPagoInput } from "../schemas/pagos.schema";
 
 const person = { select: { id: true, nombre: true, fotoUrl: true } } as const;
@@ -96,6 +97,10 @@ export async function reportarPago(
         select: { id: true, hash: true, app: true, operacion: true },
       });
       if (!voucher) throw new Error("El comprobante ya no está disponible. Súbelo otra vez.", 409);
+      // A group row lock alone cannot protect the same evidence submitted in two different groups.
+      const keys = [`voucher-image:${voucher.hash}`];
+      if (voucher.operacion && voucher.operacion.length >= 6) keys.push(`voucher-operation:${JSON.stringify([voucher.app, voucher.operacion])}`);
+      for (const key of keys.sort()) await transactionLock(tx, key);
       const used = await voucherInUse(tx, voucher);
       if (used) throw new Error(used, 409);
     }
