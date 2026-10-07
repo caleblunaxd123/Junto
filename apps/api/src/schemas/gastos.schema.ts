@@ -26,9 +26,14 @@ export const crearGastoSchema = z.object({
   fecha: z.string().datetime().optional(),
 });
 
+/** Same fields plus an optional idempotency key, only when creating. */
+export const nuevoGastoSchema = crearGastoSchema.extend({
+  solicitudId: z.string().regex(/^[A-Za-z0-9_-]{8,80}$/, "Identificador de envío inválido.").optional(),
+});
+
 export const editarGastoSchema = crearGastoSchema.partial().strict().refine((input) => Object.keys(input).length > 0, "Indica qué dato del gasto quieres corregir.");
 
 export const paginaGastosSchema = z.coerce.number().int().min(1).max(100_000).default(1);
 
-export type CrearGastoInput = z.infer<typeof crearGastoSchema>;
+export type CrearGastoInput = z.infer<typeof nuevoGastoSchema>;
 export type EditarGastoInput = z.infer<typeof editarGastoSchema>;

@@ -1,3 +1,4 @@
+import { describeError } from "../lib/logSafe";
 import { prisma } from "../lib/prisma";
 import { UserError as Error } from "../domain/errors";
 import { sendPushNotification } from "../lib/firebase";
@@ -27,8 +28,15 @@ export async function crearGasto(
 
   const participanteData = calcularParticipantes(input);
 
-  const gasto = await prisma.gasto.create({
+  // Same key again (double tap, retry after a timeout): return what was already saved, never a copy.
+  const previo = await gastoPorSolicitud(grupoId, input, creadoPor);
+  if (previo) return { gasto: previo, repetido: true };
+
+  let gasto;
+  try {
+  gasto = await prisma.gasto.create({
     data: {
+      solicitudId: input.solicitudId,
       grupoId,
       descripcion: input.descripcion,
       montoTotal: input.montoTotal,
@@ -51,13 +59,35 @@ export async function crearGasto(
       creador: { select: { id: true, nombre: true } },
     },
   });
+  } catch (error) {
+    // Two identical requests raced: the unique key let only one in.
+    const ganador = (error as { code?: string }).code === "P2002" ? await gastoPorSolicitud(grupoId, input, creadoPor) : null;
+    if (ganador) return { gasto: ganador, repetido: true };
+    throw error;
+  }
 
   // Send notifications to participants (non-blocking)
   notificarParticipantes(gasto, creadoPor).catch((err) =>
-    console.error("[Notification] Failed to notify participants:", err),
+    console.error("[Notification] Failed to notify participants:", describeError(err)),
   );
 
-  return gasto;
+  return { gasto, repetido: false };
+}
+
+async function gastoPorSolicitud(grupoId: string, input: CrearGastoInput, creadoPor: string) {
+  if (!input.solicitudId) return null;
+  const previo = await prisma.gasto.findUnique({
+    where: { creadoPor_solicitudId: { creadoPor, solicitudId: input.solicitudId } },
+    include: {
+      participantes: { include: { usuario: { select: { id: true, nombre: true, fotoUrl: true } } } },
+      pagador: { select: { id: true, nombre: true, fotoUrl: true } },
+      creador: { select: { id: true, nombre: true } },
+    },
+  });
+  if (!previo) return null;
+  if (previo.grupoId !== grupoId || previo.montoTotal !== input.montoTotal || previo.descripcion !== input.descripcion || previo.pagadoPor !== input.pagadoPor)
+    throw new Error("Este envío ya guardó un gasto distinto. Revisa los gastos del grupo antes de volver a guardar.", 409);
+  return previo;
 }
 
 function calcularParticipantes(input: CrearGastoInput) {

@@ -1,3 +1,4 @@
+import { describeError } from "./logSafe";
 import { initializeApp, cert } from 'firebase-admin';
 
 let firebaseInitialized = false;
@@ -58,9 +59,9 @@ export async function sendPushNotification(
     });
 
     if (!response.ok) {
-      console.error('[Firebase] Push notification failed:', await response.text());
+      console.error('[Firebase] Push notification failed: status', response.status);
     }
   } catch (error) {
-    console.error('[Firebase] Error sending push notification:', error);
+    console.error('[Firebase] Error sending push notification:', describeError(error));
   }
 }

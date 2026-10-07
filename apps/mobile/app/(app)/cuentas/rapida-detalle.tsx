@@ -13,6 +13,7 @@ import { Brand, FormField } from "../../../src/components/ui/Reference";
 import { ShareChannels, ShareMessageSheet, ShareSummary } from "../../../src/components/ui/ShareMessage";
 import type { ShareMessage } from "../../../src/lib/shareMessage";
 import { quickBillSharePreview } from "../../../src/lib/tryBill";
+import { nextContribution, type ContributionMode } from "../../../src/lib/contribution";
 const money = (cents: number) => `S/ ${centavosASoles(cents)}`;
 export default function QuickBillDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -21,6 +22,7 @@ export default function QuickBillDetail() {
   const [error, setError] = React.useState("");
   const [selected, setSelected] = React.useState<string>();
   const [amount, setAmount] = React.useState("");
+  const [mode, setMode] = React.useState<ContributionMode>("ahora");
   const [preview, setPreview] = React.useState(false);
   const [history, setHistory] = React.useState(false);
   const [page, setPage] = React.useState(0);
@@ -36,6 +38,7 @@ export default function QuickBillDetail() {
   const pages = Math.ceil((bill?.resultado.partes.length || 1) / 10);
   const paid = part ? bill?.aportes[part.id] || 0 : 0;
   const entered = parseMoney(amount);
+  const next = part ? nextContribution(mode, paid, part.total, entered) : { total: null, error: "" };
   const disabled = mutation.isPending || query.isError || !!bill?.archivada;
   async function record(participanteId: string, monto: number) {
     if (!bill || disabled) return;
@@ -43,11 +46,12 @@ export default function QuickBillDetail() {
     catch (err) { setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "No se confirmó el cambio. Actualiza antes de reintentar."); setSelected(undefined); await refetch(); }
   }
   function confirmAmount() {
-    if (!part || entered === null || entered < 0 || entered > part.total) return;
-    Alert.alert("¿Confirmamos el aporte?", "Comprueba que recibiste el dinero antes de guardarlo.", [{ text: "Volver", style: "cancel" }, { text: "Sí, confirmar", onPress: () => record(part.id, entered) }], {
-      tone: "success", eyebrow: "APORTE RECIBIDO",
-      summary: { label: part.nombre, value: money(entered), caption: "Total acumulado que quedará confirmado" },
-      details: [{ label: "Confirmado antes", value: money(paid) }, { label: "Pendiente después", value: money(part.total - entered) }],
+    if (!part || next.total === null) return;
+    const total = next.total;
+    Alert.alert(mode === "ahora" ? "¿Recibiste este pago?" : "¿Corregimos lo confirmado?", "Comprueba que el dinero llegó antes de guardarlo.", [{ text: "Volver", style: "cancel" }, { text: "Sí, guardar", onPress: () => record(part.id, total) }], {
+      tone: "success", eyebrow: mode === "ahora" ? "APORTE RECIBIDO" : "CORRECCIÓN",
+      summary: { label: part.nombre, value: money(total), caption: "Total confirmado de esta persona" },
+      details: [{ label: "Confirmado antes", value: money(paid) }, ...(mode === "ahora" ? [{ label: "Recibido ahora", value: money(total - paid) }] : []), { label: "Pendiente después", value: money(part.total - total) }],
       footnote: "Solo actualiza el registro. JUNTO no cobra ni transfiere dinero.",
     });
   }
@@ -81,7 +85,7 @@ export default function QuickBillDetail() {
         return <Card key={p.id} style={{ padding: 14, backgroundColor: p.invitado ? palette.lilac : confirmed === p.total ? palette.mint : "white" }}>
           <View style={[design.row, { justifyContent: "space-between" }]}><Label weight="bold" style={{ flex: 1 }}>{p.nombre}</Label><Label weight="extra" size={21}>{money(p.total)}</Label></View>
           <Label size={12} color={palette.muted}>{p.invitado ? "Invitado: no paga." : bill.datos.division === "igual" ? (p.extras ? `Parte ${money(p.consumo)} + extras ${money(p.extras)}` : "Parte igual") : `Consumo ${money(p.consumo)} + invitados ${money(p.invitados)} + extras ${money(p.extras)}`}</Label>
-          {!p.invitado && p.total > 0 && <><Label size={12}>Confirmado {money(confirmed)} · falta {money(p.total - confirmed)}</Label><Button title={confirmed ? "Ver / corregir aporte" : "Registrar aporte recibido"} secondary disabled={disabled} onPress={() => { setAmount(centavosASoles(confirmed || p.total)); setSelected(p.id); }} /></>}
+          {!p.invitado && p.total > 0 && <><Label size={12}>Confirmado {money(confirmed)} · falta {money(p.total - confirmed)}</Label><Button title={confirmed === p.total ? "Ver o corregir aporte" : confirmed ? "Registrar otro pago" : "Registrar aporte recibido"} secondary disabled={disabled} onPress={() => { const complete = confirmed === p.total; setMode(complete ? "corregir" : "ahora"); setAmount(centavosASoles(complete ? confirmed : p.total - confirmed)); setSelected(p.id); }} /></>}
         </Card>;
       })}
       <Card><Label weight="bold">¿A quién se aporta?</Label><Label>{bill.datos.cobrarA || "La organización aún no indicó quién recibe."}</Label>{!!bill.datos.instrucciones && <Label size={13}>{bill.datos.instrucciones}</Label>}<Label size={12} color={palette.muted}>JUNTO no verifica Yape ni Plin. Si adelantaste la boleta, puedes confirmar tu propia parte cubierta y registrar los aportes de los demás al recibirlos.</Label></Card>
@@ -92,11 +96,27 @@ export default function QuickBillDetail() {
       {(bill.archivada || !bill.pendiente) && <Button title={bill.archivada ? "Reactivar cuenta" : "Archivar cuenta completada"} secondary disabled={mutation.isPending || query.isError} onPress={archive} />}
       <Button title="Ver mis cuentas" secondary onPress={() => router.replace("/(app)/cuentas/rapidas")} />
       <Modal visible={!!part} animationType="slide" onRequestClose={() => !mutation.isPending && setSelected(undefined)}><SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 16 }}>
-        <Label size={25} weight="extra">Aporte de {part?.nombre}</Label><Label>Su parte es {money(part?.total || 0)}. Ya confirmaste {money(paid)}.</Label><FormField label="Total recibido de esta persona (S/)" value={amount} onChangeText={setAmount} editable={!mutation.isPending} keyboardType="decimal-pad" />
-        <Label size={13}>Es el acumulado: si recibiste S/10 antes y S/15 ahora, escribe S/25. No se suma otra vez. Usa 0 para corregir una confirmación equivocada.</Label>
-        {part && (entered === null || entered > part.total) && <ErrorBox message="Usa un monto válido entre cero y su parte." />}
-        <Button title="Revisar y confirmar monto" disabled={disabled || entered === null || entered > (part?.total || 0)} onPress={confirmAmount} />
-        {part && <Button title="Completar toda su parte" secondary disabled={disabled} onPress={() => setAmount(centavosASoles(part.total))} />}
+        <Label accessibilityRole="header" size={25} weight="extra">Aporte de {part?.nombre}</Label>
+        <View style={design.row}>
+          <Card style={{ flex: 1, padding: 12, gap: 2 }}><Label size={11} color={palette.muted}>Su parte</Label><Label weight="extra" size={17}>{money(part?.total || 0)}</Label></Card>
+          <Card style={{ flex: 1, padding: 12, gap: 2 }}><Label size={11} color={palette.muted}>Ya confirmado</Label><Label weight="extra" size={17}>{money(paid)}</Label></Card>
+          <Card style={{ flex: 1, padding: 12, gap: 2, backgroundColor: palette.lilac }}><Label size={11} color={palette.muted}>Falta</Label><Label weight="extra" size={17}>{money((part?.total || 0) - paid)}</Label></Card>
+        </View>
+        <View accessibilityRole="radiogroup" style={{ flexDirection: "row", gap: 8 }}>
+          {([["ahora", "Recibí un pago"], ["corregir", "Corregir el total"]] as const).map(([value, title]) => (
+            <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: mode === value, disabled: value === "ahora" && paid === part?.total }} disabled={mutation.isPending || (value === "ahora" && paid === part?.total)}
+              onPress={() => { setMode(value); setAmount(part ? centavosASoles(value === "ahora" ? part.total - paid : paid) : ""); }}
+              style={{ flex: 1, minHeight: 48, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: mode === value ? palette.mint : "#F5F5FB", borderWidth: 1, borderColor: mode === value ? palette.primary : "transparent", opacity: value === "ahora" && paid === part?.total ? 0.5 : 1 }}>
+              <Label weight="bold" size={13} color={mode === value ? "#007B60" : palette.muted}>{title}</Label>
+            </Pressable>
+          ))}
+        </View>
+        <FormField label={mode === "ahora" ? "¿Cuánto recibiste ahora? (S/)" : "Total confirmado de esta persona (S/)"} value={amount} onChangeText={setAmount} editable={!mutation.isPending} keyboardType="decimal-pad" error={amount.trim() ? next.error || undefined : undefined} />
+        {next.total !== null && <Card style={{ backgroundColor: palette.mint, padding: 14, gap: 2 }}>
+          <Label size={13}>Quedará confirmado <Label size={13} weight="extra">{money(next.total)}</Label> de {money(part?.total || 0)}.</Label>
+          <Label size={12} color={palette.muted}>{next.total === part?.total ? "Su parte queda completa." : `Faltará ${money((part?.total || 0) - next.total)}.`}{mode === "ahora" ? " Se suma a lo ya confirmado una sola vez." : " Reemplaza lo confirmado; no se suma."}</Label>
+        </Card>}
+        <Button title="Revisar y guardar" disabled={disabled || next.total === null || next.total === paid} onPress={confirmAmount} />
         {part && paid < part.total && <Button title="Preparar recordatorio de su pendiente" secondary disabled={query.isError} onPress={() => { setReminder({ subject: `JUNTO · ${bill.datos.nombre}`, preview: {
           title: bill.datos.nombre, total: part.total - paid, totalLabel: "Falta confirmar", caption: bill.datos.cobrarA ? `Recibe: ${bill.datos.cobrarA}` : "Recordatorio de aporte", rowsHeading: "Aporte pendiente",
           rows: [{ id: part.id, name: part.nombre, amount: part.total - paid, detail: `Su parte: ${money(part.total)} · Confirmado: ${money(paid)}` }],

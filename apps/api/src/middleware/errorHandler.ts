@@ -1,3 +1,4 @@
+import { describeError } from "../lib/logSafe";
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
@@ -32,7 +33,7 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     if (err.code === 'P2010' && /22P02/.test(err.message)) { res.status(404).json({ error: 'No encontramos lo que buscas.' }); return; }
   }
 
-  console.error('[Error]', err.message, err.stack);
+  console.error('[Error]', describeError(err), err.stack?.split('\n').slice(1, 6).join(' | '));
   reportError(err);
   res.status(500).json({ error: 'Error interno del servidor' });
 }

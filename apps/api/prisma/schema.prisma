@@ -115,6 +115,8 @@ model Gasto {
   fotoUrl      String?   @map("foto_url") @db.VarChar(500)
   notas        String?   @db.Text
   activo       Boolean   @default(true)
+  // Client-generated key: a double tap or a retry after a timeout returns the same expense.
+  solicitudId  String?   @map("solicitud_id") @db.VarChar(80)
 
   // Relations
   grupo        Grupo               @relation(fields: [grupoId], references: [id])
@@ -123,6 +125,7 @@ model Gasto {
   participantes GastoParticipante[]
 
   @@index([grupoId])
+  @@unique([creadoPor, solicitudId])
   @@map("gastos")
 }
 

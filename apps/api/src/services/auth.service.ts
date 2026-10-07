@@ -1,3 +1,4 @@
+import { describeError } from "../lib/logSafe";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
@@ -193,7 +194,7 @@ export async function verifyEmail(email: string, otp: string) {
     },
   });
   sendWelcomeEmail(verified.email, verified.nombre).catch((err) =>
-    console.error("[Email] Failed to send welcome:", err),
+    console.error("[Email] Welcome delivery failed:", describeError(err)),
   );
   return { usuario: verified, ...(await issueSession(usuario)) };
 }
@@ -316,7 +317,7 @@ export async function forgotPassword(email: string) {
   });
 
   sendOTPEmail(email, usuario.nombre, otp).catch((err) =>
-    console.error("[Email] Failed to send OTP:", err),
+    console.error("[Email] OTP delivery failed:", describeError(err)),
   );
 }
 

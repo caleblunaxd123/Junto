@@ -1,3 +1,4 @@
+import { describeError } from "../lib/logSafe";
 import cron from 'node-cron';
 import { ejecutarRecordatoriosAutomaticos } from '../services/recordatorios.service';
 
@@ -10,7 +11,7 @@ export function initRemindersJob(): void {
     try {
       await ejecutarRecordatoriosAutomaticos();
     } catch (err) {
-      console.error('[Cron] Error in reminders job:', err);
+      console.error('[Cron] Error in reminders job:', describeError(err));
     }
   });
 

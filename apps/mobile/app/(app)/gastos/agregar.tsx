@@ -36,6 +36,8 @@ import { parseMoney, parsePercentage, allocatePreview } from "../../../src/lib/e
 import { groupCover } from "../../../src/components/ui/Artwork";
 import { memberLabels, meFirst } from "../../../src/lib/people";
 import { guessCategory } from "../../../src/lib/category";
+const newRequestId = () => `gasto_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
 function Field({
   label,
   children,
@@ -120,6 +122,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   const [notes, setNotes] = useState("");
   const [detail, setDetail] = useState(false);
   const [picker, setPicker] = useState<"grupo" | "pagador" | null>(null);
+  const saving = useRef(false);
+  const requestId = useRef(newRequestId());
   const [writeIt, setWriteIt] = useState(!!params.texto);
   useEffect(() => {
     if (params.texto) setWriteIt(true);
@@ -242,11 +246,14 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     }
   }
   async function save() {
-    if (!valid || !description.trim() || description.trim().length > 200 || !payer || !group?.miembros.some((m) => m.usuarioId === payer) || ids.some((id) => !group?.miembros.some((m) => m.usuarioId === id)) || create.isPending) return;
+    if (!valid || !description.trim() || description.trim().length > 200 || !payer || !group?.miembros.some((m) => m.usuarioId === payer) || ids.some((id) => !group?.miembros.some((m) => m.usuarioId === id)) || create.isPending || saving.current) return;
+    // State updates are async: a ref stops a second tap before isPending flips.
+    saving.current = true;
     try {
       cancelProposal();
       setError("");
       await create.mutateAsync({
+        ...(params.gastoId ? {} : { solicitudId: requestId.current }),
         descripcion: description.trim(),
         montoTotal: total,
         pagadoPor: payer,
@@ -275,16 +282,24 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       setDate(new Date());
       setIds(group?.miembros.map((member) => member.usuarioId) || []);
       setPayer(user?.id || "");
+      requestId.current = newRequestId();
       router.replace(
         params.gastoId
           ? `/(app)/gastos/${params.gastoId}`
           : `/(app)/grupos/${groupId}`,
       );
     } catch (err) {
-      const e = err as { response?: { data?: { error?: string } } };
+      const e = err as { response?: { status?: number; data?: { error?: string } } };
+      const status = e.response?.status;
+      // A rejected request (4xx) saved nothing: the next attempt is a new one. With no answer
+      // (timeout, no signal) we keep the key, so retrying cannot create a second copy.
+      if (status && status >= 400 && status < 500 && status !== 409) requestId.current = newRequestId();
       setError(
-        e.response?.data?.error || "No se pudo guardar. Tus datos siguen aquí.",
+        e.response?.data?.error ||
+          (status ? "No se pudo guardar. Tus datos siguen aquí." : "No sabemos si se guardó: revisa tu conexión y vuelve a tocar Guardar. No se creará un gasto repetido."),
       );
+    } finally {
+      saving.current = false;
     }
   }
   const selectedPayer = group?.miembros.find((m) => m.usuarioId === payer);

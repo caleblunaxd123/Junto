@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import * as gastosService from "../services/gastos.service";
-import { crearGastoSchema, editarGastoSchema, paginaGastosSchema } from "../schemas/gastos.schema";
+import { nuevoGastoSchema, editarGastoSchema, paginaGastosSchema } from "../schemas/gastos.schema";
 import { z } from "zod";
 
 export async function crearGasto(
@@ -9,13 +9,13 @@ export async function crearGasto(
   next: NextFunction,
 ) {
   try {
-    const input = crearGastoSchema.parse(req.body);
-    const gasto = await gastosService.crearGasto(
+    const input = nuevoGastoSchema.parse(req.body);
+    const { gasto, repetido } = await gastosService.crearGasto(
       req.params.grupoId,
       input,
       req.user!.userId,
     );
-    res.status(201).json(gasto);
+    res.status(repetido ? 200 : 201).json(gasto);
   } catch (err) {
     next(err);
   }

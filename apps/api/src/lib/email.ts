@@ -41,7 +41,13 @@ export async function deliver(message: Message): Promise<boolean> {
     return true;
   }
   if (process.env.NODE_ENV !== "production") {
-    console.info(`[Email:dev] Para ${message.to} · ${message.subject}\n${message.text}`);
+    // Local development without a provider: nothing is sent. Codes and amounts are printed only on
+    // explicit opt-in (EMAIL_DEV_LOG=true), never by default, so a misconfigured server cannot leak them.
+    console.info(
+      process.env.EMAIL_DEV_LOG === "true"
+        ? `[Email:dev] Para ${message.to} · ${message.subject}\n${message.text}`
+        : "[Email:dev] Sin proveedor configurado: el correo no se envió. Usa EMAIL_DEV_LOG=true para verlo en consola.",
+    );
     return false;
   }
   throw new Error("No hay proveedor de correo configurado");
