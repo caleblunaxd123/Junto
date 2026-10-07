@@ -178,6 +178,11 @@ export default function Group() {
                           ? "Invita a las personas con las que compartes gastos y agrega el primero."
                           : "Agrega el primero: quién pagó y para quién fue."}
                     </Label>
+                    {group.miembros.length < 2 && (
+                      <View style={{ marginTop: 8 }}>
+                        <Button compact title="Invitar a mi grupo" onPress={goInvite} />
+                      </View>
+                    )}
                   </View>
                 </Card>
               )}
@@ -187,10 +192,14 @@ export default function Group() {
                 </Label>
               ))}
               {me && group.resumen.totalGastado > 0 && (
-                <Pressable accessibilityRole="button" onPress={() => router.push(`/(app)/cuentas/${id}`)} style={[design.row, { minHeight: 44 }]}>
-                  <Label size={13} color={palette.muted} style={{ flex: 1 }}>
-                    Tu parte {money(me.tuParte)} · Pagaste {money(me.pagaste)}
-                  </Label>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Tu parte ${money(me.tuParte)}, pagaste ${money(me.pagaste)}. Ver cómo se calcula`}
+                  onPress={() => router.push(`/(app)/cuentas/${id}`)}
+                  style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 12, rowGap: 2, minHeight: 44 }}
+                >
+                  <Label size={13} color={palette.muted}>Tu parte <Label size={13} weight="bold">{money(me.tuParte)}</Label></Label>
+                  <Label size={13} color={palette.muted}>Pagaste <Label size={13} weight="bold">{money(me.pagaste)}</Label></Label>
                   <Label size={13} weight="bold" color={palette.primary}>¿Cómo se calcula? ›</Label>
                 </Pressable>
               )}
@@ -200,19 +209,23 @@ export default function Group() {
                 {meFirst(group.miembros, (m) => m.usuarioId, user?.id).map((m) => {
                   const net = group.resumen.cuentas.find((a) => a.usuarioId === m.usuarioId)?.neto || 0;
                   const isMe = m.usuarioId === user?.id;
-                  const state = net < 0 ? `Debe ${money(-net)}` : net > 0 ? `Le deben ${money(net)}` : "Al día";
+                  const state = net < 0 ? (isMe ? "Debes" : "Debe") : net > 0 ? (isMe ? "Te deben" : "Le deben") : "Al día";
+                  const color = net < 0 ? palette.coral : net > 0 ? "#007B60" : palette.muted;
                   return (
                     <View
                       key={m.usuarioId}
                       accessible
-                      accessibilityLabel={`${isMe ? "Tú" : m.usuario.nombre}. ${state}`}
+                      accessibilityLabel={`${isMe ? "Tú" : m.usuario.nombre}. ${state}${net ? ` ${money(Math.abs(net))}` : ""}`}
                       style={[design.card, { width: 116, alignItems: "center", gap: 4, padding: 10, backgroundColor: isMe ? palette.mint : "white", borderColor: isMe ? "#A4EDD7" : "#EDF0F2" }]}
                     >
                       <Avatar name={m.usuario.nombre} photo={m.usuario.fotoUrl} seed={m.usuarioId} size={48} />
                       <Label size={13} weight="bold" numberOfLines={1}>{labels.get(m.usuarioId)}</Label>
-                      <Label size={12} weight="bold" numberOfLines={1} color={net < 0 ? palette.coral : net > 0 ? "#007B60" : palette.muted}>
-                        {state}
-                      </Label>
+                      <Label size={11} color={color}>{state}</Label>
+                      {!!net && (
+                        <Label size={14} weight="extra" numberOfLines={1} adjustsFontSizeToFit color={color}>
+                          {money(Math.abs(net))}
+                        </Label>
+                      )}
                     </View>
                   );
                 })}

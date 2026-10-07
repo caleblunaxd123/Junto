@@ -120,8 +120,11 @@ test("pending actions put the payment to confirm first and keep groups apart", (
   ];
   const payments = [{ id: "p1", grupoId: "g1", pagadorId: "luis", receptorId: "me", monto: 6000, estado: "reportado" }];
   const actions = pendingActions(groups, payments, "me");
-  assert.deepEqual(actions.map((a) => [a.kind, a.persona, a.monto]), [["confirmar", "Luis", 6000], ["pagar", "Ana", 4000], ["cobrar", "Luis", 6000]]);
-  assert.equal(actions[2].porConfirmar, true);
+  // A pending payment that covers the whole debt is shown once, as a question.
+  assert.deepEqual(actions.map((a) => [a.kind, a.persona, a.monto]), [["confirmar", "Luis", 6000], ["pagar", "Ana", 4000]]);
+  const partial = pendingActions(groups, [{ ...payments[0], monto: 2000 }], "me");
+  assert.deepEqual(partial.map((a) => a.kind), ["confirmar", "pagar", "cobrar"]);
+  assert.equal(partial[2].porConfirmar, true);
   assert.deepEqual(pendingActions(groups, payments, null), []);
 });
 test("invitation links are https web links and pasted links or codes are accepted", () => {
@@ -131,4 +134,20 @@ test("invitation links are https web links and pasted links or codes are accepte
   assert.equal(extractInvitationCode("junto://unirse/QA-invite_1234"), "QA-invite_1234");
   assert.equal(extractInvitationCode(" QA-invite_1234 "), "QA-invite_1234");
   assert.equal(extractInvitationCode("hola"), null);
+});
+const { guessGroupType } = require("../apps/mobile/src/lib/groupType.ts");
+test("the group cover follows the name people type", () => {
+  assert.equal(guessGroupType("Depa Miraflores"), "roomies");
+  assert.equal(guessGroupType("Escapada a Cusco"), "viaje");
+  assert.equal(guessGroupType("Cumple de Ana"), "amigos");
+  assert.equal(guessGroupType("Mi novia y yo"), "pareja");
+  assert.equal(guessGroupType("Gastos varios"), null);
+});
+const { guessCategory } = require("../apps/mobile/src/lib/category.ts");
+test("expense categories are suggested from the description", () => {
+  assert.equal(guessCategory("Pizza"), "comida");
+  assert.equal(guessCategory("Supermercado Plaza Vea"), "compras");
+  assert.equal(guessCategory("Taxi al aeropuerto"), "transporte");
+  assert.equal(guessCategory("Entradas del cine"), "entretenimiento");
+  assert.equal(guessCategory("Luz y agua"), null);
 });

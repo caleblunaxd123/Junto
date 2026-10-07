@@ -12,6 +12,8 @@
 | Privacidad | Página `/privacidad` con los datos que realmente se usan. | Revisar el texto con quien sea responsable legal |
 | UX | Inicio con «Pendientes» (confirmar pagos, pagar, recordar), un solo botón «+», «Tú» siempre visible y primero, nombres repetidos distinguidos, avatares de iniciales con color por persona, detalle de grupo con frase de estado, formulario de gasto con el monto primero, actividad en segunda persona, texto legal en «¿Cómo funciona?», nombre opcional en cuentas de un día, aviso sin conexión. La pestaña Asistente sale de la barra (sigue en Perfil → Ayuda y en «Agregar gasto»). | `node ops/test-mobile-ux.cjs` |
 
+| Primer contacto | Ficha de Play Store lista para pegar (`store/google-play.md`: nombre con palabras clave, descripciones, orden de capturas, Data Safety). Bienvenida con los botones siempre visibles y «Probar sin cuenta»: una calculadora que divide la cuenta al instante sin registrarse ni guardar nada. Registro sin «confirmar contraseña», verificación que entra sola al escribir los 6 dígitos. | Recorrido automatizado en navegador (ver abajo) |
+
 ## Necesita al propietario (no se puede hacer desde el código)
 
 1. **Dominio**: apuntar `junto.pe` (o el que elijas) a la API y configurar `PUBLIC_WEB_URL` en la API y `EXPO_PUBLIC_WEB_URL` en EAS. Sin dominio, se usa la URL https de la API.
@@ -24,6 +26,8 @@
 8. **Asistente IA**: configurar `JUNTO_AI_BASE_URL`/`JUNTO_AI_API_KEY` en producción antes de volver a mostrarlo como pestaña. Sin él, las frases simples («Pagué 120 por la cena con Ana») siguen funcionando con reglas locales.
 
 ## Probar en dispositivos antes de la prueba cerrada
+
+El recorrido de usuario nuevo (bienvenida → probar sin cuenta → registro → verificación → crear grupo → invitar → gasto → pendientes → pagar → cuenta de un día → perfil) se revisó con capturas en un navegador del tamaño de un teléfono. Eso no reemplaza un teléfono real:
 
 - Dos teléfonos reales: invitación por WhatsApp (con y sin la app instalada), registro con correo real, gasto, pago parcial, confirmación desde Inicio, eliminación de cuenta.
 - TalkBack: recorrer Inicio, «+», detalle de grupo, agregar gasto y confirmar un pago solo con gestos.

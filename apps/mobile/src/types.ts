@@ -35,7 +35,7 @@ export interface GrupoMiembro {
   rol: MiembroRol;
   fechaUnion: string;
   activo: boolean;
-  usuario: Pick<Usuario, "id" | "nombre" | "email" | "fotoUrl">;
+  usuario: Pick<Usuario, "id" | "nombre" | "email" | "fotoUrl"> & { celular?: string | null };
 }
 
 export interface Grupo {
@@ -189,6 +189,8 @@ export interface ActividadEvento {
   gastoId: string | null;
   pagoId: string | null;
   estado?: EstadoPago;
+  tuParte?: number | null;
+  pagaste?: boolean;
   requiereAccion: boolean;
 }
 

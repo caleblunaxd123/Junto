@@ -19,6 +19,25 @@ import { centavosASoles, type ActividadEvento } from "../../src/types";
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
 const when = (date: string) =>
   new Date(date).toLocaleString("es-PE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const time = (date: string) => new Date(date).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
+
+/** "Hoy", "Ayer" or the date, so the feed reads like a timeline. */
+function dayLabel(date: string) {
+  const d = new Date(date);
+  const today = new Date();
+  const days = Math.round((new Date(today.toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 86_400_000);
+  if (days === 0) return "Hoy";
+  if (days === 1) return "Ayer";
+  return d.toLocaleDateString("es-PE", { weekday: "long", day: "numeric", month: "long" });
+}
+
+function impact(e: ActividadEvento) {
+  if (e.tipo !== "gasto") return null;
+  if (e.pagaste && e.tuParte != null) return { text: `Pagaste · tu parte ${money(e.tuParte)}`, color: "#007B60" };
+  if (e.pagaste) return { text: "Pagaste · no participas", color: "#007B60" };
+  if (e.tuParte) return { text: `Tu parte ${money(e.tuParte)}`, color: palette.coral };
+  return { text: "No participas", color: palette.muted };
+}
 
 export default function Activity() {
   const {
@@ -98,11 +117,16 @@ export default function Activity() {
               </View>
             </Card>
           ))}
-          {rest.map((e) => (
+          {rest.map((e, index) => (
+            <React.Fragment key={e.id}>
+            {(index === 0 || dayLabel(rest[index - 1].fecha) !== dayLabel(e.fecha)) && (
+              <Label accessibilityRole="header" size={13} weight="bold" color={palette.muted} style={{ marginTop: index ? 8 : 0, textTransform: "capitalize" }}>
+                {dayLabel(e.fecha)}
+              </Label>
+            )}
             <Pressable
-              key={e.id}
               accessibilityRole="button"
-              accessibilityLabel={`${e.titulo}. ${money(e.monto)}. ${e.detalle}. ${when(e.fecha)}`}
+              accessibilityLabel={`${e.titulo}. ${money(e.monto)}. ${impact(e)?.text ?? ""}. ${e.detalle}. ${when(e.fecha)}`}
               onPress={() =>
                 router.push(
                   e.gastoId
@@ -117,11 +141,14 @@ export default function Activity() {
                 </View>
                 <View style={{ flex: 1, gap: 2 }}>
                   <Label weight="bold" size={14}>{e.titulo}</Label>
-                  <Label size={12} color={palette.muted}>{e.detalle} · {when(e.fecha)}</Label>
+                  <Label size={12} color={palette.muted}>{e.detalle.split(" · ")[0]} · {time(e.fecha)}</Label>
+                  {impact(e) && <Label size={12} weight="bold" color={impact(e)!.color}>{impact(e)!.text}</Label>}
+                  {e.tipo === "pago" && e.detalle.includes(" · ") && <Label size={12} color={palette.muted}>{e.detalle.split(" · ").slice(1).join(" · ")}</Label>}
                 </View>
                 <Label weight="extra" size={15}>{money(e.monto)}</Label>
               </Card>
             </Pressable>
+            </React.Fragment>
           ))}
         </>
       )}

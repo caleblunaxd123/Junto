@@ -27,9 +27,9 @@ export default function AppLayout() {
         tabBarHideOnKeyboard: true,
         tabBarActiveTintColor: palette.primary,
         tabBarInactiveTintColor: palette.muted,
-        tabBarLabelStyle: { fontFamily: "JakartaBold", fontSize: 11 },
+        tabBarLabelStyle: { fontFamily: "JakartaBold", fontSize: 12, marginBottom: 2 },
         tabBarStyle: {
-          height: 64 + insets.bottom,
+          height: 68 + insets.bottom,
           paddingBottom: Math.max(insets.bottom, 8),
           paddingTop: 8,
           borderTopColor: palette.line,

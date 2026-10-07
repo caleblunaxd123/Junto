@@ -52,7 +52,10 @@ export default function EditProfile() {
         maxLength={100}
         style={design.input}
       />
-      <Label weight="bold">Celular (opcional)</Label>
+      <Label weight="bold">Celular para Yape o Plin (opcional)</Label>
+      <Label size={12} color={palette.muted}>
+        Solo lo ven las personas de tus grupos cuando van a pagarte, y sirve para que te agreguen a un grupo.
+      </Label>
       <TextInput
         accessibilityLabel="Celular peruano"
         value={phone}

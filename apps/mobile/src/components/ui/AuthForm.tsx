@@ -25,7 +25,6 @@ export function AuthForm({ register = false }: { register?: boolean }) {
   const auth = useAuthStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
   const [name, setName] = useState("");
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -39,14 +38,11 @@ export function AuthForm({ register = false }: { register?: boolean }) {
     if (!password) return setError("Escribe tu contraseña para iniciar sesión.");
     if (
       register &&
-      (name.trim().length < 2 || name.trim().length > 100 ||
-        password.length < 8 ||
-        !/\d/.test(password) ||
-        password !== confirm)
+      (name.trim().length < 2 || name.trim().length > 100)
     )
-      return setError(
-        "Revisa el nombre y las contraseñas: al menos 8 caracteres, un número y ambas iguales.",
-      );
+      return setError("Escribe tu nombre: así te reconocerán tus amigos.");
+    if (register && (password.length < 8 || !/\d/.test(password)))
+      return setError("Tu contraseña necesita al menos 8 caracteres y un número.");
     try {
       setBusy(true);
       if (register) {
@@ -92,38 +88,25 @@ export function AuthForm({ register = false }: { register?: boolean }) {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <Screen>
-        <View style={{ minHeight: 214, marginTop: 4 }}>
+        <View style={{ minHeight: 150, marginTop: 4 }}>
           <Image
             source={require("../../../assets/illustrations/auth-couple.png")}
             resizeMode="contain"
             style={{
               position: "absolute",
-              right: -23,
+              right: -16,
               bottom: -6,
-              width: "63%",
-              height: 203,
+              width: "50%",
+              height: 150,
             }}
           />
           <Brand compact />
           <View style={{ width: "49%", marginTop: 8, gap: 3 }}>
-            <Label size={18} weight="extra" style={{ lineHeight: 23 }}>
-              Las cuentas claras.
+            <Label size={20} weight="extra" style={{ lineHeight: 25 }}>
+              {register ? "Crea tu cuenta gratis" : "Qué bueno verte"}
             </Label>
-            <Label
-              size={18}
-              weight="extra"
-              color={palette.primary}
-              style={{ lineHeight: 23 }}
-            >
-              Los buenos momentos, juntos.
-            </Label>
-            <Label
-              size={11}
-              color={palette.muted}
-              style={{ marginTop: 5, width: "85%" }}
-            >
-              Comparte gastos, organiza planes y disfruta más con las personas
-              que más te importan.
+            <Label size={13} color={palette.muted}>
+              {register ? "Toma menos de un minuto." : "Tus cuentas te esperan."}
             </Label>
           </View>
         </View>
@@ -175,7 +158,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
               value={name}
               onChangeText={setName}
               autoComplete="name"
-              placeholder="¿Cómo te llamas?"
+              placeholder="Ej. Camila Torres"
               maxLength={100}
             />
           )}
@@ -212,7 +195,8 @@ export function AuthForm({ register = false }: { register?: boolean }) {
                 secureTextEntry={!show}
                 autoCapitalize="none"
                 autoComplete={register ? "new-password" : "current-password"}
-                placeholder="••••••••"
+                placeholder={register ? "Mínimo 8 caracteres y un número" : "Tu contraseña"}
+                placeholderTextColor="#8B98AE"
                 style={{
                   flex: 1,
                   height: 54,
@@ -238,21 +222,20 @@ export function AuthForm({ register = false }: { register?: boolean }) {
           </View>
           {register ? (
             <>
-              <Label size={11} color={palette.muted}>
-                Al menos 8 caracteres y un número.
-              </Label>
-              <FormField
-                label="Confirmar contraseña"
-                icon="lock-closed-outline"
-                value={confirm}
-                onChangeText={setConfirm}
-                secureTextEntry={!show}
-                autoCapitalize="none"
-                placeholder="Repite tu contraseña"
-              />
+              {!!password && (
+                <View style={{ flexDirection: "row", gap: 14 }} accessibilityLiveRegion="polite">
+                  {[
+                    ["8 caracteres", password.length >= 8],
+                    ["Un número", /\d/.test(password)],
+                  ].map(([rule, ok]) => (
+                    <Label key={String(rule)} size={12} weight="bold" color={ok ? "#007B60" : palette.muted}>
+                      {ok ? "✓" : "○"} {rule}
+                    </Label>
+                  ))}
+                </View>
+              )}
               <Label size={12} color={palette.muted}>
-                Verificaremos tu correo con un código. No necesitas registrar un
-                celular.
+                Te enviaremos un código a tu correo para confirmar que es tuyo.
               </Label>
             </>
           ) : (

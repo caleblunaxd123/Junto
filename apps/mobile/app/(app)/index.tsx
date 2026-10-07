@@ -45,6 +45,7 @@ export default function Home() {
   const refetchPayments = payments.refetch;
   const [search, setSearch] = useState("");
   const [sheet, setSheet] = useState(false);
+  const [allPending, setAllPending] = useState(false);
   const bills = useQuickBills();
   const refreshBills = bills.refetch;
   const refreshAll = useCallback(() => {
@@ -103,7 +104,14 @@ export default function Home() {
             {actions.length > 0 ? (
               <>
                 <SectionTitle title={`Pendientes (${actions.length})`} />
-                <PendingActions actions={actions} />
+                <PendingActions actions={allPending ? actions : actions.slice(0, 3)} />
+                {actions.length > 3 && (
+                  <Pressable accessibilityRole="button" onPress={() => setAllPending((v) => !v)} style={{ minHeight: 44, alignItems: "center", justifyContent: "center" }}>
+                    <Label size={14} weight="bold" color={palette.purple}>
+                      {allPending ? "Ver menos" : `Ver ${actions.length - 3} ${actions.length - 3 === 1 ? "pendiente más" : "pendientes más"}`}
+                    </Label>
+                  </Pressable>
+                )}
               </>
             ) : groups.length > 0 && !payments.isLoading ? (
               <Card style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, backgroundColor: palette.mint, borderColor: "#BDEBD9" }}>

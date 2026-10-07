@@ -49,6 +49,9 @@ export default function Payment() {
     monto: string;
   }>();
   const { data: group } = useGrupo(grupoId);
+  const creditor = group?.miembros.find((m) => m.usuarioId === acreedorId)?.usuario;
+  const creditorPhone = creditor?.celular && /^9\d{8}$/.test(creditor.celular) ? creditor.celular : null;
+  const firstName = (nombre || creditor?.nombre || "esta persona").split(" ")[0];
   const focused = useIsFocused();
   const user = useAuthStore((s) => s.usuario);
   const requestedLimit = Number(monto);
@@ -195,7 +198,7 @@ export default function Payment() {
                   Tú pagas a
                 </Label>
                 <View style={design.row}>
-                  <Avatar name={nombre || "Persona"} size={46} />
+                  <Avatar name={nombre || "Persona"} seed={acreedorId} size={46} />
                   <View style={{ flex: 1 }}>
                     <Label size={15} weight="extra">
                       {nombre}
@@ -235,12 +238,28 @@ export default function Payment() {
                       fontFamily: "JakartaExtra",
                       color: "#00997D",
                       fontSize: 27,
+                      minWidth: 0,
                     }}
                   />
                 </View>
               </View>
             </View>
           </Card>
+          {!hasReport && (
+            creditorPhone ? (
+              <Card style={{ padding: 14, gap: 4 }}>
+                <Label size={13} color={palette.muted}>Yape o Plin de {firstName}</Label>
+                <Label selectable accessibilityLabel={`Número de ${firstName}: ${creditorPhone.split("").join(" ")}`} size={24} weight="extra" style={{ letterSpacing: 1 }}>
+                  {creditorPhone.replace(/(\d{3})(\d{3})(\d{3})/, "$1 $2 $3")}
+                </Label>
+                <Label size={12} color={palette.muted}>Mantén presionado para copiar. Paga en tu app y vuelve aquí para registrarlo.</Label>
+              </Card>
+            ) : (
+              <Label size={13} color={palette.muted}>
+                {firstName} no registró su celular en JUNTO. Pídele su número de Yape o Plin, o paga en efectivo.
+              </Label>
+            )
+          )}
           {!hasReport ? (
             <>
               <Label size={14} weight="bold">

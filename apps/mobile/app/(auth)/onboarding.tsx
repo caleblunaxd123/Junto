@@ -1,100 +1,57 @@
 import React from "react";
-import { View, Image } from "react-native";
+import { View, Image, Pressable } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import {
-  Screen,
-  Card,
-  Label,
-  Button,
-  palette,
-} from "../../src/components/ui/Design";
+import { Ionicons } from "@expo/vector-icons";
+import { Screen, Label, Button, palette } from "../../src/components/ui/Design";
 import { Brand } from "../../src/components/ui/Reference";
 import { art } from "../../src/components/ui/Artwork";
+
+const points: { icon: keyof typeof Ionicons.glyphMap; title: string; copy: string; color: string; bg: string }[] = [
+  { icon: "receipt-outline", title: "La cuenta de hoy, en segundos", copy: "Escribe el total o toma foto a la boleta. Tus amigos no necesitan la app.", color: "#007B60", bg: palette.mint },
+  { icon: "people-outline", title: "Grupos para lo que se repite", copy: "Depa, pareja o viaje: queda anotado quién pagó y quién debe a quién.", color: palette.purple, bg: palette.lilac },
+  { icon: "checkmark-done-outline", title: "Saldar sin incomodidad", copy: "Cada uno ve lo que debe. Pagan por Yape o Plin y tú confirmas que llegó.", color: "#1D5FA8", bg: "#E2F0FF" },
+];
+
 export default function Onboarding() {
-  async function start(register: boolean) {
-    await AsyncStorage.setItem("onboarding_completado", "true");
-    router.replace(register ? "/(auth)/register" : "/(auth)/login");
+  async function go(target: "/(auth)/register" | "/(auth)/login" | "/(auth)/probar") {
+    await AsyncStorage.setItem("onboarding_completado", "true").catch(() => undefined);
+    if (target === "/(auth)/probar") router.push(target);
+    else router.replace(target);
   }
-  const steps = [
-    {
-      title: "Crea un grupo",
-      copy: "Invita a tus amigos, pareja o roommates. Para un viaje, un depa, una salida o lo que quieras.",
-      image: art.welcome,
-    },
-    {
-      title: "Anota lo que pagaron",
-      copy: "Registra quién pagó, cuánto y en qué. Escribe el monto o descríbelo en una frase: tú revisas antes de guardar.",
-      image: art.receipt,
-    },
-    {
-      title: "Revisa y salda las cuentas",
-      copy: "JUNTO calcula quién debe a quién. Pagan por fuera y el receptor confirma el pago. ¡Y listo!",
-      image: art.character,
-    },
-  ];
   return (
-    <Screen>
+    <Screen
+      footer={
+        <>
+          <Button title="Crear mi cuenta gratis" onPress={() => go("/(auth)/register")} />
+          <Button title="Probar sin cuenta" secondary onPress={() => go("/(auth)/probar")} />
+          <Pressable accessibilityRole="link" onPress={() => go("/(auth)/login")} style={{ minHeight: 44, alignItems: "center", justifyContent: "center" }}>
+            <Label size={14} weight="bold" color={palette.muted}>Ya tengo cuenta · Iniciar sesión</Label>
+          </Pressable>
+        </>
+      }
+    >
       <Brand />
-      <Label size={28} weight="extra" style={{ lineHeight: 33 }}>
-        Las cuentas claras.
-      </Label>
-      <Label
-        size={25}
-        weight="extra"
-        color={palette.primary}
-        style={{ lineHeight: 31 }}
-      >
-        Los buenos momentos, juntos.
-      </Label>
-      <Label size={14} color={palette.muted}>
-        Comparte gastos con amigos, pareja, roommates o en tus viajes. Mantengan
-        sus planes, sin complicaciones.
-      </Label>
-      {steps.map((step, i) => (
-        <Card
-          key={step.title}
-          style={{ padding: 14, minHeight: 145, overflow: "hidden" }}
-        >
-          <View style={{ width: "56%", gap: 8 }}>
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-            >
-              <View
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 15,
-                  backgroundColor: i === 1 ? "#E6DAFF" : "#CFFAEA",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Label weight="extra">{i + 1}</Label>
-              </View>
-              <Label size={17} weight="extra" style={{ flex: 1 }}>
-                {step.title}
-              </Label>
-            </View>
-            <Label size={12} color={palette.muted}>
-              {step.copy}
-            </Label>
+      <View style={{ height: 170, borderRadius: 24, backgroundColor: "#FFF2E4", overflow: "hidden" }}>
+        <Image source={art.welcome} accessibilityIgnoresInvertColors style={{ width: "100%", height: "100%" }} resizeMode="contain" />
+      </View>
+      <View style={{ gap: 6 }}>
+        <Label accessibilityRole="header" size={28} weight="extra" style={{ lineHeight: 33 }}>
+          Divide gastos sin incomodar a nadie.
+        </Label>
+        <Label size={15} color={palette.muted}>Gratis. JUNTO no toca tu dinero: solo lleva las cuentas claras.</Label>
+      </View>
+      {points.map((point) => (
+        <View key={point.title} style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
+          <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: point.bg, alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name={point.icon} size={22} color={point.color} />
           </View>
-          <Image
-            source={step.image}
-            style={{
-              position: "absolute",
-              right: -6,
-              bottom: 0,
-              width: "45%",
-              height: 140,
-            }}
-            resizeMode="contain"
-          />
-        </Card>
+          <View style={{ flex: 1 }}>
+            <Label weight="bold" size={15}>{point.title}</Label>
+            <Label size={13} color={palette.muted}>{point.copy}</Label>
+          </View>
+        </View>
       ))}
-      <Button title="Comenzar →" onPress={() => start(true)} />
-      <Button title="Ya tengo cuenta" secondary onPress={() => start(false)} />
     </Screen>
   );
 }

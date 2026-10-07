@@ -35,6 +35,7 @@ import { centavosASoles, TipoDivision, Gasto } from "../../../src/types";
 import { parseMoney, parsePercentage, allocatePreview } from "../../../src/lib/expensePreview";
 import { groupCover } from "../../../src/components/ui/Artwork";
 import { memberLabels, meFirst } from "../../../src/lib/people";
+import { guessCategory } from "../../../src/lib/category";
 function Field({
   label,
   children,
@@ -43,11 +44,11 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-      <Label weight="bold" size={13} style={{ width: 82 }}>
+    <View style={{ gap: 6 }}>
+      <Label weight="bold" size={14}>
         {label}
       </Label>
-      <View style={{ flex: 1 }}>{children}</View>
+      {children}
     </View>
   );
 }
@@ -107,6 +108,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   const [mode, setMode] = useState<TipoDivision>("igual");
   const [values, setValues] = useState<Record<string, string>>({});
   const [category, setCategory] = useState("otro");
+  const [categoryPicked, setCategoryPicked] = useState(false);
   const [text, setText] = useState(params.texto || "");
   useEffect(() => {
     if (params.texto) setText(params.texto);
@@ -163,6 +165,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       ),
     );
     setCategory(expense.categoria);
+    setCategoryPicked(true);
     setNotes(expense.notas || "");
     setDate(new Date(expense.fecha));
     setProposal(
@@ -268,6 +271,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       setValues({});
       setMode("igual");
       setCategory("otro");
+      setCategoryPicked(false);
       setDate(new Date());
       setIds(group?.miembros.map((member) => member.usuarioId) || []);
       setPayer(user?.id || "");
@@ -407,6 +411,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                   autoFocus={!params.gastoId}
                   style={{
                     flex: 1,
+                    minWidth: 0,
                     fontSize: 31,
                     fontFamily: "JakartaExtra",
                     color: palette.ink,
@@ -437,6 +442,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                   onChangeText={(value) => {
                     cancelProposal();
                     setDescription(value);
+                    if (!categoryPicked) setCategory(guessCategory(value) ?? "otro");
                   }}
                   placeholder="Ej. Cena, taxi, luz"
                   placeholderTextColor="#94A3B8"
@@ -707,7 +713,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
           {mode === "porcentaje" && parsedPct.some((value) => value === null) && <ErrorBox message="Completa cada porcentaje: entre 0 y 100, con máximo 2 decimales. Usa 0 explícitamente si no participa en el costo." />}
           <Pressable accessibilityRole="button" accessibilityState={{ expanded: detail }} onPress={() => setDetail((v) => !v)} style={{ minHeight: 44, justifyContent: "center" }}>
             <Label color={palette.muted} size={13}>
-              {detail ? "Ocultar detalles" : "＋ Categoría y nota (opcional)"}
+              {detail ? "Ocultar detalles" : `＋ Categoría (${({ comida: "Comida", transporte: "Transporte", alojamiento: "Alojamiento", entretenimiento: "Diversión", compras: "Compras", otro: "Otro" } as Record<string, string>)[category] ?? "Otro"}) y nota`}
             </Label>
           </Pressable>
           {detail && (
@@ -725,7 +731,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                     key={id}
                     accessibilityRole="button"
                     accessibilityState={{ selected: category === id }}
-                    onPress={() => { cancelProposal(); setCategory(id); }}
+                    onPress={() => { cancelProposal(); setCategory(id); setCategoryPicked(true); }}
                     style={{
                       padding: 10,
                       borderRadius: 12,

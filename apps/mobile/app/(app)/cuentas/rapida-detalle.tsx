@@ -80,7 +80,7 @@ export default function QuickBillDetail() {
         const confirmed = bill.aportes[p.id] || 0;
         return <Card key={p.id} style={{ padding: 14, backgroundColor: p.invitado ? palette.lilac : confirmed === p.total ? palette.mint : "white" }}>
           <View style={[design.row, { justifyContent: "space-between" }]}><Label weight="bold" style={{ flex: 1 }}>{p.nombre}</Label><Label weight="extra" size={21}>{money(p.total)}</Label></View>
-          <Label size={12} color={palette.muted}>{p.invitado ? "Invitado: no paga." : bill.datos.division === "igual" ? `Parte ${money(p.consumo)} + extras ${money(p.extras)}` : `Consumo ${money(p.consumo)} + invitados ${money(p.invitados)} + extras ${money(p.extras)}`}</Label>
+          <Label size={12} color={palette.muted}>{p.invitado ? "Invitado: no paga." : bill.datos.division === "igual" ? (p.extras ? `Parte ${money(p.consumo)} + extras ${money(p.extras)}` : "Parte igual") : `Consumo ${money(p.consumo)} + invitados ${money(p.invitados)} + extras ${money(p.extras)}`}</Label>
           {!p.invitado && p.total > 0 && <><Label size={12}>Confirmado {money(confirmed)} · falta {money(p.total - confirmed)}</Label><Button title={confirmed ? "Ver / corregir aporte" : "Registrar aporte recibido"} secondary disabled={disabled} onPress={() => { setAmount(centavosASoles(confirmed || p.total)); setSelected(p.id); }} /></>}
         </Card>;
       })}
