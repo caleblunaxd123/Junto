@@ -1,17 +1,62 @@
+import axios from "axios";
 import nodemailer from "nodemailer";
 
-export const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || "smtp.gmail.com",
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: Number(process.env.SMTP_PORT) === 465,
-  connectionTimeout: 3000,
-  greetingTimeout: 3000,
-  socketTimeout: 5000,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+/**
+ * Correo transaccional (verificación, recuperación, bienvenida).
+ * Proveedores, en orden: Resend (RESEND_API_KEY) o SMTP (SMTP_HOST/USER/PASS).
+ * Sin proveedor, en desarrollo el código se escribe en la consola; en producción falla
+ * para que la app muestre "reenviar" en lugar de dar por enviado un correo que no salió.
+ */
+type Message = { to: string; subject: string; html: string; text: string };
+
+export function emailProvider(): "resend" | "smtp" | null {
+  if (process.env.RESEND_API_KEY) return "resend";
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) return "smtp";
+  return null;
+}
+
+function sender() {
+  return process.env.EMAIL_FROM || `"JUNTO" <${process.env.SMTP_USER || "no-reply@junto.invalid"}>`;
+}
+
+let smtp: ReturnType<typeof nodemailer.createTransport> | undefined;
+function smtpTransport() {
+  smtp ??= nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: Number(process.env.SMTP_PORT) === 465,
+    connectionTimeout: 5000,
+    greetingTimeout: 5000,
+    socketTimeout: 8000,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
+  return smtp;
+}
+
+export async function deliver(message: Message): Promise<void> {
+  const provider = emailProvider();
+  if (provider === "resend") {
+    await axios.post(
+      "https://api.resend.com/emails",
+      { from: sender(), to: [message.to], subject: message.subject, html: message.html, text: message.text },
+      { headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` }, timeout: 8000 },
+    );
+    return;
+  }
+  if (provider === "smtp") {
+    await smtpTransport().sendMail({ from: sender(), ...message });
+    return;
+  }
+  if (process.env.NODE_ENV !== "production") {
+    console.info(`[Email:dev] Para ${message.to} · ${message.subject}\n${message.text}`);
+    return;
+  }
+  throw new Error("No hay proveedor de correo configurado");
+}
+
+function publicUrl() {
+  return (process.env.PUBLIC_WEB_URL || "").replace(/\/$/, "");
+}
 
 function escapeHTML(value: string): string {
   return value.replace(
@@ -28,14 +73,14 @@ export async function sendOTPEmail(
   nombre: string,
   otp: string,
 ): Promise<void> {
-  await transporter.sendMail({
-    from: `"Junto" <${process.env.SMTP_USER}>`,
+  await deliver({
     to: email,
-    subject: "Tu código de verificación - Junto",
+    subject: "Tu código para cambiar la contraseña · JUNTO",
+    text: `Hola ${nombre}. Tu código para cambiar la contraseña de JUNTO es ${otp}. Expira en 15 minutos. Si no lo pediste, ignora este correo.`,
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
         <h2 style="color: #534AB7;">Hola ${escapeHTML(nombre)} 👋</h2>
-        <p>Tu código de verificación es:</p>
+        <p>Tu código para cambiar la contraseña es:</p>
         <div style="background: #EEEDFE; padding: 24px; border-radius: 12px; text-align: center;">
           <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #534AB7;">${otp}</span>
         </div>
@@ -50,13 +95,13 @@ export async function sendVerificationEmail(
   nombre: string,
   otp: string,
 ): Promise<void> {
-  await transporter.sendMail({
-    from: `"Junto" <${process.env.SMTP_USER}>`,
+  await deliver({
     to: email,
-    subject: "Verifica tu cuenta en Junto",
+    subject: `${otp} es tu código de JUNTO`,
+    text: `Hola ${nombre}. Tu código para verificar tu cuenta de JUNTO es ${otp}. Expira en 15 minutos.`,
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-        <h2 style="color: #534AB7;">Bienvenido a Junto, ${escapeHTML(nombre)}! 🎉</h2>
+        <h2 style="color: #534AB7;">Bienvenido a JUNTO, ${escapeHTML(nombre)}! 🎉</h2>
         <p>Verifica tu cuenta con este código:</p>
         <div style="background: #EEEDFE; padding: 24px; border-radius: 12px; text-align: center;">
           <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #534AB7;">${otp}</span>
@@ -72,10 +117,11 @@ export async function sendWelcomeEmail(
   nombre: string,
 ): Promise<void> {
   const primerNombre = nombre.split(" ")[0];
-  await transporter.sendMail({
-    from: `"Junto" <${process.env.SMTP_USER}>`,
+  const link = publicUrl() || "junto://";
+  await deliver({
     to: email,
-    subject: `¡Bienvenido a Junto, ${primerNombre}! 🎉`,
+    subject: `¡Bienvenido a JUNTO, ${primerNombre}!`,
+    text: `Hola ${primerNombre}. Tu cuenta de JUNTO está lista: divide cuentas, organiza grupos y registra pagos hechos por fuera. JUNTO no guarda ni transfiere dinero.`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -89,10 +135,10 @@ export async function sendWelcomeEmail(
           <div style="padding:32px;">
             <h1 style="font-size:22px;font-weight:700;color:#111827;margin:0 0 8px;">¡Hola, ${escapeHTML(primerNombre)}! 👋</h1>
             <p style="font-size:15px;color:#6B7280;line-height:1.6;margin:0 0 24px;">
-              Bienvenido a Junto, la app para dividir gastos y cobrar sin la incomodidad de pedirle plata a tus amigos.
+              Bienvenido a JUNTO, la app para dividir gastos y cobrar sin la incomodidad de pedirle plata a tus amigos.
             </p>
-            <a href="junto://app" style="display:block;background:#534AB7;color:#fff;text-decoration:none;border-radius:12px;padding:16px;text-align:center;font-size:15px;font-weight:700;margin:0 0 24px;">
-              Abrir Junto →
+            <a href="${escapeHTML(link)}" style="display:block;background:#534AB7;color:#fff;text-decoration:none;border-radius:12px;padding:16px;text-align:center;font-size:15px;font-weight:700;margin:0 0 24px;">
+              Abrir JUNTO →
             </a>
             <div style="display:flex;gap:12px;margin:0 0 24px;">
               <div style="flex:1;background:#F9FAFB;border-radius:12px;padding:16px;text-align:center;">

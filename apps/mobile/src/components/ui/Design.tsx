@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import { avatarColors, initials } from "../../lib/people";
 
 export const palette = {
   background: "#FFFCF7",
@@ -80,18 +81,24 @@ export function Button({
   secondary = false,
   loading = false,
   disabled = false,
+  compact = false,
+  accessibilityHint,
 }: {
   title: string;
   onPress: () => void;
   secondary?: boolean;
   loading?: boolean;
   disabled?: boolean;
+  /** Smaller button for inline actions inside cards. */
+  compact?: boolean;
+  accessibilityHint?: string;
 }) {
   const [pressed, setPressed] = React.useState(false);
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={title}
+      accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: disabled || loading, busy: loading }}
       disabled={disabled || loading}
       onPress={onPress}
@@ -99,6 +106,7 @@ export function Button({
       onPressOut={() => setPressed(false)}
       style={[
         design.button,
+        compact && { minHeight: 44, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 14 },
         {
           backgroundColor: secondary ? palette.lilac : palette.primary,
           opacity: disabled || loading ? 0.55 : pressed ? 0.82 : 1,
@@ -111,7 +119,7 @@ export function Button({
           colors={["#00856A", "#007B60"]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={[StyleSheet.absoluteFill, { borderRadius: 20 }]}
+          style={[StyleSheet.absoluteFill, { borderRadius: compact ? 14 : 20 }]}
         />
       )}
       {loading ? (
@@ -119,7 +127,7 @@ export function Button({
       ) : (
         <Label
           weight="bold"
-          size={16}
+          size={compact ? 14 : 16}
           color={secondary ? palette.purple : "white"}
           style={{ textAlign: "center" }}
         >
@@ -221,42 +229,40 @@ export function Avatar({
   name,
   size = 44,
   photo,
+  seed,
 }: {
   name: string;
   size?: number;
   photo?: string | null;
+  /** Stable id (user id) so two people with the same name get different colors. */
+  seed?: string;
 }) {
-  const variants = [
-    require("../../../assets/illustrations/avatar-caleb.png"),
-    require("../../../assets/illustrations/avatar-ana.png"),
-    require("../../../assets/illustrations/avatar-luis.png"),
-  ];
-  const normalized = name.toLowerCase();
-  const variant = normalized.startsWith("ana")
-    ? 1
-    : normalized.startsWith("luis")
-      ? 2
-      : normalized.startsWith("caleb")
-        ? 0
-        : [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0) %
-          variants.length;
+  const colors = avatarColors(seed || name);
   return (
     <View
-      accessibilityLabel={name}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel={`Foto de ${name}`}
       style={{
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: palette.lilac,
+        backgroundColor: colors.bg,
         alignItems: "center",
         justifyContent: "center",
+        overflow: "hidden",
       }}
     >
-      <Image
-        source={photo ? { uri: photo } : variants[variant]}
-        style={{ width: size, height: size, borderRadius: size / 2 }}
-        resizeMode="cover"
-      />
+      {photo ? (
+        <Image source={{ uri: photo }} style={{ width: size, height: size }} resizeMode="cover" />
+      ) : (
+        <Text
+          allowFontScaling={false}
+          style={{ fontFamily: "JakartaExtra", fontSize: Math.round(size * 0.38), color: colors.fg }}
+        >
+          {initials(name)}
+        </Text>
+      )}
     </View>
   );
 }

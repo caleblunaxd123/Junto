@@ -1,3 +1,4 @@
+-- HISTORIAL: la base nueva se crea con prisma/migrations (ver prisma/MIGRATIONS.md).
 -- Junto DB Schema
 -- Paste this in Supabase SQL Editor and click Run
 

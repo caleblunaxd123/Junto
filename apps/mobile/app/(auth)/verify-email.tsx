@@ -12,7 +12,7 @@ import {
   ErrorBox,
   palette,
 } from "../../src/components/ui/Design";
-import { Brand, IconBubble } from "../../src/components/ui/Reference";
+import { IconBubble } from "../../src/components/ui/Reference";
 export default function Verify() {
   const { email = "", delivery } = useLocalSearchParams<{
     email: string;
@@ -54,6 +54,11 @@ export default function Verify() {
       setBusy(false);
     }
   }
+  // Six digits are enough: no need to look for the button.
+  useEffect(() => {
+    if (/^\d{6}$/.test(code)) submit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
   async function resend() {
     if (busy || seconds > 0) return;
     try {
@@ -77,21 +82,22 @@ export default function Verify() {
     }
   }
   return (
-    <Screen title="Verifica tu correo" back>
-      <Brand compact />
+    <Screen title="Revisa tu correo" back>
       <Card>
         <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
           <IconBubble name="mail-outline" size={50} />
           <View style={{ flex: 1 }}>
             <Label size={20} weight="extra">
-              Protege tu cuenta
+              Te enviamos un código
             </Label>
             <Label size={13} color={palette.muted}>
-              Solicitamos un código de 6 dígitos para {email}.
+              Escribe los 6 dígitos que llegaron a {email}. Si no lo ves, revisa Spam o Promociones.
             </Label>
           </View>
         </View>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Escribir el código de 6 dígitos"
           onPress={() => input.current?.focus()}
           style={{ height: 60, position: "relative" }}
         >
@@ -172,15 +178,18 @@ export default function Verify() {
           disabled={!/^\d{6}$/.test(code)}
         />
         <Label size={11} color={palette.muted}>
-          Caduca en 15 minutos. Nunca compartas tus códigos por llamadas o
-          mensajes.
+          Vence en 15 minutos. JUNTO nunca te pedirá este código por llamada o mensaje.
         </Label>
       </Card>
-      <Button
-        title="Volver a iniciar sesión"
-        secondary
-        onPress={() => router.replace("/(auth)/login")}
-      />
+      <Pressable
+        accessibilityRole="link"
+        onPress={() => router.replace("/(auth)/register")}
+        style={{ minHeight: 44, alignItems: "center", justifyContent: "center" }}
+      >
+        <Label size={13} weight="bold" color={palette.purple}>
+          ¿Escribiste mal tu correo? Vuelve a registrarte
+        </Label>
+      </Pressable>
     </Screen>
   );
 }

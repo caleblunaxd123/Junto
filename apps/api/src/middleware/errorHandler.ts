@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
 import { UserError } from '../domain/errors';
+import { reportError } from '../lib/monitoring';
 
 type HttpishError = Error & { type?: string; status?: number; statusCode?: number };
 
@@ -32,5 +33,6 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
   }
 
   console.error('[Error]', err.message, err.stack);
+  reportError(err);
   res.status(500).json({ error: 'Error interno del servidor' });
 }

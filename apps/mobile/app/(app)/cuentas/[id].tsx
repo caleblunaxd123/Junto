@@ -3,6 +3,7 @@ import { ActivityIndicator, View, Image } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, router, useFocusEffect } from "expo-router";
 import { useGrupo } from "../../../src/hooks/useGrupos";
+import { memberLabels } from "../../../src/lib/people";
 import { useAuthStore } from "../../../src/store/auth.store";
 import {
   Screen,
@@ -102,6 +103,11 @@ export default function Accounts() {
   );
   const user = useAuthStore((s) => s.usuario);
   const me = group?.resumen.cuentas.find((a) => a.usuarioId === user?.id);
+  const labels = memberLabels(
+    group?.resumen.cuentas.map((a) => ({ id: a.usuarioId, nombre: a.nombre, email: group.miembros.find((m) => m.usuarioId === a.usuarioId)?.usuario.email })) ?? [],
+    user?.id,
+  );
+  const nameOf = (id: string, fallback: string) => labels.get(id) ?? fallback.split(" ")[0];
   return (
     <Screen title="Tus cuentas explicadas" subtitle={group?.nombre} back>
       {isLoading ? (
@@ -136,7 +142,7 @@ export default function Accounts() {
             </View>
             <View style={{ gap: 4, flexDirection: "row" }}>
               {group.miembros.slice(0, 3).map((m) => (
-                <Avatar key={m.usuarioId} name={m.usuario.nombre} size={26} />
+                <Avatar key={m.usuarioId} name={m.usuario.nombre} photo={m.usuario.fotoUrl} seed={m.usuarioId} size={26} />
               ))}
             </View>
           </Card>
@@ -171,9 +177,9 @@ export default function Accounts() {
                       key={a.usuarioId}
                       style={{ flex: 1, alignItems: "center", gap: 4 }}
                     >
-                      <Avatar name={a.nombre} size={36} />
+                      <Avatar name={a.nombre} seed={a.usuarioId} size={36} />
                       <Label size={10} numberOfLines={1}>
-                        {a.nombre.split(" ")[0]}
+                        {nameOf(a.usuarioId, a.nombre)}
                       </Label>
                       <Label
                         size={10}
@@ -196,8 +202,8 @@ export default function Accounts() {
                     key={a.usuarioId}
                     style={{ minWidth: 75, alignItems: "center", gap: 4 }}
                   >
-                    <Avatar name={a.nombre} size={36} />
-                    <Label size={11}>{a.nombre.split(" ")[0]}</Label>
+                    <Avatar name={a.nombre} seed={a.usuarioId} size={36} />
+                    <Label size={11}>{nameOf(a.usuarioId, a.nombre)}</Label>
                     <Label size={12} weight="bold">
                       {money(a.tuParte)}
                     </Label>
@@ -213,7 +219,7 @@ export default function Accounts() {
           <Step
             number={3}
             title="Lo que tú pagaste"
-            copy={`${user?.nombre.split(" ")[0] || "Tú"} pagó por el grupo:`}
+            copy="Tú pagaste por el grupo:"
             value={money(me.pagaste)}
             image={art.paid}
           >
@@ -263,7 +269,7 @@ export default function Accounts() {
           {group.saldos.length ? (
             group.saldos.map((s, i) => (
               <Card
-                key={i}
+                key={`${s.deudorId}-${s.acreedorId}`}
                 style={{
                   padding: 12,
                   flexDirection: "row",
@@ -272,14 +278,14 @@ export default function Accounts() {
                 }}
               >
                 <View style={{ alignItems: "center", width: 68 }}>
-                  <Avatar name={s.deudorNombre} size={42} />
+                  <Avatar name={s.deudorNombre} seed={s.deudorId} size={42} />
                   <Label size={11} weight="bold" numberOfLines={1}>
-                    {s.deudorNombre.split(" ")[0]}
+                    {nameOf(s.deudorId, s.deudorNombre)}
                   </Label>
                 </View>
                 <View style={{ flex: 1, alignItems: "center", gap: 3 }}>
                   <Label size={12} color={palette.coral} weight="bold">
-                    Debe pagar {money(s.monto)}
+                    {s.deudorId === user?.id ? "Pagas" : "Paga"} {money(s.monto)}
                   </Label>
                   <Ionicons
                     name="arrow-forward"
@@ -288,9 +294,9 @@ export default function Accounts() {
                   />
                 </View>
                 <View style={{ alignItems: "center", width: 68 }}>
-                  <Avatar name={s.acreedorNombre} size={42} />
+                  <Avatar name={s.acreedorNombre} seed={s.acreedorId} size={42} />
                   <Label size={11} weight="bold" numberOfLines={1}>
-                    {s.acreedorNombre.split(" ")[0]}
+                    {nameOf(s.acreedorId, s.acreedorNombre)}
                   </Label>
                 </View>
               </Card>
@@ -316,9 +322,9 @@ export default function Accounts() {
                   },
                 ]}
               >
-                <Avatar name={a.nombre} size={32} />
+                <Avatar name={a.nombre} seed={a.usuarioId} size={32} />
                 <Label size={13}>
-                  {a.nombre.split(" ")[0]} no debe ni tiene por cobrar.
+                  {a.usuarioId === user?.id ? "Tú no debes ni tienes por cobrar." : `${nameOf(a.usuarioId, a.nombre)} no debe ni tiene por cobrar.`}
                 </Label>
               </View>
             ))}

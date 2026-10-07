@@ -52,7 +52,10 @@ export default function EditProfile() {
         maxLength={100}
         style={design.input}
       />
-      <Label weight="bold">Celular (opcional)</Label>
+      <Label weight="bold">Celular para Yape o Plin (opcional)</Label>
+      <Label size={12} color={palette.muted}>
+        Solo lo ven las personas de tus grupos cuando van a pagarte, y sirve para que te agreguen a un grupo.
+      </Label>
       <TextInput
         accessibilityLabel="Celular peruano"
         value={phone}
@@ -69,6 +72,13 @@ export default function EditProfile() {
           No se cambia desde este formulario para proteger el acceso a tu
           cuenta.
         </Label>
+        {usuario?.conGoogle && (
+          <Label size={12} color={palette.muted}>
+            {usuario.tienePassword === false
+              ? "Entras con Google. Si también quieres entrar con contraseña, usa «¿Olvidaste tu contraseña?» al iniciar sesión."
+              : "Puedes entrar con Google o con tu contraseña."}
+          </Label>
+        )}
       </Card>
       {!!error && <ErrorBox message={error} />}
       <Button

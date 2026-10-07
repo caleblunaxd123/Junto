@@ -74,9 +74,9 @@ export default function Join() {
                     {preview.data.nombre}
                   </Label>
                   <Label>
-                    {preview.data.miembros} personas comparten sus gastos aquí.
-                    Al unirte podrás ver los gastos del grupo; entrar no
-                    registra ningún pago.
+                    {preview.data.miembros} {preview.data.miembros === 1 ? "persona comparte" : "personas comparten"} sus gastos aquí.
+                    Al unirte verás los gastos del grupo; entrar no registra
+                    ningún gasto ni pago.
                   </Label>
                 </>
               )}
@@ -90,18 +90,17 @@ export default function Join() {
           ) : (
             <>
               <Label>
-                Inicia sesión o crea tu cuenta. Guardaremos esta invitación para
-                que puedas unirte al terminar; no necesitas abrir el enlace otra
-                vez.
+                Crea tu cuenta o inicia sesión. Guardamos esta invitación y te
+                unirás al terminar, sin abrir el enlace otra vez.
               </Label>
               <Button
-                title="Iniciar sesión"
-                onPress={() => authenticate(false)}
+                title="Crear cuenta"
+                onPress={() => authenticate(true)}
               />
               <Button
-                title="Crear cuenta"
+                title="Ya tengo cuenta"
                 secondary
-                onPress={() => authenticate(true)}
+                onPress={() => authenticate(false)}
               />
             </>
           )}

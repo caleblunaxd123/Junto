@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import { initMonitoring } from './lib/monitoring';
+initMonitoring();
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -10,6 +12,8 @@ import gastosRoutes from './routes/gastos.routes';
 import pagosRoutes from './routes/pagos.routes';
 import aiRoutes from './routes/ai.routes';
 import cuentasRoutes from './routes/cuentas.routes';
+import publicRoutes from './routes/public.routes';
+import { emailProvider } from './lib/email';
 import { authMiddleware } from './middleware/auth';
 import { getActivity } from './services/activity.service';
 import { errorHandler } from './middleware/errorHandler';
@@ -22,9 +26,13 @@ const allowedOrigins = (process.env.FRONTEND_URL || '').split(',').map((value) =
 if (process.env.NODE_ENV === 'production') {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 || /super_secret|cambia_esto|local-qa|example/i.test(process.env.JWT_SECRET)) throw new Error('Configure a strong production JWT_SECRET before starting JUNTO.');
   if (!allowedOrigins.length || allowedOrigins.some((origin) => !origin.startsWith('https://') || origin.includes('*'))) throw new Error('Configure explicit HTTPS FRONTEND_URL origins for production.');
+  // Without e-mail nobody can verify an account; keep serving existing users but make it loud.
+  if (!emailProvider()) console.error('[Email] Sin proveedor de correo: el registro y la recuperación de contraseña no funcionarán. Configura RESEND_API_KEY o SMTP_*.');
 }
 
 // Security & logging
+// Render/railway terminate TLS in a proxy; without this every client shares one rate-limit bucket.
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1);
 app.use(helmet());
 app.use(
   cors({
@@ -53,8 +61,11 @@ app.get('/api/actividad', authMiddleware, async (req, res, next) => {
 
 // Health check
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', env: process.env.NODE_ENV, timestamp: new Date().toISOString() });
+  res.json({ status: 'ok', env: process.env.NODE_ENV, email: emailProvider() ?? 'sin configurar', timestamp: new Date().toISOString() });
 });
+
+// Public web: invitation landing, App Links, privacy and account deletion.
+app.use(publicRoutes);
 
 // Global error handler
 app.use(errorHandler);

@@ -1,46 +1,29 @@
 import React, { useState } from "react";
-import {
-  View,
-  TextInput,
-  Pressable,
-  Image,
-  ScrollView,
-} from "react-native";
+import { View, TextInput, Pressable, Image, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
 import { router } from "expo-router";
 import { useCrearGrupo } from "../../../src/hooks/useGrupos";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { api } from "../../../src/lib/api";
 import { queryClient } from "../../../src/lib/queryClient";
-import {
-  Screen,
-  Card,
-  Label,
-  Button,
-  ErrorBox,
-  Avatar,
-  palette,
-  design,
-} from "../../../src/components/ui/Design";
-import {
-  ReferenceHero,
-  IconBubble,
-  SectionTitle,
-  FormField,
-} from "../../../src/components/ui/Reference";
+import { guessGroupType } from "../../../src/lib/groupType";
+import { Screen, Label, Button, ErrorBox, palette, design } from "../../../src/components/ui/Design";
+import { FormField } from "../../../src/components/ui/Reference";
 import { art } from "../../../src/components/ui/Artwork";
+
 const types = [
-  { id: "viaje", label: "Viaje", image: art.travel },
+  { id: "roomies", label: "Depa", image: art.home },
   { id: "pareja", label: "Pareja", image: art.couple },
-  { id: "roomies", label: "Departamento", image: art.home },
+  { id: "viaje", label: "Viaje", image: art.travel },
   { id: "amigos", label: "Amigos", image: art.group },
   { id: "otro", label: "Otro", image: art.other },
 ];
+
 export default function CreateGroup() {
   const user = useAuthStore((s) => s.usuario);
   const [name, setName] = useState("");
-  const [type, setType] = useState("viaje");
+  const [picked, setPicked] = useState<string | null>(null);
+  const type = picked ?? guessGroupType(name) ?? "amigos";
   const [error, setError] = useState("");
   const [identifier, setIdentifier] = useState("");
   const [people, setPeople] = useState<string[]>([]);
@@ -48,6 +31,7 @@ export default function CreateGroup() {
   const [createdId, setCreatedId] = useState("");
   const [busy, setBusy] = useState(false);
   const create = useCrearGrupo();
+
   function addPerson() {
     const value = identifier.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(value) && !/^(?:\+51\s*)?9\d{8}$/.test(value)) {
@@ -62,11 +46,15 @@ export default function CreateGroup() {
     setIdentifier("");
     setError("");
   }
+
   async function submit() {
     if (busy) return;
-    if (name.trim().length < 2 || name.trim().length > 100) { setError("El nombre del grupo debe tener entre 2 y 100 caracteres."); return; }
+    if (name.trim().length < 2 || name.trim().length > 100) {
+      setError("Ponle un nombre de 2 a 100 letras, por ejemplo «Depa Miraflores».");
+      return;
+    }
     if (identifier.trim()) {
-      setError("Pulsa Agregar para incluir el correo o celular que escribiste, o borra ese campo para continuar sin esa persona.");
+      setError("Toca «Agregar» para sumar a esa persona, o borra el campo.");
       return;
     }
     let groupId = createdId;
@@ -74,259 +62,129 @@ export default function CreateGroup() {
       setBusy(true);
       setError("");
       if (!groupId) {
-        const group = await create.mutateAsync({
-          nombre: name.trim(),
-          tipo: type,
-        });
+        const group = await create.mutateAsync({ nombre: name.trim(), tipo: type });
         groupId = group.id;
         setCreatedId(groupId);
       }
       const results = await Promise.all(
-        people.map((identificador) =>
-          api
-            .post(`/grupos/${groupId}/invitar`, { identificador })
-            .then((r) => r.data),
-        ),
+        people.map((identificador) => api.post(`/grupos/${groupId}/invitar`, { identificador }).then((r) => r.data)),
       );
       await queryClient.invalidateQueries({ queryKey: ["grupos"] });
-      if (results.some((r) => !r.found)) {
-        Alert.alert(
-          "Tu grupo está creado",
-          "Algunas personas aún no tienen cuenta. Comparte el enlace para que se registren y se unan.",
-        );
-        router.replace(`/(app)/grupos/agregar-personas?grupoId=${groupId}`);
-      } else router.replace(`/(app)/grupos/${groupId}`);
+      // The next useful step is almost always inviting: go straight there unless everyone is already in.
+      if (!people.length || results.some((r) => !r.found))
+        router.replace(`/(app)/grupos/agregar-personas?grupoId=${groupId}&nuevo=1`);
+      else router.replace(`/(app)/grupos/${groupId}`);
     } catch {
       setError(
         groupId
-          ? "Tu grupo ya está creado. No completamos todas las invitaciones; reintenta sin crear otro grupo."
-          : "No pudimos crear el grupo. Tus datos siguen aquí; reintenta.",
+          ? "Tu grupo ya está creado, pero no pudimos agregar a todos. Reintenta: no se creará otro grupo."
+          : "No pudimos crear el grupo. Revisa tu conexión; tus datos siguen aquí.",
       );
     } finally {
       setBusy(false);
     }
   }
+
   return (
     <Screen
-      title="Crear grupo"
-      subtitle="Organiza tus gastos y vive mejores momentos, juntos."
+      title="Nuevo grupo"
       back
+      footer={
+        <>
+          {!!error && <ErrorBox message={error} />}
+          <Button
+            title={createdId ? "Reintentar invitaciones" : "Crear grupo"}
+            onPress={submit}
+            loading={busy}
+            disabled={name.trim().length < 2}
+          />
+        </>
+      }
     >
-      <ReferenceHero
-        title="Un grupo para cada plan"
-        subtitle="Comparte gastos con las personas que hacen tus momentos especiales."
-        image={art.group}
-        height={155}
-      />
-      <SectionTitle title="Tipo de grupo" />
-      <Label size={12} color={palette.muted}>
-        Elige el tipo que mejor se ajuste a tu plan.
-      </Label>
-      <View style={{ flexDirection: "row", gap: 5 }}>
-        {types.map((t) => (
-          <Pressable
-            key={t.id}
-            accessibilityRole="button"
-            accessibilityState={{ selected: type === t.id }}
-            disabled={!!createdId || busy}
-            onPress={() => setType(t.id)}
-            style={{
-              flex: 1,
-              borderRadius: 16,
-              borderWidth: 1.5,
-              borderColor: type === t.id ? palette.primary : palette.line,
-              backgroundColor: type === t.id ? palette.mint : "white",
-              paddingVertical: 8,
-              alignItems: "center",
-            }}
-          >
-            <Image
-              source={t.image}
-              style={{ width: "100%", height: 57 }}
-              resizeMode="contain"
-            />
-            <Label size={t.id === "roomies" ? 8 : 10} weight="bold">
-              {t.label}
-            </Label>
-            {type === t.id && (
-              <View style={{ position: "absolute", right: 3, top: 3 }}>
-                <Ionicons
-                  name="checkmark-circle"
-                  size={18}
-                  color={palette.primary}
-                />
-              </View>
-            )}
-          </Pressable>
-        ))}
-      </View>
       <FormField
-        label="Nombre del grupo"
+        label="¿Cómo se llama?"
         icon="people-outline"
         accessibilityLabel="Nombre del grupo"
         maxLength={100}
         value={name}
         onChangeText={setName}
         editable={!createdId && !busy}
-        placeholder="Ej. Escapada a Cusco"
+        autoFocus
+        placeholder="Ej. Depa Miraflores, Viaje a Cusco"
+        onSubmitEditing={submit}
       />
-      <SectionTitle title="Invitar personas" />
-      <Label size={12} color={palette.muted}>
-        Por correo, celular o enlace. No necesitas acceder a tus contactos.
-      </Label>
-      <View style={{ flexDirection: "row", gap: 10 }}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() =>
-            Alert.alert(
-              "Compartir enlace",
-              "El enlace estará listo cuando crees el grupo. Podrás copiarlo o compartirlo desde “Invitar personas”.",
-            )
-          }
-          style={{ flex: 1 }}
-        >
-          <Card
-            style={{
-              backgroundColor: palette.mint,
-              padding: 14,
-              minHeight: 135,
-            }}
-          >
-            <IconBubble name="link" size={34} />
-            <Label weight="extra" size={14}>
-              Compartir enlace
-            </Label>
-            <Label size={11} color={palette.muted}>
-              Invita para que se unan al grupo.
-            </Label>
-          </Card>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setManual(true)}
-          style={{ flex: 1 }}
-        >
-          <Card
-            style={{
-              backgroundColor: palette.lilac,
-              padding: 14,
-              minHeight: 135,
-            }}
-          >
-            <IconBubble
-              name="person-add-outline"
-              size={34}
-              color={palette.purple}
-              background="#E3D6FF"
-            />
-            <Label weight="extra" size={14}>
-              Agregar personas manualmente
-            </Label>
-            <Label size={11} color={palette.muted}>
-              Añade por correo o celular.
-            </Label>
-          </Card>
-        </Pressable>
+      <View style={{ gap: 8 }}>
+        <Label weight="bold" size={14}>Tipo</Label>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          {types.map((t) => {
+            const selected = type === t.id;
+            return (
+              <Pressable
+                key={t.id}
+                accessibilityRole="radio"
+                accessibilityLabel={t.label}
+                accessibilityState={{ checked: selected }}
+                disabled={!!createdId || busy}
+                onPress={() => setPicked(t.id)}
+                style={{ width: 76, borderRadius: 16, borderWidth: 1.5, borderColor: selected ? palette.primary : palette.line, backgroundColor: selected ? palette.mint : "white", paddingVertical: 8, alignItems: "center", gap: 2 }}
+              >
+                <Image source={t.image} style={{ width: 52, height: 44 }} resizeMode="contain" />
+                <Label size={12} weight="bold" color={selected ? "#007B60" : palette.ink}>{t.label}</Label>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+        {!picked && !!guessGroupType(name) && (
+          <Label size={12} color={palette.muted}>Lo elegimos por el nombre; puedes cambiarlo.</Label>
+        )}
       </View>
-      <Card
-        style={{
-          padding: 12,
-          backgroundColor: "#EEF6FF",
-          flexDirection: "row",
-          alignItems: "center",
-        }}
-      >
-        <Ionicons name="information-circle-outline" size={24} color="#398BE5" />
-        <Label size={12} color={palette.muted} style={{ flex: 1 }}>
-          Quienes ya tengan cuenta se agregarán al crear el grupo. Para los
-          demás, comparte el enlace de invitación.
-        </Label>
-      </Card>
-      <SectionTitle
-        title={`Tú + ${people.length} ${people.length === 1 ? "invitación" : "invitaciones"}`}
-        action="Agregar más"
-        onPress={() => setManual(true)}
-      />
-      {!people.length && <Label size={12} color={palette.muted}>Puedes crear el grupo ahora e invitar a los demás después.</Label>}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 8 }}
-      >
-        <View
-          style={[
-            design.row,
-            { backgroundColor: "white", borderRadius: 30, padding: 8 },
-          ]}
+
+      <View style={{ gap: 8 }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded: manual }}
+          onPress={() => setManual((v) => !v)}
+          style={[design.row, { minHeight: 44, gap: 8 }]}
         >
-          <Avatar name={user?.nombre || "Tú"} size={36} />
-          <Label size={12} weight="bold">
-            {user?.nombre.split(" ")[0]} (Tú)
+          <Ionicons name="person-add-outline" size={18} color={palette.purple} />
+          <Label size={14} weight="bold" color={palette.purple} style={{ flex: 1 }}>
+            {manual ? "Ocultar" : "¿Ya usan JUNTO? Agrégalos por correo o celular"}
           </Label>
-        </View>
-        {people.map((p) => (
-          <View
-            key={p}
-            style={[
-              design.row,
-              { backgroundColor: palette.lilac, borderRadius: 30, padding: 8 },
-            ]}
-          >
-            <Ionicons name="person-outline" color={palette.purple} size={22} />
-            <Label size={11}>{p}</Label>
-            <Pressable
-              accessibilityLabel={`Quitar ${p}`}
-              disabled={busy}
-              hitSlop={12}
-              onPress={() => setPeople((items) => items.filter((v) => v !== p))}
-            >
-              <Ionicons name="close" size={20} color={palette.muted} />
-            </Pressable>
-          </View>
-        ))}
-      </ScrollView>
-      {manual && (
-        <View style={design.row}>
-          <TextInput
-            accessibilityLabel="Correo o celular de la persona"
-            style={[design.input, { flex: 1 }]}
-            value={identifier}
-            onChangeText={setIdentifier}
-            placeholder="Correo o celular"
-            autoCapitalize="none"
-            editable={!busy}
-          />
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy}
-            onPress={addPerson}
-            style={{
-              backgroundColor: palette.mint,
-              borderRadius: 16,
-              padding: 16,
-            }}
-          >
-            <Label color="#078B70" weight="bold" size={12}>
-              Agregar
-            </Label>
-          </Pressable>
-        </View>
-      )}
-      {!!error && <ErrorBox message={error} />}
-      <Button
-        title={createdId ? "Completar invitaciones →" : "Crear grupo →"}
-        onPress={submit}
-        loading={busy}
-        disabled={name.trim().length < 2}
-      />
-      {!!createdId && (
-        <Button
-          title="Abrir mi grupo creado"
-          secondary
-          disabled={busy}
-          onPress={() => router.replace(`/(app)/grupos/${createdId}`)}
-        />
-      )}
+        </Pressable>
+        {manual && (
+          <>
+            <View style={design.row}>
+              <TextInput
+                accessibilityLabel="Correo o celular de la persona"
+                style={[design.input, { flex: 1 }]}
+                value={identifier}
+                onChangeText={setIdentifier}
+                placeholder="ana@correo.com o 999888777"
+                placeholderTextColor="#8B98AE"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                editable={!busy}
+                onSubmitEditing={addPerson}
+              />
+              <Pressable accessibilityRole="button" disabled={busy} onPress={addPerson} style={{ backgroundColor: palette.mint, borderRadius: 16, minHeight: 54, paddingHorizontal: 16, justifyContent: "center" }}>
+                <Label color="#078B70" weight="bold" size={14}>Agregar</Label>
+              </Pressable>
+            </View>
+            {people.map((p) => (
+              <View key={p} style={[design.row, { backgroundColor: palette.lilac, borderRadius: 16, paddingHorizontal: 12, minHeight: 44 }]}>
+                <Ionicons name="person-outline" color={palette.purple} size={18} />
+                <Label size={13} style={{ flex: 1 }} numberOfLines={1}>{p}</Label>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Quitar ${p}`} disabled={busy} hitSlop={12} onPress={() => setPeople((items) => items.filter((v) => v !== p))}>
+                  <Ionicons name="close" size={20} color={palette.muted} />
+                </Pressable>
+              </View>
+            ))}
+          </>
+        )}
+        <Label size={12} color={palette.muted}>
+          Al crear el grupo te daremos un enlace para invitar a los demás por WhatsApp.
+        </Label>
+      </View>
     </Screen>
   );
 }

@@ -9,6 +9,9 @@ export interface Usuario {
   emailVerificado: boolean;
   fechaRegistro: string;
   expoPushToken?: string | null;
+  /** false for accounts created with Google that never set a password. */
+  tienePassword?: boolean;
+  conGoogle?: boolean;
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
@@ -35,7 +38,7 @@ export interface GrupoMiembro {
   rol: MiembroRol;
   fechaUnion: string;
   activo: boolean;
-  usuario: Pick<Usuario, "id" | "nombre" | "email" | "fotoUrl">;
+  usuario: Pick<Usuario, "id" | "nombre" | "email" | "fotoUrl"> & { celular?: string | null };
 }
 
 export interface Grupo {
@@ -63,6 +66,7 @@ export interface GrupoConBalance extends Grupo {
       pagosRecibidos: number;
       neto: number;
     }[];
+    saldos?: Saldo[];
   };
   balanceUsuario: {
     teDeben: number; // en centavos
@@ -136,7 +140,7 @@ export interface Saldo {
 // ─── Payments ─────────────────────────────────────────────────────────────────
 
 export type MetodoPago = "yape" | "plin" | "transferencia" | "efectivo";
-export type EstadoPago = "reportado" | "exitoso" | "rechazado" | "fallido";
+export type EstadoPago = "reportado" | "exitoso" | "rechazado" | "fallido" | "cancelado";
 
 export interface Pago {
   nota?: string | null;
@@ -173,6 +177,24 @@ export interface Recordatorio {
   leido: boolean;
   fechaEnvio: string;
   fechaLectura?: string | null;
+}
+
+// ─── Activity ─────────────────────────────────────────────────────────────────
+
+export interface ActividadEvento {
+  id: string;
+  tipo: "gasto" | "pago";
+  titulo: string;
+  detalle: string;
+  monto: number;
+  fecha: string;
+  grupoId: string;
+  gastoId: string | null;
+  pagoId: string | null;
+  estado?: EstadoPago;
+  tuParte?: number | null;
+  pagaste?: boolean;
+  requiereAccion: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

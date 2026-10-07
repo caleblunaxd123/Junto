@@ -73,14 +73,14 @@ export default function QuickBillDetail() {
     {query.isLoading ? <ActivityIndicator color={palette.primary} /> : !bill ? <><ErrorBox message="No pudimos abrir esta cuenta." /><Button title="Reintentar" onPress={() => refetch()} /></> : <>
       {query.isError && <><ErrorBox message="No pudimos actualizar. Este es el último desglose consultado; actualiza antes de confirmar o compartir." /><Button title="Actualizar cuenta" secondary onPress={() => refetch()} /></>}
       <Card style={{ backgroundColor: palette.mint }}><Label weight="extra" size={22}>{bill.datos.nombre}</Label><Label weight="extra" size={32}>{money(bill.resultado.montoTotal)}</Label><Label size={13}>{bill.resultado.partes.length} personas · {bill.resultado.cantidadPagadores} aportan · {bill.archivada ? "Archivada" : bill.estado === "completada" ? "Completada" : bill.estado === "parcial" ? "Aportes parciales" : "Abierta"}</Label></Card>
-      <View style={design.row}><Card style={{ flex: 1 }}><Label size={12}>Confirmado</Label><Label weight="extra" size={20}>{money(bill.cobrado)}</Label></Card><Card style={{ flex: 1, backgroundColor: palette.lilac }}><Label size={12}>Por confirmar</Label><Label weight="extra" size={20}>{money(bill.pendiente)}</Label></Card></View>
+      <View style={design.row}><Card style={{ flex: 1 }}><Label size={12}>Ya cobrado</Label><Label weight="extra" size={20}>{money(bill.cobrado)}</Label></Card><Card style={{ flex: 1, backgroundColor: palette.lilac }}><Label size={12}>Falta cobrar</Label><Label weight="extra" size={20}>{money(bill.pendiente)}</Label></Card></View>
       <Button title="Revisar y compartir reparto" disabled={query.isError} onPress={() => { setPage(0); setImageReady(false); setPreview(true); }} />
       <Label size={12} color={palette.muted}>No es saldo bancario ni una deuda de tus grupos. Solo tú confirmas los aportes después de comprobarlos.</Label>
       {bill.resultado.partes.map((p) => {
         const confirmed = bill.aportes[p.id] || 0;
         return <Card key={p.id} style={{ padding: 14, backgroundColor: p.invitado ? palette.lilac : confirmed === p.total ? palette.mint : "white" }}>
           <View style={[design.row, { justifyContent: "space-between" }]}><Label weight="bold" style={{ flex: 1 }}>{p.nombre}</Label><Label weight="extra" size={21}>{money(p.total)}</Label></View>
-          <Label size={12} color={palette.muted}>{p.invitado ? "Invitado: no paga." : bill.datos.division === "igual" ? `Parte ${money(p.consumo)} + extras ${money(p.extras)}` : `Consumo ${money(p.consumo)} + invitados ${money(p.invitados)} + extras ${money(p.extras)}`}</Label>
+          <Label size={12} color={palette.muted}>{p.invitado ? "Invitado: no paga." : bill.datos.division === "igual" ? (p.extras ? `Parte ${money(p.consumo)} + extras ${money(p.extras)}` : "Parte igual") : `Consumo ${money(p.consumo)} + invitados ${money(p.invitados)} + extras ${money(p.extras)}`}</Label>
           {!p.invitado && p.total > 0 && <><Label size={12}>Confirmado {money(confirmed)} · falta {money(p.total - confirmed)}</Label><Button title={confirmed ? "Ver / corregir aporte" : "Registrar aporte recibido"} secondary disabled={disabled} onPress={() => { setAmount(centavosASoles(confirmed || p.total)); setSelected(p.id); }} /></>}
         </Card>;
       })}

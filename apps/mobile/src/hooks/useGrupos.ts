@@ -108,10 +108,12 @@ export function useInterpretarGasto() {
   });
 }
 
-export function useEnviarRecordatorio(grupoId: string) {
+export function useEnviarRecordatorio(grupoId?: string) {
   return useMutation({
-    mutationFn: (data: { deudorId: string; tono: string }) =>
-      api.post(`/grupos/${grupoId}/recordar`, data).then((r) => r.data),
+    mutationFn: (data: { deudorId: string; tono: string; grupoId?: string }) =>
+      api
+        .post(`/grupos/${data.grupoId ?? grupoId}/recordar`, { deudorId: data.deudorId, tono: data.tono })
+        .then((r) => r.data),
   });
 }
 
@@ -123,7 +125,8 @@ export function usePagos() {
   });
 }
 
-export function useResolverPago(grupoId: string) {
+/** Confirm or reject a payment someone says they made to you. */
+export function useResolverPago() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -140,7 +143,7 @@ export function useResolverPago(grupoId: string) {
       queryClient.invalidateQueries({ queryKey: ["actividad"] });
       queryClient.invalidateQueries({ queryKey: ["pagos"] });
       queryClient.invalidateQueries({ queryKey: ["grupos"] });
-      queryClient.invalidateQueries({ queryKey: ["grupos", grupoId] });
+      queryClient.invalidateQueries({ queryKey: ["saldos"] });
     },
   });
 }

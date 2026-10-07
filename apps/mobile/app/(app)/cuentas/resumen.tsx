@@ -13,8 +13,10 @@ import {
   design,
 } from "../../../src/components/ui/Design";
 import { centavosASoles } from "../../../src/types";
+import { useAuthStore } from "../../../src/store/auth.store";
 const money = (v: number) => `S/ ${centavosASoles(v)}`;
 export default function AccountsOverview() {
+  const user = useAuthStore((s) => s.usuario);
   const groupsQuery = useGrupos();
   const paymentsQuery = usePagos();
   const { refetch: refreshGroups } = groupsQuery;
@@ -111,11 +113,14 @@ export default function AccountsOverview() {
                     }
                   >
                     <Label size={13}>
-                      {payment.pagador.nombre} → {payment.receptor.nombre}:{" "}
-                      {money(payment.monto)}
+                      {payment.receptorId === user?.id
+                        ? `${payment.pagador.nombre.split(" ")[0]} dice que te pagó ${money(payment.monto)}`
+                        : payment.pagadorId === user?.id
+                          ? `Tu pago de ${money(payment.monto)} a ${payment.receptor.nombre.split(" ")[0]}`
+                          : `${payment.pagador.nombre.split(" ")[0]} → ${payment.receptor.nombre.split(" ")[0]}: ${money(payment.monto)}`}
                     </Label>
                     <Label size={12} color={palette.muted}>
-                      Ver grupo y estado del pago ›
+                      {payment.receptorId === user?.id ? "Confirmar en el grupo ›" : "Ver grupo ›"}
                     </Label>
                   </Pressable>
                 ))}

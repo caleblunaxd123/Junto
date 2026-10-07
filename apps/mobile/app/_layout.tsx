@@ -13,6 +13,10 @@ import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { useAuthStore } from "../src/store/auth.store";
 import { DialogHost } from "../src/components/ui/AppDialog";
+import { OfflineBanner } from "../src/components/ui/OfflineBanner";
+import { Button, Label, palette } from "../src/components/ui/Design";
+import { View } from "react-native";
+import type { ErrorBoundaryProps } from "expo-router";
 import "../global.css";
 
 SplashScreen.preventAutoHideAsync();
@@ -39,6 +43,7 @@ function RootLayoutInner() {
     <>
       <Stack screenOptions={{ headerShown: false }} />
       <StatusBar style="dark" />
+      <OfflineBanner />
       <DialogHost />
     </>
   );
@@ -49,5 +54,18 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <RootLayoutInner />
     </QueryClientProvider>
+  );
+}
+
+/** Any unexpected screen error lands here instead of a blank or red screen. */
+export function ErrorBoundary({ retry }: ErrorBoundaryProps) {
+  return (
+    <View style={{ flex: 1, backgroundColor: palette.background, padding: 24, justifyContent: "center", gap: 16 }}>
+      <Label accessibilityRole="header" size={24} weight="extra">Algo salió mal</Label>
+      <Label color={palette.muted}>
+        No perdiste nada de lo que ya estaba guardado. Vuelve a intentarlo; si se repite, cuéntanos desde Perfil → Contactar soporte.
+      </Label>
+      <Button title="Reintentar" onPress={retry} />
+    </View>
   );
 }

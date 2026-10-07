@@ -36,8 +36,8 @@ cp apps/api/.env.example apps/api/.env
 cp apps/mobile/.env.example apps/mobile/.env
 # Editar los .env con tus credenciales
 
-# 5. Correr migraciones
-npm run db:migrate
+# 5. Aplicar migraciones (versionadas en apps/api/prisma/migrations)
+npm run db:deploy        # para crear una nueva: npm run db:migrate
 
 # 6. Iniciar backend
 npm run dev:api
@@ -77,4 +77,6 @@ El borrador de cuenta puntual se conserva por usuario en almacenamiento privado 
 
 `apps/mobile/eas.json` prepara APK interno y AAB de producción. La configuración bloquea distribuciones sin API HTTPS, privacidad, canal de eliminación y correo de soporte. Tener esas variables no demuestra que sus páginas o procesos funcionen: deben verificarse antes de publicar.
 
-Pendientes externos y de producto: entrega SMTP real, política de conservación/eliminación de registros compartidos y su implementación completa, canales públicos de soporte/privacidad, despliegue con las migraciones nuevas, revisión de vulnerabilidades, compilación firmada y pruebas fuera de Expo Go. Consulta `RELEASE_CHECKLIST.md`. Esta versión no se declara lista para Play Store.
+La API también sirve la web pública: `/unirse/:code` (invitaciones con App Links y Google Play), `/privacidad`, `/eliminar-cuenta` y `/.well-known/assetlinks.json`. Las migraciones y su línea base para la base existente están explicadas en `apps/api/prisma/MIGRATIONS.md`.
+
+Lo que falta depende de cuentas y datos del propietario (dominio, correo, EAS/Firebase, Play Console). Consulta `RELEASE_CHECKLIST.md`.

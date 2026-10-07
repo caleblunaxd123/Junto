@@ -71,7 +71,7 @@ export default function ExpenseDetail() {
             <Label size={34} weight="extra">
               S/ {centavosASoles(expense.montoTotal)}
             </Label>
-            <Label>{expense.pagador.nombre} adelantó este dinero.</Label>
+            <Label>{expense.pagadoPor === user?.id ? "Tú adelantaste este dinero." : `${expense.pagador.nombre} adelantó este dinero.`}</Label>
             <Label size={13} color={palette.muted}>
               {new Date(expense.fecha).toLocaleDateString("es-PE")} ·{" "}
               {expense.categoria}
@@ -83,7 +83,7 @@ export default function ExpenseDetail() {
             </Label>
             {expense.participantes.map((p) => (
               <View key={p.id} style={design.row}>
-                <Avatar name={p.usuario.nombre} />
+                <Avatar name={p.usuario.nombre} photo={p.usuario.fotoUrl} seed={p.usuarioId} />
                 <Label style={{ flex: 1 }}>
                   {p.usuario.nombre}
                   {p.usuarioId === user?.id ? " (tú)" : ""}
