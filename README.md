@@ -87,6 +87,18 @@ Los gastos, cuentas explicadas, cuentas puntuales e invitaciones muestran primer
 
 La vista previa presenta el total y las personas en tarjetas, con el texto completo desplegable. Correo abre su propio formulario con el destinatario arriba, fuera del área que tapa el teclado. En Android se adjunta una imagen del resumen, revisable antes de abrir el correo: el editor nativo convierte HTML a texto con formato y no conserva tarjetas/tablas CSS. En iOS se usa HTML con estilos inline, tablas, total, aportes, invitados e instrucciones. En web `mailto:` entrega texto. No se promete la misma apariencia de HTML en todos los clientes ni entrega por abrir un borrador. Las imágenes generadas se mantienen en la caché temporal mientras la app corre; comprobar borradores y recepción en clientes reales antes de publicar.
 
+### Enviar desde JUNTO (correo HTML desde la API)
+
+Con sesión iniciada, en grupos, gastos y cuentas de un día el formulario de correo ofrece «Enviar desde JUNTO»: el correo llega con el diseño completo (tablas y estilos inline), a nombre de quien lo comparte y con `Reply-To` a su correo. La app solo envía referencias (`POST /api/compartir/correo` con tipo e id del recurso, destinatario, clave de envío y una huella de lo revisado); el servidor arma el contenido desde la base de datos tras comprobar que la persona es dueña de la cuenta o miembro del grupo, y no acepta HTML, asunto ni montos del cliente. Si las cuentas cambiaron después de revisarlas, no se envía.
+
+- Idempotente: la misma clave devuelve el mismo resultado; un doble toque espera al primero.
+- Límites por persona (en base de datos): 5 cada 10 minutos, 30 al día, 10 direcciones distintas al día; no repite el mismo resumen a la misma dirección en 10 minutos.
+- Estados: «aceptado» (el proveedor lo tomó; **no** significa entregado ni leído), «fallido» e «incierto» (timeout: no sabemos si salió y un reintento con la misma clave no lo reenvía).
+- Sin `RESEND_API_KEY`/SMTP la API responde 503 y la app solo ofrece abrirlo en Gmail/Outlook (`GET /api/compartir/correo/estado`).
+- El destinatario se guarda como hash con clave (`EMAIL_HASH_SECRET`, o `JWT_SECRET` si falta) y una máscara `a***@dominio`; se borra al eliminar la cuenta. Sin imágenes remotas ni seguimiento.
+
+Prueba local sin enviar nada fuera del equipo (receptor SMTP propio, dos instancias de la API): `npm run build:api && DATABASE_URL=… JWT_SECRET=… node ops/test-share-email-api.cjs`.
+
 Plantilla ficticia para revisión visual: `node ops/preview-share-email.cjs`, luego abrir `http://127.0.0.1:3006`. No envía correo. Tests de diseño, importes y escape de HTML: `node --test ops/test-share-email.cjs`.
 
 El correo transaccional de registro y recuperación es independiente. Necesita Resend o SMTP en la API. Sin proveedor real, el registro devuelve `emailDelivery: false`; reenviar avisa del fallo en vez de afirmar que llegó. SMTP exige TLS (587 con STARTTLS o 465 con TLS desde el inicio), con tiempos de espera limitados. Nunca incluyas contraseñas de Gmail en la app móvil.
@@ -94,6 +106,18 @@ El correo transaccional de registro y recuperación es independiente. Necesita R
 Para comprobar las plantillas y el protocolo SMTP sin enviar a nadie: `node --test ops/test-email.cjs`. Para los mensajes compartidos y la detección de WhatsApp: `node --test ops/test-sharing.cjs`.
 
 Para una prueba real con Gmail, crea tú una contraseña de aplicación y configúrala en el archivo privado `apps/api/.env.smtp.local` (no en Git ni en el chat). Después de compilar, desde la raíz: `node --env-file=apps/api/.env.smtp.local apps/api/dist/scripts/send-test-email.js calebluna41@gmail.com`. Verifica la bandeja y spam: el servidor solo puede certificar que el proveedor aceptó el correo, no que el destinatario lo leyó.
+
+## Pruebas de interfaz en web
+
+`ops/e2e-web.cjs` recorre en un navegador del tamaño de un teléfono: invitación pendiente tras iniciar sesión, sesión expirada, corte de red al guardar un gasto (debe quedar uno solo), volver atrás y reabrir un borrador. Necesita la API en `:3005` con una base de pruebas, Expo web en `:8081` y Chromium con `playwright-core`; esas dependencias web no forman parte del proyecto:
+
+```bash
+npm install --no-save react-native-web@~0.21.0 react-dom@19.1.0 @expo/metro-runtime@~6.1.2 playwright-core --workspace=apps/mobile
+EXPO_PUBLIC_API_URL=http://localhost:3005 npx expo start --web --offline   # en apps/mobile
+DATABASE_URL=postgresql://…localhost…/<base de pruebas> node ops/e2e-web.cjs
+```
+
+En web `expo-secure-store` no existe y zustand usa `import.meta`; para correrlo localmente se usó un reemplazo temporal en `node_modules` y `unstable_transformImportMeta` en babel, **sin** subir esos cambios. La web no sustituye pruebas nativas de teclado, Google, adjuntos o navegación de Android/iOS.
 
 ## Google y Android local
 

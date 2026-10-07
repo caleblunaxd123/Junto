@@ -16,6 +16,11 @@
 | Continuar con Google | Botón en la bienvenida, el login y el registro (`@react-native-google-signin/google-signin`). La API verifica el token con `google-auth-library` (firma, vencimiento, emisor y audiencia), crea la cuenta o la vincula por correo. Si el correo existía pero nunca se verificó, la contraseña anterior se anula: Google demostró quién es el dueño del correo. Un correo ya vinculado a otra cuenta de Google no se puede tomar. Las cuentas solo-Google se eliminan escribiendo ELIMINAR. | `ops/test-google-sign-in.cjs` (corre en CI), `src/domain/googleAccount.test.ts` |
 | Primer contacto | Ficha de Play Store lista para pegar (`store/google-play.md`: nombre con palabras clave, descripciones, orden de capturas, Data Safety). Bienvenida con los botones siempre visibles y «Probar sin cuenta»: una calculadora que divide la cuenta al instante sin registrarse ni guardar nada. Registro sin «confirmar contraseña», verificación que entra sola al escribir los 6 dígitos. | Recorrido automatizado en navegador (ver abajo) |
 
+| Correo desde la API | «Enviar desde JUNTO»: contenido armado en el servidor con autorización por recurso, huella de lo revisado, idempotencia, límites en base de datos, estados aceptado/fallido/incierto, Reply-To de quien comparte, sin imágenes remotas ni seguimiento. Sin proveedor: 503 y la app ofrece Gmail/Outlook. | `ops/test-share-email-api.cjs` (receptor SMTP local, en CI) |
+| Precisión | Escenarios A–E automatizados; gastos idempotentes (`solicitud_id`); aportes «recibí ahora» con acumulado calculado y corrección separada; el resumen del grupo cuenta todos sus pagos por confirmar. | `ops/test-money-scenarios.cjs`, `ops/test-expense-idempotency.cjs` |
+| Logs | Errores registrados por tipo/código/estado; nunca el objeto de Axios (con la API key y el OTP). Sin proveedor no se imprime el correo salvo `EMAIL_DEV_LOG=true`. | `apps/api/src/domain/logSafe.test.ts` |
+| Pagos heredados | Retirados el webhook y el cobro con Culqi, que no estaban habilitados. | — |
+
 ## Necesita al propietario (no se puede hacer desde el código)
 
 1. **Dominio**: apuntar `junto.pe` (o el que elijas) a la API y configurar `PUBLIC_WEB_URL` en la API y `EXPO_PUBLIC_WEB_URL` en EAS. Sin dominio, se usa la URL https de la API.
@@ -31,6 +36,20 @@
    3. *Crear ID de cliente → Android*, paquete `com.junto.app`, uno por cada certificado: la huella SHA-1 de «Firma de apps de Google Play» (Play Console → Integridad de la app) y la de las builds de prueba (`eas credentials`). No hay que copiar estos IDs a ningún lado, pero sin ellos Google responde DEVELOPER_ERROR.
    4. Probar en una build EAS (en Expo Go el botón avisa que funciona en la app instalada).
 9. **Asistente IA**: configurar `JUNTO_AI_BASE_URL`/`JUNTO_AI_API_KEY` en producción antes de volver a mostrarlo como pestaña. Sin él, las frases simples («Pagué 120 por la cena con Ana») siguen funcionando con reglas locales.
+
+## Pruebas pendientes en dispositivos y servicios reales
+
+Nada de esto se ejecutó en este entorno (sin emulador, sin cuentas reales). Cada punto indica qué confirmar:
+
+1. **Correo desde la API con proveedor real** (Resend o SES con dominio verificado): enviar un resumen de cuenta de un día, uno de grupo y uno de gasto a Gmail y a Outlook. Confirmar bandeja/spam, que tablas y colores se ven bien en web y en las apps móviles de Gmail/Outlook, que «Responder» va a quien compartió y que el texto alternativo se lee completo. Revisar el panel del proveedor: el estado «aceptado» de JUNTO debe coincidir con «sent/delivered» del proveedor.
+2. **Correo abierto en la app del teléfono (Android)**: la imagen adjunta del resumen sigue disponible si se guarda el borrador, se cierra JUNTO y se vuelve a abrir Gmail más tarde. Probar con un reparto de 30 personas (captura larga) en un teléfono de gama baja.
+3. **Continuar con Google** en una build EAS con la huella registrada: primer ingreso, cuenta existente con el mismo correo, cancelar el selector y cerrar sesión.
+4. **WhatsApp**: abrir con el texto, elegir chat, cancelar; teléfono sin WhatsApp.
+5. **Teclado y navegación Android**: formulario de gasto y de correo con teclado abierto, botón atrás del sistema en el asistente de cuenta de un día (debe retroceder un paso, no salir) y en los modales.
+6. **Lector de boletas** con 10 boletas reales (térmicas, arrugadas, con propina incluida) y una foto que no sea boleta: siempre debe pedir revisión y nunca perder el total escrito a mano.
+7. **TalkBack y letra grande** en Inicio, «+», probar sin cuenta (interruptor «Paga/Invitado»), aporte de una persona y correo.
+8. **Sin conexión**: guardar un gasto en modo avión y al volver la señal tocar Guardar de nuevo (debe quedar uno solo, como en la prueba web).
+9. **Notificaciones** con FCM: pago reportado, confirmado y recordatorio.
 
 ## Probar en dispositivos antes de la prueba cerrada
 

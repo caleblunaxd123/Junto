@@ -263,8 +263,8 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
             {!!error && <ErrorBox message={error} />}
             {!!serverResult && <MailOutcome result={serverResult} />}
             {serverMail ? <>
-              <Button title={serverResult?.estado === "aceptado" ? "Enviar a otra persona" : "Enviar desde JUNTO"} loading={busy} disabled={disabled || !email || invalidEmail || serverResult?.estado === "aceptado"} onPress={confirmSend} />
-              <Label size={11} color={palette.muted}>Llega con el diseño del resumen, desde JUNTO y con tu nombre. Las respuestas van a tu correo.</Label>
+              <Button title={serverResult?.estado === "aceptado" ? "Enviado ✓" : "Enviar desde JUNTO"} loading={busy} disabled={disabled || !email || invalidEmail || serverResult?.estado === "aceptado"} onPress={confirmSend} />
+              <Label size={11} color={palette.muted}>{serverResult?.estado === "aceptado" ? "Para enviarlo a otra persona, cambia el correo de arriba." : "Llega con el diseño del resumen, desde JUNTO y con tu nombre. Las respuestas van a tu correo."}</Label>
               {serverResult?.estado === "incierto" && <Button title="Enviar de nuevo de todos modos" secondary disabled={busy} onPress={() => Alert.alert("¿Enviar otra vez?", "Si el primero sí llegó, la persona recibirá dos correos iguales.", [{ text: "Cancelar", style: "cancel" }, { text: "Enviar otra vez", onPress: () => { mailRequest.current = newMailRequestId(); run(sendFromJunto, ""); } }])} />}
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><View style={{ flex: 1, height: 1, backgroundColor: palette.line }} /><Label size={11} color={palette.muted}>o</Label><View style={{ flex: 1, height: 1, backgroundColor: palette.line }} /></View>
             </> : !!resource && availability.data?.disponible === false && <Label size={11} color={palette.muted}>El envío directo desde JUNTO no está activo en esta versión. Usa tu app de correo.</Label>}

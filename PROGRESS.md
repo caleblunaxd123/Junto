@@ -1,41 +1,41 @@
-# Junto — Progress Tracker
+# JUNTO — estado real
 
-## Semana 1 — Fundación + Auth
-- [x] Monorepo setup (workspaces, git, .gitignore)
-- [x] Docker Compose con PostgreSQL 16
-- [ ] Backend: setup + dependencias
-- [ ] Backend: Prisma schema + migración
-- [ ] Backend: Feature 1 — Auth completo (register, login, refresh, forgot-password, reset, me)
-- [ ] Mobile: setup Expo + navegación
-- [ ] Mobile: pantallas de auth (splash, onboarding, login, registro, OTP)
+Actualizado el 8 de octubre de 2026 contrastando el código de `main` + esta rama, no el plan original por semanas (que estaba desactualizado: marcaba como pendiente casi todo lo que ya existe).
 
-## Semana 2 — Grupos
-- [ ] Backend: Feature 2 — Grupos completo
-- [ ] Backend: algoritmo de simplificación de deudas
-- [ ] Mobile: Home (lista de grupos con saldos)
-- [ ] Mobile: Crear grupo
-- [ ] Mobile: Detalle de grupo
+Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = funciona con límites conocidos · **Pendiente** = no existe o necesita algo externo.
 
-## Semana 3 — Gastos
-- [ ] Backend: Feature 3 — Gastos completo
-- [ ] Mobile: Agregar gasto (división por partes iguales/exactas/porcentajes)
-- [ ] Mobile: Detalle de gasto
+## Producto
 
-## Semana 4 — Recordatorios + Notificaciones
-- [ ] Backend: Feature 4 — Recordatorios + cron job
-- [ ] Firebase Cloud Messaging setup
-- [ ] Mobile: Botón recordar + config recordatorio automático
+| Área | Estado | Evidencia |
+| --- | --- | --- |
+| Registro, verificación por código, login, recuperación, cerrar sesión | Hecho | `ops/test-redesign.cjs`, `ops/test-security-ux.cjs` (OTP de un solo uso, rotación de sesiones, límite de intentos) |
+| Continuar con Google | Parcial | Backend probado con claims (`ops/test-google-sign-in.cjs`); falta el inicio de sesión real en Android con la cuenta del propietario |
+| Probar sin cuenta (sin servidor) | Hecho | Nombres opcionales, invitados por persona, propina; conservar el cálculo con consentimiento (`ops/test-mobile-ux.cjs`) |
+| Grupos, invitaciones por enlace/correo/celular | Hecho | `ops/test-redesign.cjs`; App Links necesita dominio y huella de Play |
+| Gastos por partes iguales, montos y porcentajes, en céntimos | Hecho | `apps/api/src/domain/money.test.ts`, escenarios A–E (`ops/test-money-scenarios.cjs`) |
+| Gastos sin duplicados por doble toque o reintento | Hecho | `ops/test-expense-idempotency.cjs`, recorrido web con corte de red (`ops/e2e-web.cjs`) |
+| Saldos simplificados, pagos externos reportados y confirmados por quien recibe | Hecho | Un pago reportado no reduce la deuda hasta confirmarse (escenario E) |
+| Cuentas de un día: total, personas, invitados, consumos, extras, aportes parciales, historial, archivo | Hecho | `ops/test-quick-bills.cjs`, `ops/test-bill-validation.cjs` |
+| Lector de boletas (OCR local en la API) | Parcial | Propone el total y exige revisión; probado con boleta ficticia. Falta probar boletas reales variadas |
+| Compartir por WhatsApp, menú del teléfono, copiar | Hecho | `ops/test-sharing.cjs`; envío real depende del teléfono |
+| Correo abierto en Gmail/Outlook | Parcial | Android adjunta imagen; iOS HTML; web texto. Falta prueba en teléfonos con cuentas reales |
+| Correo HTML enviado desde la API | Hecho en código | `ops/test-share-email-api.cjs` con SMTP local. Falta proveedor real (Resend/SES) y prueba de recepción |
+| Recordatorios manuales y automáticos (cron diario) | Parcial | Rutas y job existen; notificaciones dependen de Firebase/EAS |
+| Notificaciones push | Pendiente externo | Código listo; requiere proyecto EAS y Firebase del propietario |
+| Eliminar cuenta (app y web) | Hecho | `ops/test-account-deletion.cjs` |
+| Cobros integrados (Culqi/Yape) | Retirado | JUNTO no cobra. Se quitó el webhook y el cobro heredados, que no estaban habilitados |
 
-## Semana 5 — Pagos Yape
-- [ ] Backend: Feature 5 — Integración Culqi
-- [ ] Mobile: Pantalla de pago Yape
-- [ ] Testing flujo completo de pago
+## Plataforma
 
-## Semana 6 — Polish + Deploy
-- [ ] UI/UX polish
-- [ ] Testing en dispositivo Android real
-- [ ] EAS Build (APK)
-- [ ] Deploy backend en Railway/Render
+| Área | Estado |
+| --- | --- |
+| Migraciones Prisma versionadas, CI con Postgres y verificación de desfase | Hecho |
+| Actualización no destructiva desde la base anterior | Probada en base aislada (gasto previo intacto) |
+| Logs sin claves, OTP ni montos | Hecho (`apps/api/src/domain/logSafe.test.ts`) |
+| Sentry en la API | Opcional, requiere DSN |
+| Build Android (APK/AAB) firmada | Pendiente externo (EAS + Play Console) |
+| Despliegue HTTPS con dominio | Pendiente externo |
 
----
-*Última actualización: Setup inicial*
+## Lo que todavía no está demostrado
+
+Ver «Pruebas pendientes en dispositivos y servicios reales» en `RELEASE_CHECKLIST.md`. Pasar lint, TypeScript y las pruebas locales no equivale a estar listo para Play Store.
