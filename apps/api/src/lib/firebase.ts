@@ -1,3 +1,4 @@
+import axios from "axios";
 import { describeError } from "./logSafe";
 import { initializeApp, cert } from 'firebase-admin';
 
@@ -39,26 +40,14 @@ export async function sendPushNotification(
   if (!/^Expo(nent)?PushToken\[.+\]$/.test(expoPushToken)) return;
 
   try {
-    // Expo push token format: ExponentPushToken[...]
-    // For direct FCM, we'd need native token — using Expo Push API as fallback
-    const response = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'Accept-Encoding': 'gzip, deflate',
-      },
-      body: JSON.stringify({
-        to: expoPushToken,
-        title,
-        body,
-        data: data || {},
-        sound: 'default',
-        priority: 'high',
-      }),
-    });
-
-    if (!response.ok) {
+    // Expo push token format: ExponentPushToken[...]. A slow push service must never hold a
+    // payment or comment request: give up after 5 s.
+    const response = await axios.post(
+      'https://exp.host/--/api/v2/push/send',
+      { to: expoPushToken, title, body, data: data || {}, sound: 'default', priority: 'high' },
+      { timeout: 5000, headers: { Accept: 'application/json' }, validateStatus: () => true },
+    );
+    if (response.status >= 400) {
       console.error('[Firebase] Push notification failed: status', response.status);
     }
   } catch (error) {

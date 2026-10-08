@@ -83,7 +83,7 @@ export default function Group() {
           try {
             await api.delete(`/grupos/${id}/salir`);
             await qc.invalidateQueries({ queryKey: ["grupos"] });
-            router.replace("/(app)");
+            router.dismissTo("/(app)/(tabs)");
           } catch (err) {
             setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "No pudimos sacarte del grupo. Reintenta.");
           }
@@ -125,7 +125,7 @@ export default function Group() {
                 <Pressable
                   accessibilityLabel="Volver"
                   accessibilityRole="button"
-                  onPress={() => (router.canGoBack() ? router.back() : router.replace("/(app)"))}
+                  onPress={() => (router.canGoBack() ? router.back() : router.replace("/(app)/(tabs)"))}
                   style={[design.back, { backgroundColor: "white" }]}
                 >
                   <Ionicons name="arrow-back" size={24} color={palette.ink} />
@@ -393,7 +393,7 @@ export default function Group() {
       )}
       <Modal transparent visible={menu} animationType="slide" onRequestClose={() => setMenu(false)}>
         <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "#08264466" }}>
-          <Pressable accessibilityLabel="Cerrar opciones" onPress={() => setMenu(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+          <Pressable accessibilityRole="button" accessibilityLabel="Cerrar opciones" onPress={() => setMenu(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
           <SafeAreaView edges={["bottom"]} style={{ backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 12 }}>
             <Label accessibilityRole="header" size={22} weight="extra">{group?.nombre || "Tu grupo"}</Label>
             <Button title="Invitar personas" onPress={() => { setMenu(false); goInvite(); }} />

@@ -37,10 +37,11 @@ export async function listComments(userId: string, target: CommentTarget) {
   const rows = await prisma.comentario.findMany({
     where: target.gastoId ? { gastoId: target.gastoId } : { pagoId: target.pagoId },
     include: { autor: { select: { id: true, nombre: true, fotoUrl: true } }, reportes: { where: { usuarioId: userId }, select: { id: true } } },
-    orderBy: { fechaCreacion: "asc" },
+    // The newest 200, shown oldest first: a long thread never hides what was just written.
+    orderBy: { fechaCreacion: "desc" },
     take: 200,
   });
-  return rows.map(({ reportes, ...row }) => ({
+  return rows.reverse().map(({ reportes, ...row }) => ({
     id: row.id,
     texto: row.eliminado ? "" : row.texto,
     eliminado: row.eliminado,
@@ -78,7 +79,7 @@ export async function createComment(userId: string, input: CommentTarget & { tex
     ? await prisma.usuario.findMany({ where: { id: { in: recipients }, activo: true, expoPushToken: { not: null }, grupoMiembros: { some: { grupoId: target.grupoId, activo: true } } }, select: { expoPushToken: true } })
     : [];
   const preview = texto.length > 90 ? `${texto.slice(0, 87)}…` : texto;
-  await Promise.all(people.map((p) => sendPushNotification(p.expoPushToken!, `${first(created.autor.nombre)} comentó ${target.titulo}`, preview, {
+  void Promise.all(people.map((p) => sendPushNotification(p.expoPushToken!, `${first(created.autor.nombre)} comentó ${target.titulo}`, preview, {
     grupoId: target.grupoId, ...(input.gastoId ? { gastoId: input.gastoId } : { pagoId: input.pagoId! }), type: "comentario",
   }).catch(() => console.error("[Notification] Comment saved; push delivery failed"))));
   return { id: created.id, repetido: false };

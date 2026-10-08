@@ -9,6 +9,7 @@ const path = require("node:path");
 const { PrismaClient } = require("@prisma/client");
 const { quickBillShareMessage, groupShareMessage, expenseShareMessage, shareFingerprint } = require("../packages/shared/share.js");
 require("./local-qa.cjs").localQa();
+const { acceptInvite } = require("./accept-invite.cjs");
 const db = new PrismaClient();
 const suffix = Date.now();
 const inbox = [];
@@ -154,6 +155,7 @@ async function run() {
     // Groups and expenses: membership is required, and the content matches the app's preview.
     const group = (await api("/grupos", ana.accessToken, "POST", { nombre: `QA correo ${suffix}`, tipo: "amigos" })).data;
     await api(`/grupos/${group.id}/invitar`, ana.accessToken, "POST", { identificador: luis.email });
+    await acceptInvite("http://127.0.0.1:3017/api", luis.accessToken, group.id);
     const expense = (await api(`/grupos/${group.id}/gastos`, ana.accessToken, "POST", { descripcion: "Pizza", montoTotal: 10000, pagadoPor: ana.usuario.id, participantes: [ana, luis].map((u) => ({ usuarioId: u.usuario.id })) })).data;
     await api("/pagos/reportar", luis.accessToken, "POST", { grupoId: group.id, receptorId: ana.usuario.id, monto: 2000, metodo: "yape" });
     const groupView = (await api(`/grupos/${group.id}`, ana.accessToken)).data;

@@ -253,6 +253,18 @@ export async function getGastoDetalle(gastoId: string, usuarioId: string) {
   return gasto;
 }
 
+/**
+ * True when someone in this expense (who paid or who shares it) is no longer an active member.
+ * Changing its money would move debts that person can no longer see or settle.
+ */
+async function involvesFormerMembers(gasto: { id: string; grupoId: string; pagadoPor: string }) {
+  const participantes = await prisma.gastoParticipante.findMany({ where: { gastoId: gasto.id }, select: { usuarioId: true } });
+  const ids = [...new Set([gasto.pagadoPor, ...participantes.map((p) => p.usuarioId)])];
+  const activos = await prisma.grupoMiembro.count({ where: { grupoId: gasto.grupoId, usuarioId: { in: ids }, activo: true } });
+  return activos !== ids.length;
+}
+const FORMER_MEMBER = "Este gasto incluye a alguien que ya no está en el grupo: cambiar su monto, quién pagó o eliminarlo movería deudas que esa persona ya no puede saldar. Puedes corregir la descripción, la categoría, la fecha o la nota.";
+
 export async function editarGasto(
   gastoId: string,
   input: Partial<CrearGastoInput>,
@@ -282,6 +294,9 @@ export async function editarGasto(
       "Para cambiar el monto o la división, envía el monto total, el tipo y todas las personas",
     );
   }
+
+  if ((cambiaDivision || (input.pagadoPor && input.pagadoPor !== gasto.pagadoPor)) && (await involvesFormerMembers(gasto)))
+    throw new Error(FORMER_MEMBER, 409);
 
   if (input.pagadoPor || input.participantes) {
     await validarMiembros(
@@ -332,6 +347,7 @@ export async function eliminarGasto(gastoId: string, usuarioId: string) {
 
   if (!miembro || (!esCreador && !esAdmin))
     throw new Error("No tienes permisos para eliminar este gasto");
+  if (await involvesFormerMembers(gasto)) throw new Error(FORMER_MEMBER, 409);
 
   await prisma.gasto.update({
     where: { id: gastoId },

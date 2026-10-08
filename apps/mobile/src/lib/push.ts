@@ -1,7 +1,9 @@
 import { Platform } from "react-native";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import type { Router } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 import { api } from "./api";
+import { queryClient } from "./queryClient";
 
 type NotificationsModule = typeof import("expo-notifications");
 
@@ -22,6 +24,16 @@ function projectId(): string | undefined {
 }
 
 let lastRegisteredToken: string | null = null;
+const HANDLED_KEY = "junto.notification.handled";
+
+/**
+ * Signing out: this phone must stop receiving the person's notices, and the next account to sign
+ * in registers the token again (the server moves it to whoever registered last).
+ */
+export async function unregisterPush() {
+  lastRegisteredToken = null;
+  await api.delete("/auth/push-token").catch(() => undefined);
+}
 
 /** Best effort: a denied permission or missing configuration must never block the app. */
 export async function registerForPush() {
@@ -69,16 +81,26 @@ export function listenForNotificationTaps(router: Router) {
         const gastoId = id("gastoId");
         const pagoId = id("pagoId");
         const grupoId = id("grupoId");
-        if (gastoId) router.push(`/(app)/gastos/${gastoId}`);
+        if (data?.type === "invitacion") router.push("/(app)/(tabs)");
+        else if (gastoId) router.push(`/(app)/gastos/${gastoId}`);
         else if (pagoId) router.push(`/(app)/pagos/${pagoId}`);
         else if (grupoId) router.push(`/(app)/grupos/${grupoId}`);
       };
-      const subscription = Notifications.addNotificationResponseReceivedListener((response) =>
-        open(response.notification.request.content.data),
-      );
-      remove = () => subscription.remove();
+      // The last tapped notice is replayed on every start: open it only once (and never for the next account).
+      const handle = async (response: { notification: { request: { identifier: string; content: { data?: Record<string, unknown> } } } }) => {
+        const identifier = response.notification.request.identifier;
+        if ((await SecureStore.getItemAsync(HANDLED_KEY).catch(() => null)) === identifier) return;
+        await SecureStore.setItemAsync(HANDLED_KEY, identifier).catch(() => undefined);
+        open(response.notification.request.content.data);
+      };
+      const subscription = Notifications.addNotificationResponseReceivedListener((response) => { void handle(response); });
+      // A notice that arrives while JUNTO is open refreshes what it is about (a payment, a comment…).
+      const received = Notifications.addNotificationReceivedListener(() => {
+        for (const key of ["pagos", "grupos", "actividad", "comentarios", "invitaciones"]) void queryClient.invalidateQueries({ queryKey: [key] });
+      });
+      remove = () => { subscription.remove(); received.remove(); };
       const initial = await Notifications.getLastNotificationResponseAsync();
-      if (initial) open(initial.notification.request.content.data);
+      if (initial) await handle(initial);
     } catch {
       /* Tapping a notification simply lands on Inicio if this fails. */
     }

@@ -83,7 +83,7 @@ test("invitation survives authentication without accepting arbitrary redirects",
     "a".repeat(129),
   ])
     assert.equal(validInvitationCode(value), false);
-  assert.equal(authenticatedDestination(null), "/(app)");
+  assert.equal(authenticatedDestination(null), "/(app)/(tabs)");
 });
 const { memberLabels, meFirst, initials, avatarColors } = require("../apps/mobile/src/lib/people.ts");
 const { pendingActions } = require("../apps/mobile/src/lib/pending.ts");

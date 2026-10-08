@@ -11,7 +11,10 @@ Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = fu
 | Registro, verificación por código, login, recuperación, cerrar sesión | Hecho | `ops/test-redesign.cjs`, `ops/test-security-ux.cjs` (OTP de un solo uso, rotación de sesiones, límite de intentos) |
 | Continuar con Google | Parcial | Backend probado con claims (`ops/test-google-sign-in.cjs`); falta el inicio de sesión real en Android con la cuenta del propietario |
 | Probar sin cuenta (sin servidor) | Hecho | Nombres opcionales, invitados por persona, propina; conservar el cálculo con consentimiento (`ops/test-mobile-ux.cjs`) |
-| Grupos, invitaciones por enlace/correo/celular | Hecho | `ops/test-redesign.cjs`; App Links necesita dominio y huella de Play |
+| Grupos, invitaciones por enlace/correo/celular | Hecho | Por correo o celular la persona acepta antes de entrar (`ops/test-groups-ledger.cjs`, recorrido web); App Links necesita dominio y huella de Play |
+| Navegación (pantallas de detalle apiladas) | Hecho | «Volver» y formularios limpios (`ops/e2e-web.cjs`, guarda en `ops/test-ui-patterns.cjs`) |
+| Tope de un pago, salida de grupo, gastos con ex-integrantes, recordatorios | Hecho | `ops/test-groups-ledger.cjs`, `apps/api/src/domain/payable.test.ts` |
+| Dependencias de la API sin avisos de seguridad | Hecho | `npm audit`: quedan solo herramientas de compilación y una de expo-router que exige otra versión mayor de Expo |
 | Gastos por partes iguales, montos y porcentajes, en céntimos | Hecho | `apps/api/src/domain/money.test.ts`, escenarios A–E (`ops/test-money-scenarios.cjs`) |
 | Gastos sin duplicados por doble toque o reintento | Hecho | `ops/test-expense-idempotency.cjs`, recorrido web con corte de red (`ops/e2e-web.cjs`) |
 | Saldos simplificados, pagos externos reportados y confirmados por quien recibe | Hecho | Un pago reportado no reduce la deuda hasta confirmarse (escenario E) |

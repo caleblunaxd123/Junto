@@ -28,7 +28,7 @@ export function CreateSheet({ visible, onClose, groups }: { visible: boolean; on
   return (
     <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "#08264466" }}>
-        <Pressable accessibilityLabel="Cerrar" onPress={onClose} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Cerrar" onPress={onClose} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
         <SafeAreaView edges={["bottom"]} style={{ backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 10 }}>
           <Label accessibilityRole="header" size={22} weight="extra">¿Qué quieres agregar?</Label>
           {options.map((option) => (

@@ -5,6 +5,8 @@ import { validInvitationCode } from "../lib/invitation";
 import { googleSignOut } from "../lib/google";
 import { api, onSessionExpired } from "../lib/api";
 import { queryClient } from "../lib/queryClient";
+import { unregisterPush } from "../lib/push";
+import { forgetSessionData } from "../lib/localData";
 import type { Usuario, AuthResponse } from "../types";
 
 interface AuthState {
@@ -138,6 +140,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    // While still signed in: stop this phone's notices for this person.
+    await unregisterPush();
     const refreshToken = await SecureStore.getItemAsync("refreshToken");
     if (refreshToken) {
       await api.post("/auth/logout", { refreshToken }).catch(() => undefined);
@@ -147,6 +151,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await SecureStore.deleteItemAsync("cachedUsuario");
     await googleSignOut();
     await get().clearInvitation();
+    await forgetSessionData();
     queryClient.clear();
     set({ usuario: null, isAuthenticated: false, sessionExpired: false });
   },

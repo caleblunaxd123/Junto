@@ -283,7 +283,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       setIds(group?.miembros.map((member) => member.usuarioId) || []);
       setPayer(user?.id || "");
       requestId.current = newRequestId();
-      router.replace(
+      // Back to the screen this came from (the group or the expense), never a second copy of it.
+      router.dismissTo(
         params.gastoId
           ? `/(app)/gastos/${params.gastoId}`
           : `/(app)/grupos/${groupId}`,

@@ -3,6 +3,7 @@ import * as gruposService from "../services/grupos.service";
 import { calcularSaldosGrupo } from "../services/balance.service";
 import { crearGrupoSchema, editarGrupoSchema, invitarSchema } from "../schemas/grupos.schema";
 import { z } from "zod";
+import { INVITE_SENT, invitePerson } from "../services/invitaciones.service";
 
 export async function crearGrupo(
   req: Request,
@@ -84,77 +85,21 @@ export async function getSaldos(
 
 export async function invitar(req: Request, res: Response, next: NextFunction) {
   try {
-    if (req.body.identificador) {
-      const identifier = z
-        .string()
-        .trim()
-        .min(2)
-        .max(255)
-        .parse(req.body.identificador);
-      const group = await gruposService.getGrupoDetalle(
-        req.params.id,
-        req.user!.userId,
-      );
-      const { prisma } = await import("../lib/prisma");
-      const usuario = await prisma.usuario.findFirst({
-        where: {
-          activo: true,
-          OR: [
-            { email: identifier.toLowerCase() },
-            { celular: identifier.replace(/^\+51\s*/, "") },
-          ],
-        },
-      });
-      if (!usuario) {
-        res.json({
-          found: false,
-          mensaje:
-            "Esta persona aún no tiene cuenta. Comparte el enlace para que se registre y se una.",
-          linkCode: group.linkInvitacion,
-        });
-        return;
-      }
-      const existing = await prisma.grupoMiembro.findUnique({
-        where: {
-          grupoId_usuarioId: { grupoId: req.params.id, usuarioId: usuario.id },
-        },
-      });
-      await prisma.grupoMiembro.upsert({
-        where: {
-          grupoId_usuarioId: { grupoId: req.params.id, usuarioId: usuario.id },
-        },
-        create: { grupoId: req.params.id, usuarioId: usuario.id },
-        update: { activo: true },
-      });
-      res.json({
-        found: true,
-        alreadyMember: !!existing?.activo,
-        usuario: { id: usuario.id, nombre: usuario.nombre },
-      });
+    const group = await gruposService.getGrupoDetalle(req.params.id, req.user!.userId);
+    const { identificador, celular } = z
+      .object({ identificador: z.string().trim().min(2).max(255).optional(), celular: invitarSchema.shape.celular })
+      .parse(req.body ?? {});
+    const target = identificador ?? celular;
+    if (target) {
+      // Invited people must accept: nobody is added to a group (or shown to it) without consent.
+      const result = await invitePerson(req.params.id, req.user!.userId, target);
+      res.json({ ...result, invitacionEnviada: !result.alreadyMember, linkCode: group.linkInvitacion });
       return;
     }
-    const { celular } = invitarSchema.parse(req.body);
-
-    if (celular) {
-      const result = await gruposService.invitarPorCelular(
-        req.params.id,
-        celular,
-        req.user!.userId,
-      );
-      res.json(result);
-    } else {
-      await gruposService.getGrupoDetalle(req.params.id, req.user!.userId);
-      // Return the invitation link
-      const { prisma } = await import("../lib/prisma");
-      const grupo = await prisma.grupo.findUnique({
-        where: { id: req.params.id },
-        select: { linkInvitacion: true },
-      });
-      res.json({
-        link: `${process.env.FRONTEND_URL}/unirse/${grupo?.linkInvitacion}`,
-        linkCode: grupo?.linkInvitacion,
-      });
-    }
+    res.json({
+      link: `${process.env.FRONTEND_URL}/unirse/${group.linkInvitacion}`,
+      linkCode: group.linkInvitacion,
+    });
   } catch (err) {
     next(err);
   }
@@ -223,21 +168,13 @@ export async function agregarMiembrosBulk(
   next: NextFunction,
 ) {
   try {
-    const { z } = await import("zod");
     const { celulares } = z
-      .object({ celulares: z.array(z.string()).min(1).max(30) })
+      .object({ celulares: z.array(z.string().max(20)).min(1).max(30) })
       .parse(req.body);
-    const results = await Promise.all(
-      celulares.map((cel: string) =>
-        gruposService.invitarPorCelular(
-          req.params.id,
-          cel.replace("+51", ""),
-          req.user!.userId,
-        ),
-      ),
-    );
-    const agregados = results.filter((r) => r.found && !r.alreadyMember).length;
-    res.json({ agregados, resultados: results });
+    await gruposService.getGrupoDetalle(req.params.id, req.user!.userId);
+    for (const celular of celulares) await invitePerson(req.params.id, req.user!.userId, celular);
+    // Counts and identities stay private: each person decides whether to join.
+    res.json({ mensaje: INVITE_SENT });
   } catch (err) {
     next(err);
   }

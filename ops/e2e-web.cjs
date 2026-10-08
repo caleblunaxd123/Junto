@@ -1,5 +1,6 @@
 // Browser journeys (Expo web, phone-sized) for flows that unit tests cannot see: pending invitation
-// after login, expired session, network failure while saving, back navigation and draft reopening.
+// after login, expired session, network failure while saving, back navigation and draft reopening,
+// «Volver» inside a group, a second new group, and accepting an e-mail invitation.
 // Web is a stand-in: it does not replace native keyboard, Google, attachments or Android navigation.
 //
 // Needs, all local: API on :3005 with a test database, Expo web on :8081 pointing to it, and
@@ -115,6 +116,57 @@ async function run() {
     await page.getByRole("button", { name: "Volver" }).first().click();
     await page.getByText("¿Cuánto fue la cuenta?").waitFor();
     assert.equal(await page.getByLabel("Total de la cuenta").inputValue(), "240");
+    await context.close();
+  });
+
+  await scenario("G · «Volver» returns to the group; a second new group starts with an empty form", async () => {
+    const { context, page } = await freshPage(browser);
+    await login(page, ana.email);
+    await page.getByText("Hola, Ana").waitFor({ timeout: 15_000 });
+    // The group's own card (its name also appears in pending cards once there are debts).
+    await page.getByRole("button", { name: new RegExp(`^Depa E2E ${suffix}\\.`) }).click();
+    await page.getByText("Integrantes", { exact: true }).waitFor({ timeout: 15_000 });
+    await page.getByRole("button", { name: /Agregar gasto|＋ Gasto/ }).first().click();
+    await page.getByLabel("Monto total en soles").waitFor({ timeout: 15_000 });
+    await page.getByRole("button", { name: "Volver" }).first().click();
+    // Before: hidden tabs sent «Volver» to Inicio.
+    await page.getByText("Integrantes", { exact: true }).waitFor({ timeout: 15_000 });
+    assert.match(page.url(), new RegExp(`/grupos/${group.id}`));
+    await page.getByRole("button", { name: "Volver" }).first().click();
+    await page.getByText("Hola, Ana").waitFor({ timeout: 15_000 });
+    for (const name of [`Primero E2E ${suffix}`, `Segundo E2E ${suffix}`]) {
+      await page.getByRole("button", { name: "Agregar" }).click();
+      await page.getByRole("button", { name: /Un grupo nuevo/ }).click();
+      // Before: the form kept the first group's name and offered «Reintentar invitaciones».
+      assert.equal(await page.getByLabel("Nombre del grupo").inputValue(), "");
+      await page.getByLabel("Nombre del grupo").fill(name);
+      await page.getByRole("button", { name: "Crear grupo" }).click();
+      await page.getByRole("button", { name: /ir al grupo/i }).click();
+      await page.getByText("Integrantes", { exact: true }).waitFor({ timeout: 15_000 });
+      await page.getByRole("button", { name: "Volver" }).first().click();
+      await page.getByText("Hola, Ana").waitFor({ timeout: 15_000 });
+    }
+    assert.equal(await db.grupo.count({ where: { creadoPor: ana.usuario.id, nombre: { contains: `E2E ${suffix}` } } }), 3);
+    await context.close();
+  });
+
+  await scenario("G · an e-mail invitation waits on the invited person's Inicio until accepted", async () => {
+    const dora = await account("Dora");
+    const ownerPage = await freshPage(browser);
+    await login(ownerPage.page, ana.email);
+    await ownerPage.page.getByText("Hola, Ana").waitFor({ timeout: 15_000 });
+    await ownerPage.page.goto(`${WEB}/grupos/agregar-personas?grupoId=${group.id}`, { waitUntil: "networkidle" });
+    await ownerPage.page.getByLabel("Correo o celular para invitar").fill(dora.email);
+    await ownerPage.page.getByRole("button", { name: "Invitar" }).click();
+    await ownerPage.page.getByText(/Invitación lista/).waitFor({ timeout: 15_000 });
+    await ownerPage.context.close();
+    assert.equal(await db.grupoMiembro.count({ where: { grupoId: group.id, usuarioId: dora.usuario.id, activo: true } }), 0, "not added without consent");
+    const { context, page } = await freshPage(browser);
+    await login(page, dora.email);
+    await page.getByText(new RegExp(`Ana te invitó a «Depa E2E ${suffix}»`)).waitFor({ timeout: 15_000 });
+    await page.getByRole("button", { name: "Unirme" }).click();
+    await page.waitForURL(new RegExp(`/grupos/${group.id}`), { timeout: 15_000 });
+    assert.equal(await db.grupoMiembro.count({ where: { grupoId: group.id, usuarioId: dora.usuario.id, activo: true } }), 1);
     await context.close();
   });
 
