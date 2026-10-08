@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   View,
   Image,
@@ -11,8 +12,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import { useGrupos, usePagos } from "../../src/hooks/useGrupos";
-import { useAuthStore } from "../../src/store/auth.store";
+import { useGrupos, usePagos } from "../../../src/hooks/useGrupos";
+import { useAuthStore } from "../../../src/store/auth.store";
 import {
   Avatar,
   Button,
@@ -21,17 +22,18 @@ import {
   ErrorBox,
   palette,
   design,
-} from "../../src/components/ui/Design";
-import { Brand, SectionTitle } from "../../src/components/ui/Reference";
-import { centavosASoles } from "../../src/types";
-import { useQuickBills } from "../../src/hooks/useQuickBills";
-import { groupCover } from "../../src/components/ui/Artwork";
-import { pendingActions } from "../../src/lib/pending";
-import { PendingActions } from "../../src/components/PendingActions";
-import { AddButton, CreateSheet } from "../../src/components/CreateSheet";
+} from "../../../src/components/ui/Design";
+import { Brand, SectionTitle } from "../../../src/components/ui/Reference";
+import { centavosASoles } from "../../../src/types";
+import { useQuickBills } from "../../../src/hooks/useQuickBills";
+import { groupCover } from "../../../src/components/ui/Artwork";
+import { pendingActions } from "../../../src/lib/pending";
+import { PendingActions } from "../../../src/components/PendingActions";
+import { Invitations } from "../../../src/components/Invitations";
+import { AddButton, CreateSheet } from "../../../src/components/CreateSheet";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AppDialog as Alert } from "../../src/components/ui/AppDialog";
-import { clearTryBill, loadTryBill, tryBillToDraft, type SavedTryBill } from "../../src/lib/tryBillHandoff";
+import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
+import { clearTryBill, loadTryBill, tryBillToDraft, type SavedTryBill } from "../../../src/lib/tryBillHandoff";
 
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
 
@@ -51,11 +53,13 @@ export default function Home() {
   const [allPending, setAllPending] = useState(false);
   const bills = useQuickBills();
   const refreshBills = bills.refetch;
+  const qc = useQueryClient();
   const refreshAll = useCallback(() => {
     refetch();
     refetchPayments();
     refreshBills();
-  }, [refetch, refetchPayments, refreshBills]);
+    void qc.invalidateQueries({ queryKey: ["invitaciones"] });
+  }, [refetch, refetchPayments, refreshBills, qc]);
   useFocusEffect(refreshAll);
   // A calculation kept from "Probar sin cuenta" (only with consent, only on this phone).
   const [trial, setTrial] = useState<SavedTryBill | null>(null);
@@ -93,7 +97,7 @@ export default function Home() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Abrir mi perfil"
-            onPress={() => router.push("/(app)/perfil")}
+            onPress={() => router.push("/(app)/(tabs)/perfil")}
             hitSlop={8}
           >
             <Avatar name={usuario?.nombre || "Tú"} photo={usuario?.fotoUrl} seed={usuario?.id} />
@@ -103,6 +107,7 @@ export default function Home() {
           Hola, {usuario?.nombre.split(" ")[0] || "amigo"}
         </Label>
 
+        <Invitations />
         {trial && (
           <Card style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", gap: 8 }}>
             <Label weight="bold">Tu cálculo de prueba sigue aquí</Label>
@@ -147,7 +152,7 @@ export default function Home() {
                   </Pressable>
                 )}
               </>
-            ) : groups.length > 0 && !payments.isLoading ? (
+            ) : groups.length > 0 && !payments.isLoading && !payments.isError ? (
               <Card style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, backgroundColor: palette.mint, borderColor: "#BDEBD9" }}>
                 <Ionicons name="checkmark-circle" size={28} color="#007B60" />
                 <View style={{ flex: 1 }}>

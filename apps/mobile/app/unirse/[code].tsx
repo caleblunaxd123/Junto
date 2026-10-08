@@ -113,7 +113,7 @@ export default function Join() {
           secondary
           onPress={async () => {
             await useAuthStore.getState().clearInvitation();
-            router.replace("/(app)");
+            router.replace("/(app)/(tabs)");
           }}
         />
       )}

@@ -166,6 +166,11 @@ async function run() {
   assert.equal(burst.filter((r) => r.status === 429).length, 2);
   assert.equal(await db.comprobante.count({ where: { subidoPor: pedro.usuario.id } }), 10);
 
-  console.log(JSON.stringify({ result: "PASS", checks: "invitations need consent and reveal nothing, unverified shared phones invite nobody, phone lookup removed, payment fits debt and credit after suggestions change, no over-reporting, reminders 409/429 and auto-config, leaving blocked by pending payment, last member closes group, ex-admin rejoins as member, expenses with former members locked, body size limit, newest 200 comments, bounded history, atomic upload limit" }));
+  // ── Signing out of a phone stops its notices for that person.
+  await ok("/auth/push-token", ana.accessToken, "PUT", { expoPushToken: `ExponentPushToken[qa-ledger-${suffix}]` });
+  await ok("/auth/push-token", ana.accessToken, "DELETE", undefined, 204);
+  assert.equal((await db.usuario.findUniqueOrThrow({ where: { id: ana.usuario.id } })).expoPushToken, null);
+
+  console.log(JSON.stringify({ result: "PASS", checks: "push token cleared on sign-out, invitations need consent and reveal nothing, unverified shared phones invite nobody, phone lookup removed, payment fits debt and credit after suggestions change, no over-reporting, reminders 409/429 and auto-config, leaving blocked by pending payment, last member closes group, ex-admin rejoins as member, expenses with former members locked, body size limit, newest 200 comments, bounded history, atomic upload limit" }));
 }
 run().finally(() => db.$disconnect()).catch((error) => { console.error(error); process.exit(1); });

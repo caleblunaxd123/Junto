@@ -94,7 +94,9 @@ export function paymentHeadline(pago: PaymentLike, meId: string | undefined, nom
         title: !byOther ? "Pago confirmado" : pago.resueltoPor === meId ? "Lo aprobaste" : `Aprobado por ${nombre(pago.resueltoPor!)}`,
         body: byOther
           ? `La deuda bajó ${amount}. ${pago.receptorId === meId ? "Si no te llegó, avísalo abajo." : `${nombre(pago.receptorId)} puede indicar si no le llegó.`}`
-          : `${nombre(pago.receptorId)} confirmó que recibió ${amount}. La deuda bajó por ese monto.`,
+          : pago.receptorId === meId
+            ? `Confirmaste que recibiste ${amount}. La deuda bajó por ese monto.`
+            : `${nombre(pago.receptorId)} confirmó que recibió ${amount}. La deuda bajó por ese monto.`,
       };
     case "rechazado":
       return {

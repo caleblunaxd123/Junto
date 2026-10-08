@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@prisma/client": "^5.14.0",
-    "@sentry/node": "^8.55.2",
+    "@sentry/node": "~10.75.3",
     "@tesseract.js-data/spa": "^1.0.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",

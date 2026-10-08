@@ -7,7 +7,7 @@ export function validInvitationCode(code: unknown): code is string {
 export function authenticatedDestination(code: string | null) {
   return validInvitationCode(code)
     ? { pathname: "/unirse/[code]" as const, params: { code } }
-    : ("/(app)" as const);
+    : ("/(app)/(tabs)" as const);
 }
 
 /** Public https link (opens the app through App Links or the web page with Play Store). */

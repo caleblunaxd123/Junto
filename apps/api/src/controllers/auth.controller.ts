@@ -137,6 +137,15 @@ export async function updatePushToken(
   }
 }
 
+export async function clearPushToken(req: Request, res: Response, next: NextFunction) {
+  try {
+    await authService.updatePushToken(req.user!.userId, null);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function verifyEmail(
   req: Request,
   res: Response,

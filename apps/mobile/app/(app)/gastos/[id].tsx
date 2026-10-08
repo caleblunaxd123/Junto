@@ -37,7 +37,7 @@ export default function ExpenseDetail() {
       ["gastos", "saldos", "grupos", "actividad"].forEach((key) =>
         qc.invalidateQueries({ queryKey: [key] }),
       );
-      router.replace(`/(app)/grupos/${expense?.grupoId}`);
+      router.dismissTo(`/(app)/grupos/${expense?.grupoId}`);
     },
   });
   function askDelete() {

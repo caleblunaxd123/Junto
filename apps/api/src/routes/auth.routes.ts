@@ -20,6 +20,8 @@ router.patch('/me', authMiddleware, authController.updateProfile);
 router.get('/me/eliminacion', authMiddleware, authController.deletionSummary);
 router.delete('/me', authMiddleware, authRateLimit, authController.deleteAccount);
 router.put('/push-token', authMiddleware, authController.updatePushToken);
+// Signing out of a phone: it must stop receiving this person's payment and comment notices.
+router.delete('/push-token', authMiddleware, authController.clearPushToken);
 
 // /verificar-celulares was removed: it told anyone which phone numbers have a JUNTO account.
 
