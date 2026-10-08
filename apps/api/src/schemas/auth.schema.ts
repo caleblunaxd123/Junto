@@ -36,8 +36,12 @@ export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1, 'Refresh token requerido'),
 });
 
+const expoPushToken = z.string().regex(/^Expo(nent)?PushToken\[.+\]$/, 'Token de notificaciones inválido').max(200);
+export const logoutSchema = refreshTokenSchema.extend({ expoPushToken: expoPushToken.optional() });
 export const updatePushTokenSchema = z.object({
-  expoPushToken: z.string().regex(/^Expo(nent)?PushToken\[.+\]$/, 'Token de notificaciones inválido').max(200),
+  expoPushToken,
+  // New clients bind registration to a live session; old clients remain compatible.
+  refreshToken: z.string().min(1).max(500).optional(),
 });
 
 export const verifyEmailSchema = z.object({

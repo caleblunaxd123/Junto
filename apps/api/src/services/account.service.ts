@@ -72,6 +72,7 @@ export async function deleteAccount(userId: string, confirmation: { password?: s
     await tx.comentario.updateMany({ where: { autorId: userId }, data: { eliminado: true, texto: "" } });
     await tx.reporteComentario.deleteMany({ where: { usuarioId: userId } });
     await tx.correoCompartido.deleteMany({ where: { usuarioId: userId } });
+    await tx.reciboPush.deleteMany({ where: { usuarioId: userId } });
     await tx.recordatorio.deleteMany({ where: { OR: [{ enviadoPor: userId }, { enviadoA: userId }] } });
     await tx.configRecordatorio.deleteMany({ where: { configuradoPor: userId } });
     await tx.refreshToken.deleteMany({ where: { usuarioId: userId } });

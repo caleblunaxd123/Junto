@@ -291,10 +291,19 @@ export async function refresh(refreshToken: string) {
   return { accessToken, refreshToken: newRefreshToken };
 }
 
-export async function logout(refreshToken: string) {
-  await prisma.refreshToken.updateMany({
-    where: { token: hashRefreshToken(refreshToken), revocado: false },
-    data: { revocado: true },
+export async function logout(refreshToken: string, expoPushToken?: string) {
+  await prisma.$transaction(async (tx) => {
+    // Serialize with device registration. A late request must not reattach a signed-out device.
+    const sessions = await tx.$queryRaw<Array<{ id: string; usuario_id: string }>>`
+      SELECT id, usuario_id FROM refresh_tokens
+      WHERE token = ${hashRefreshToken(refreshToken)} AND revocado = false
+      AND fecha_expiracion > NOW() FOR UPDATE`;
+    if (!sessions.length) return;
+    await tx.refreshToken.updateMany({ where: { id: { in: sessions.map(s => s.id) } }, data: { revocado: true } });
+    if (expoPushToken) await tx.usuario.updateMany({
+      where: { id: { in: sessions.map(s => s.usuario_id) }, expoPushToken },
+      data: { expoPushToken: null },
+    });
   });
 }
 
@@ -497,16 +506,25 @@ export async function loginWithGoogle(idToken: string) {
   return signInWithGoogleClaims(await verifyGoogleIdToken(idToken));
 }
 
-export async function updatePushToken(userId: string, expoPushToken: string) {
+export async function updatePushToken(userId: string, expoPushToken: string, refreshToken?: string) {
   // A physical device belongs to whoever signed in last; never keep notifying the previous person.
-  await prisma.$transaction([
-    prisma.usuario.updateMany({
+  await prisma.$transaction(async (tx) => {
+    // Concurrent logins on the same installation must never leave two owners of one token.
+    await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${`junto-device:${expoPushToken}`}, 0))`;
+    if (refreshToken) {
+      const sessions = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM refresh_tokens WHERE token = ${hashRefreshToken(refreshToken)}
+        AND usuario_id = ${userId}::uuid AND revocado = false
+        AND fecha_expiracion > NOW() FOR UPDATE`;
+      if (!sessions.length) throw new UserError("Tu sesión expiró. Inicia sesión nuevamente.", 401);
+    }
+    await tx.usuario.updateMany({
       where: { expoPushToken, id: { not: userId } },
       data: { expoPushToken: null },
-    }),
-    prisma.usuario.update({
+    });
+    await tx.usuario.update({
       where: { id: userId },
       data: { expoPushToken },
-    }),
-  ]);
+    });
+  });
 }

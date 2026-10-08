@@ -3,6 +3,7 @@ import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { validInvitationCode } from "../lib/invitation";
 import { googleSignOut } from "../lib/google";
+import { forgetPushRegistration, registeredPushToken } from "../lib/push";
 import { api, onSessionExpired } from "../lib/api";
 import { queryClient } from "../lib/queryClient";
 import type { Usuario, AuthResponse } from "../types";
@@ -14,6 +15,7 @@ interface AuthState {
   pendingInvitation: string | null;
   /** True when the server ended the session (not a manual logout), so login can explain why. */
   sessionExpired: boolean;
+  signingOut: boolean;
   rememberInvitation: (code: string) => Promise<void>;
   clearInvitation: () => Promise<void>;
 
@@ -38,6 +40,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isAuthenticated: false,
   pendingInvitation: null,
   sessionExpired: false,
+  signingOut: false,
   rememberInvitation: async (code) => {
     if (!validInvitationCode(code))
       throw new Error("Enlace de invitación inválido.");
@@ -138,17 +141,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
-    const refreshToken = await SecureStore.getItemAsync("refreshToken");
-    if (refreshToken) {
-      await api.post("/auth/logout", { refreshToken }).catch(() => undefined);
-    }
-    await SecureStore.deleteItemAsync("accessToken");
-    await SecureStore.deleteItemAsync("refreshToken");
-    await SecureStore.deleteItemAsync("cachedUsuario");
-    await googleSignOut();
-    await get().clearInvitation();
-    queryClient.clear();
-    set({ usuario: null, isAuthenticated: false, sessionExpired: false });
+    if (get().signingOut) return;
+    set({ signingOut: true });
+    try {
+      const userId = get().usuario?.id;
+      const expoPushToken = userId ? await registeredPushToken(userId) : undefined;
+      const refreshToken = await SecureStore.getItemAsync("refreshToken");
+      if (refreshToken) {
+        await api.post("/auth/logout", { refreshToken, expoPushToken }).catch(() => undefined);
+      }
+      if (userId) await forgetPushRegistration(userId).catch(() => undefined);
+      await SecureStore.deleteItemAsync("accessToken");
+      await SecureStore.deleteItemAsync("refreshToken");
+      await SecureStore.deleteItemAsync("cachedUsuario");
+      await googleSignOut();
+      await get().clearInvitation();
+      queryClient.clear();
+      set({ usuario: null, isAuthenticated: false, sessionExpired: false });
+    } finally { set({ signingOut: false }); }
   },
 
   updateUsuario: (data) => {

@@ -25,7 +25,8 @@ import {
 import { Brand, SectionTitle } from "../../src/components/ui/Reference";
 import { centavosASoles } from "../../src/types";
 import { useQuickBills } from "../../src/hooks/useQuickBills";
-import { groupCover } from "../../src/components/ui/Artwork";
+import { art, groupCover } from "../../src/components/ui/Artwork";
+import { homeState } from "../../src/lib/homeState";
 import { pendingActions } from "../../src/lib/pending";
 import { PendingActions } from "../../src/components/PendingActions";
 import { AddButton, CreateSheet } from "../../src/components/CreateSheet";
@@ -38,12 +39,13 @@ const money = (value: number) => `S/ ${centavosASoles(value)}`;
 export default function Home() {
   const { usuario } = useAuthStore();
   const {
-    data: groups = [],
+    data: groupData,
     isLoading,
     isError,
     refetch,
     isRefetching,
   } = useGrupos();
+  const groups = groupData ?? [];
   const payments = usePagos();
   const refetchPayments = payments.refetch;
   const [search, setSearch] = useState("");
@@ -81,12 +83,18 @@ export default function Home() {
   const filtered = groups.filter((g) =>
     g.nombre.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
   );
-  const empty = !isLoading && !isError && !groups.length && !bills.isLoading && !openBills.length;
+  const { empty, unavailable, canShowAllClear } = homeState(
+    { loading: isLoading, error: isError, hasData: groupData !== undefined },
+    { loading: payments.isLoading, error: payments.isError, hasData: payments.data !== undefined },
+    { loading: bills.isLoading, error: bills.isError, hasData: bills.data !== undefined },
+    groups.length, openBills.length,
+  );
+  const refreshing = isRefetching || payments.isRefetching || bills.isRefetching;
   return (
     <SafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: palette.background }}>
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 110, gap: 16 }}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refreshAll} tintColor={palette.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={palette.primary} />}
       >
         <View style={[design.row, { justifyContent: "space-between" }]}>
           <Brand compact />
@@ -115,8 +123,17 @@ export default function Home() {
             </View>
           </Card>
         )}
-        {empty ? (
+        {unavailable ? (
+          <Card style={{ gap: 14, backgroundColor: palette.lilac }}>
+            <Ionicons name="cloud-offline-outline" size={34} color={palette.purple} />
+            <Label size={21} weight="extra">No pudimos conectar con JUNTO</Label>
+            <Label size={14} color={palette.muted}>Todavía no podemos mostrar tus cuentas ni comprobar si hay pagos pendientes. Revisa tu conexión y vuelve a intentar.</Label>
+            <Button title="Actualizar mis cuentas" loading={refreshing} onPress={refreshAll} />
+            <Button title="Ver cómo funciona" secondary onPress={() => router.push("/(app)/ejemplo")} />
+          </Card>
+        ) : empty ? (
           <Card style={{ gap: 14 }}>
+            <Image source={art.character} resizeMode="contain" accessibilityLabel="Tu compañero de JUNTO, listo para ayudarte con las cuentas" style={{ width: "100%", height: 140 }} />
             <Label size={19} weight="extra">¿Por dónde empezamos?</Label>
             <Label size={14} color={palette.muted}>
               Divide la cuenta de hoy en tres pasos, o crea un grupo para los gastos que se repiten.
@@ -147,7 +164,7 @@ export default function Home() {
                   </Pressable>
                 )}
               </>
-            ) : groups.length > 0 && !payments.isLoading ? (
+            ) : canShowAllClear ? (
               <Card style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, backgroundColor: palette.mint, borderColor: "#BDEBD9" }}>
                 <Ionicons name="checkmark-circle" size={28} color="#007B60" />
                 <View style={{ flex: 1 }}>

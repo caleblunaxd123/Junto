@@ -45,8 +45,23 @@ model Usuario {
   comprobantes        Comprobante[]
   comentarios         Comentario[]
   reportesComentarios ReporteComentario[]
+  recibosPush         ReciboPush[]
 
   @@map("usuarios")
+}
+
+// Short-lived delivery metadata only: never notification bodies, amounts or group data.
+// "aceptado" means Expo queued it, not that the person saw it. Purged after 24 h.
+model ReciboPush {
+  ticketId        String    @id @map("ticket_id") @db.VarChar(200)
+  usuarioId       String    @map("usuario_id") @db.Uuid
+  token           String    @db.VarChar(200)
+  fechaCreacion   DateTime  @default(now()) @map("fecha_creacion")
+  ultimaConsulta  DateTime? @map("ultima_consulta")
+  usuario         Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([fechaCreacion, ultimaConsulta])
+  @@map("recibos_push")
 }
 
 // Organizer-managed bills: named guests are NOT fabricated registered users.

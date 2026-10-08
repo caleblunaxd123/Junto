@@ -4,6 +4,7 @@ import axios, {
   InternalAxiosRequestConfig,
 } from "axios";
 import * as SecureStore from "expo-secure-store";
+import { isAuthEntry } from "./authEntry";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
 
@@ -18,6 +19,13 @@ api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   const token = await SecureStore.getItemAsync("accessToken");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  if (config.url === "/auth/push-token") {
+    // A retry after refresh must use the rotated credential, not a stale body.
+    const refreshToken = await SecureStore.getItemAsync("refreshToken");
+    if (!refreshToken) throw new Error("Session ended before notification registration");
+    const body = typeof config.data === "string" ? JSON.parse(config.data) : config.data;
+    config.data = { ...body, refreshToken };
   }
   return config;
 });
@@ -56,9 +64,7 @@ api.interceptors.response.use(
       _retry?: boolean;
     };
 
-    const authEntry =
-      originalRequest?.url?.startsWith("/auth/") &&
-      !originalRequest.url.includes("/me");
+    const authEntry = isAuthEntry(originalRequest?.url);
     if (
       error.response?.status === 401 &&
       originalRequest &&

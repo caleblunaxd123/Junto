@@ -19,7 +19,7 @@ import { emailProvider } from './lib/email';
 import { authMiddleware } from './middleware/auth';
 import { getActivity } from './services/activity.service';
 import { errorHandler } from './middleware/errorHandler';
-import { initFirebase } from './lib/firebase';
+import { initPushReceiptsJob } from './jobs/pushReceipts.job';
 import { initRemindersJob } from './jobs/reminders.job';
 
 const app = express();
@@ -74,7 +74,7 @@ app.use(publicRoutes);
 app.use(errorHandler);
 
 // Initialize services
-initFirebase();
+initPushReceiptsJob();
 initRemindersJob();
 
 app.listen(PORT, () => {
