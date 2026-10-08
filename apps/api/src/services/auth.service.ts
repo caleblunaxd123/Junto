@@ -506,7 +506,11 @@ export async function loginWithGoogle(idToken: string) {
   return signInWithGoogleClaims(await verifyGoogleIdToken(idToken));
 }
 
-export async function updatePushToken(userId: string, expoPushToken: string, refreshToken?: string) {
+export async function updatePushToken(userId: string, expoPushToken: string | null, refreshToken?: string) {
+  if (!expoPushToken) {
+    await prisma.usuario.update({ where: { id: userId }, data: { expoPushToken: null } });
+    return;
+  }
   // A physical device belongs to whoever signed in last; never keep notifying the previous person.
   await prisma.$transaction(async (tx) => {
     // Concurrent logins on the same installation must never leave two owners of one token.

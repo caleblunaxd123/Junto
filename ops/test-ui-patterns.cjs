@@ -42,3 +42,12 @@ test("every Pressable tells screen readers what it is", () => {
     if (!/accessibilityRole=/.test(tag) && !/accessibilityLabel="Cerrar/.test(tag)) offenders.push(`${path.relative(process.cwd(), file)}:${line}`);
   assert.deepEqual(offenders, []);
 });
+
+test("detail screens are pushed on a stack, never mounted as hidden tabs", () => {
+  // Hidden Tabs.Screen entries never unmount: forms kept old data, «Volver» jumped to Inicio.
+  const layout = fs.readFileSync(path.join(__dirname, "../apps/mobile/app/(app)/_layout.tsx"), "utf8");
+  assert.match(layout, /<Stack\b/);
+  assert.doesNotMatch(layout, /href:\s*null|<Tabs\b/);
+  const tabs = fs.readdirSync(path.join(__dirname, "../apps/mobile/app/(app)/(tabs)")).sort();
+  assert.deepEqual(tabs, ["_layout.tsx", "actividad.tsx", "index.tsx", "perfil.tsx"]);
+});

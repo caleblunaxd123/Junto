@@ -73,9 +73,9 @@ export default function CreateGroup() {
       );
       await queryClient.invalidateQueries({ queryKey: ["grupos"] });
       // The next useful step is almost always inviting: go straight there unless everyone is already in.
-      if (!people.length || results.some((r) => !r.found))
-        router.replace(`/(app)/grupos/agregar-personas?grupoId=${groupId}&nuevo=1`);
-      else router.replace(`/(app)/grupos/${groupId}`);
+      // Invited people still have to accept, and anyone without an account needs the link.
+      const invited = results.filter((r) => !r.alreadyMember).length;
+      router.replace(`/(app)/grupos/agregar-personas?grupoId=${groupId}&nuevo=1${invited ? `&invitados=${invited}` : ""}`);
     } catch {
       setError(
         groupId
@@ -166,7 +166,7 @@ export default function CreateGroup() {
         >
           <Ionicons name="person-add-outline" size={18} color={palette.purple} />
           <Label size={14} weight="bold" color={palette.purple} style={{ flex: 1 }}>
-            {manual ? "Ocultar" : "¿Ya usan JUNTO? Agrégalos por correo o celular"}
+            {manual ? "Ocultar" : "¿Ya usan JUNTO? Invítalos por correo o celular"}
           </Label>
         </Pressable>
         {manual && (

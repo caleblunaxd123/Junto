@@ -138,6 +138,15 @@ export async function updatePushToken(
   }
 }
 
+export async function clearPushToken(req: Request, res: Response, next: NextFunction) {
+  try {
+    await authService.updatePushToken(req.user!.userId, null);
+    res.status(204).end();
+  } catch (err) {
+    next(err);
+  }
+}
+
 export async function verifyEmail(
   req: Request,
   res: Response,
@@ -163,30 +172,6 @@ export async function resendVerification(
     res.json({
       message: "Si la cuenta está pendiente, enviaremos un nuevo código",
     });
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function verificarCelulares(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
-  try {
-    const { z } = await import("zod");
-    const { celulares } = z
-      .object({ celulares: z.array(z.string()).max(200) })
-      .parse(req.body);
-    const { prisma } = await import("../lib/prisma");
-    const usuarios = await prisma.usuario.findMany({
-      where: { celular: { in: celulares }, activo: true },
-      select: { celular: true },
-    });
-    const registrados = usuarios
-      .map((u) => u.celular)
-      .filter(Boolean) as string[];
-    res.json({ celulares_registrados: registrados });
   } catch (err) {
     next(err);
   }

@@ -142,7 +142,8 @@ export function useResolverPago() {
       api
         .post(`/pagos/${pagoId}/${confirmar ? "confirmar" : "rechazar"}`)
         .then((response) => response.data),
-    onSuccess: () => {
+    // Also after an error: "ya fue resuelto" means someone else decided, and the card must go away.
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["actividad"] });
       queryClient.invalidateQueries({ queryKey: ["pagos"] });
       queryClient.invalidateQueries({ queryKey: ["grupos"] });
@@ -152,11 +153,14 @@ export function useResolverPago() {
 }
 
 /** One payment with its voucher data and what the viewer may do with it. */
-export function usePago(id: string) {
+export function usePago(id: string, focused = true) {
   return useQuery<PagoDetalle>({
     queryKey: ["pagos", "detalle", id],
     queryFn: () => api.get(`/pagos/${id}`).then((r) => r.data),
     enabled: !!id,
+    // Opening it again always shows the current state; while it waits, the decision appears on its own.
+    refetchOnMount: "always",
+    refetchInterval: (query) => (focused && query.state.data?.estado === "reportado" ? 15_000 : false),
   });
 }
 

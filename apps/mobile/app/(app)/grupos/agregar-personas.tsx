@@ -20,7 +20,7 @@ import {
   design,
 } from "../../../src/components/ui/Design";
 export default function Invite() {
-  const { grupoId, nuevo } = useLocalSearchParams<{ grupoId: string; nuevo?: string }>();
+  const { grupoId, nuevo, invitados } = useLocalSearchParams<{ grupoId: string; nuevo?: string; invitados?: string }>();
   const { data: group, refetch } = useGrupo(grupoId);
   const qc = useQueryClient();
   const meId = useAuthStore((s) => s.usuario?.id);
@@ -41,21 +41,15 @@ export default function Invite() {
       const { data } = await api.post(`/grupos/${grupoId}/invitar`, {
         identificador: identifier.trim(),
       });
-      setMessage(
-        data.found
-          ? data.alreadyMember
-            ? "Esta persona ya pertenece al grupo."
-            : `✓ ${data.usuario.nombre} se agregó al grupo.`
-          : "Aún no tiene cuenta en JUNTO. Envíale el enlace de invitación.",
-      );
-      if (data.found) {
-        setIdentifier("");
-        refetch();
-        qc.invalidateQueries({ queryKey: ["grupos"] });
-      }
-    } catch {
+      // Invited people accept before joining; the answer never reveals who has an account.
+      setMessage(data.alreadyMember ? "Esta persona ya pertenece al grupo." : `✓ Invitación lista. ${data.mensaje ?? ""}`.trim());
+      setIdentifier("");
+      refetch();
+      qc.invalidateQueries({ queryKey: ["grupos"] });
+    } catch (err) {
       setError(
-        "No pudimos agregar a esta persona. Revisa el correo o celular.",
+        (err as { response?: { data?: { error?: string } } }).response?.data?.error ||
+          "No pudimos enviar la invitación. Revisa el correo o celular.",
       );
     } finally {
       inviteGate.current = false;
@@ -83,7 +77,7 @@ export default function Invite() {
         <Button
           title={fresh ? "Lo haré después · ir al grupo" : "Ir al grupo"}
           secondary
-          onPress={() => router.replace(`/(app)/grupos/${grupoId}`)}
+          onPress={() => router.dismissTo(`/(app)/grupos/${grupoId}`)}
         />
       }
     >
@@ -96,9 +90,14 @@ export default function Invite() {
         </Label>
         <Button title="Compartir enlace de invitación" onPress={share} />
       </Card>
+      {!!invitados && Number(invitados) > 0 && (
+        <Label size={13} color={palette.muted}>
+          Enviamos {Number(invitados) === 1 ? "1 invitación" : `${invitados} invitaciones`} a quienes ya usan JUNTO: entrarán al grupo cuando la acepten desde su inicio.
+        </Label>
+      )}
       {!!error && <ErrorBox message={error} />}
       <View style={{ gap: 8 }}>
-        <Label weight="bold" size={14}>¿Ya usa JUNTO? Agrégalo directo</Label>
+        <Label weight="bold" size={14}>¿Ya usa JUNTO? Invítalo por correo o celular</Label>
         <View style={design.row}>
           <TextInput
             accessibilityLabel="Correo o celular para invitar"
@@ -111,7 +110,7 @@ export default function Invite() {
             style={[design.input, { flex: 1 }]}
             onSubmitEditing={invite}
           />
-          <Button compact title="Agregar" onPress={invite} loading={busy} disabled={identifier.trim().length < 5} />
+          <Button compact title="Invitar" onPress={invite} loading={busy} disabled={identifier.trim().length < 5} />
         </View>
         {!!message && <Label size={13} color="#078B70">{message}</Label>}
       </View>

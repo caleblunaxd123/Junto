@@ -72,7 +72,7 @@ router.get('/privacidad', (_req, res) => {
 <h2>Comentarios</h2>
 <p>Los comentarios en gastos y pagos los ven las personas activas del grupo. Quien lo escribió o un administrador del grupo puede eliminarlo; cualquier integrante puede reportarlo y lo revisamos.</p>
 <h2>Quién ve tus datos</h2>
-<p>Solo las personas de cada grupo ven tu nombre, los gastos y los pagos de ese grupo. Usamos proveedores para alojar la base de datos, enviar correos y enviar notificaciones, que tratan los datos solo para prestar ese servicio.</p>
+<p>Solo las personas de cada grupo ven tu nombre, los gastos y los pagos de ese grupo. Si alguien te invita con tu correo o celular, no entras al grupo ni ven tus datos hasta que aceptas la invitación, y a quien invita no le decimos si tienes cuenta. Usamos proveedores para alojar la base de datos, enviar correos y enviar notificaciones, que tratan los datos solo para prestar ese servicio.</p>
 <h2>Cuánto tiempo</h2>
 <p>Mientras tu cuenta esté activa. Si la eliminas, borramos tus datos personales, las capturas de comprobantes que subiste y el texto de tus comentarios; los gastos y pagos compartidos con otras personas se conservan como «Usuario eliminado» para no alterar las cuentas de los demás.</p>
 <h2>Tus derechos</h2>

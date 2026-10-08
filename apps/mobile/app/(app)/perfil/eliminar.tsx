@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../../src/lib/api";
+import { forgetAccountDrafts } from "../../../src/lib/localData";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
 import { Screen, Card, Label, Button, ErrorBox, palette, design } from "../../../src/components/ui/Design";
@@ -57,6 +58,8 @@ export default function DeleteAccount() {
       setBusy(true);
       setError("");
       await api.delete("/auth/me", { data: data?.tienePassword === false ? { confirmacion: password } : { password } });
+      const userId = useAuthStore.getState().usuario?.id;
+      if (userId) await forgetAccountDrafts(userId);
       await useAuthStore.getState().logout();
       router.replace("/(auth)/login");
       Alert.alert("Cuenta eliminada", "Borramos tus datos personales. Gracias por haber usado JUNTO.");
@@ -105,7 +108,7 @@ export default function DeleteAccount() {
               {!!data.gruposConSaldo.length && (
                 <Label size={12} color={palette.muted}>En: {data.gruposConSaldo.map((g) => g.nombre).join(", ")}</Label>
               )}
-              <Button title="Revisar mis pendientes" secondary compact onPress={() => router.push("/(app)")} />
+              <Button title="Revisar mis pendientes" secondary compact onPress={() => router.push("/(app)/(tabs)")} />
             </Card>
           )}
           {data.tienePassword ? (

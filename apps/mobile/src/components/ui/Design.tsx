@@ -184,7 +184,7 @@ export function Screen({
               accessibilityRole="button"
               accessibilityLabel="Volver"
               onPress={onBack || (() =>
-                router.canGoBack() ? router.back() : router.replace("/(app)")
+                router.canGoBack() ? router.back() : router.replace("/(app)/(tabs)")
               )}
               style={design.back}
             >

@@ -19,7 +19,7 @@ export default function SharedVoucher() {
 
   function discard() {
     setSharedVoucher(null);
-    router.replace("/(app)");
+    router.dismissTo("/(app)/(tabs)");
   }
 
   if (!shared)
@@ -29,7 +29,7 @@ export default function SharedVoucher() {
           <Label weight="bold">No encontramos la imagen compartida</Label>
           <Label size={13} color={palette.muted}>Vuelve a compartirla desde WhatsApp o Yape, o elígela desde tu grupo con «Subir comprobante».</Label>
         </Card>
-        <Button title="Ir a Inicio" onPress={() => router.replace("/(app)")} />
+        <Button title="Ir a Inicio" onPress={() => router.dismissTo("/(app)/(tabs)")} />
       </Screen>
     );
 

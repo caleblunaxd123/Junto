@@ -6,6 +6,7 @@ import { googleSignOut } from "../lib/google";
 import { forgetPushRegistration, registeredPushToken } from "../lib/push";
 import { api, onSessionExpired } from "../lib/api";
 import { queryClient } from "../lib/queryClient";
+import { forgetSessionData } from "../lib/localData";
 import type { Usuario, AuthResponse } from "../types";
 
 interface AuthState {
@@ -156,6 +157,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await SecureStore.deleteItemAsync("cachedUsuario");
       await googleSignOut();
       await get().clearInvitation();
+      await forgetSessionData();
       queryClient.clear();
       set({ usuario: null, isAuthenticated: false, sessionExpired: false });
     } finally { set({ signingOut: false }); }

@@ -4,6 +4,7 @@ import * as SecureStore from "expo-secure-store";
 import type { Router } from "expo-router";
 import { api } from "./api";
 import { notificationTarget } from "./notificationTarget";
+import { queryClient } from "./queryClient";
 
 type NotificationsModule = typeof import("expo-notifications");
 
@@ -25,6 +26,7 @@ function projectId(): string | undefined {
 
 let lastRegistration: { userId: string; token: string } | null = null;
 const handledResponses = new Set<string>();
+const HANDLED_KEY = "junto.notification.handled";
 export function clearPushRegistration(userId: string) {
   if (lastRegistration?.userId === userId) lastRegistration = null;
 }
@@ -87,22 +89,29 @@ export function listenForNotificationTaps(router: Router, isCurrent: () => boole
       if (!pushSupported()) return;
       const Notifications: NotificationsModule = await import("expo-notifications");
       if (cancelled) return;
-      const open = (response: import("expo-notifications").NotificationResponse) => {
+      const open = async (response: import("expo-notifications").NotificationResponse) => {
         if (cancelled || !isCurrent()) return;
         const identifier = response.notification.request.identifier;
         const target = notificationTarget(response.notification.request.content.data);
         if (!target || handledResponses.has(identifier)) return;
         handledResponses.add(identifier);
         if (handledResponses.size > 50) handledResponses.delete(handledResponses.values().next().value!);
+        if ((await SecureStore.getItemAsync(HANDLED_KEY).catch(() => null)) === identifier || cancelled || !isCurrent()) return;
+        await SecureStore.setItemAsync(HANDLED_KEY, identifier).catch(() => undefined);
+        if (cancelled || !isCurrent()) return;
         router.push(target as Parameters<Router["push"]>[0]);
       };
       const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
         liveResponseHandled = true;
-        open(response);
+        void open(response);
       });
-      remove = () => subscription.remove();
+      const received = Notifications.addNotificationReceivedListener(() => {
+        if (cancelled || !isCurrent()) return;
+        for (const key of ["pagos", "grupos", "actividad", "comentarios", "invitaciones"]) void queryClient.invalidateQueries({ queryKey: [key] });
+      });
+      remove = () => { subscription.remove(); received.remove(); };
       const initial = await Notifications.getLastNotificationResponseAsync();
-      if (initial && !liveResponseHandled) open(initial);
+      if (initial && !liveResponseHandled) await open(initial);
     } catch {
       /* Tapping a notification simply lands on Inicio if this fails. */
     }

@@ -10,6 +10,7 @@ test("notification destinations require an exact UUID and open the specific reso
   assert.equal(notificationTarget({ grupoId: id }), `/(app)/grupos/${id}`);
   for (const invalid of ["-".repeat(36), "a".repeat(36), "../../perfil", 123, {}, null]) assert.equal(notificationTarget({ gastoId: invalid }), null);
   assert.equal(notificationTarget(undefined), null);
+  assert.equal(notificationTarget({ type: "invitacion" }), "/(app)/(tabs)");
 });
 test("protected account endpoints refresh expired tokens, but credential exchanges do not", () => {
   for (const path of ["/auth/me", "/auth/push-token", "/auth/perfil", "/grupos"]) assert.equal(isAuthEntry(path), false, path);
@@ -32,6 +33,7 @@ test("push registration and taps stop when the account changes or the listener u
     requestPermissionsAsync: async () => { permissionRequests++; return { status: "granted" }; },
     getExpoPushTokenAsync: async () => ({ data: "ExponentPushToken[fictional-device]" }),
     addNotificationResponseReceivedListener: callback => { onTap = callback; return { remove() { onTap = undefined; } }; },
+    addNotificationReceivedListener: () => ({ remove() {} }),
     getLastNotificationResponseAsync: async () => initial,
   };
   Module._load = function(request, parent, ...rest) {
@@ -40,6 +42,7 @@ test("push registration and taps stop when the account changes or the listener u
       if (request === "expo-constants") return { __esModule: true, default: { expoConfig: { extra: { eas: { projectId: "qa" } } } }, ExecutionEnvironment: { StoreClient: "store" } };
       if (request === "expo-secure-store") return { getItemAsync: async key => storage.get(key) || null, setItemAsync: async (key, value) => storage.set(key, value), deleteItemAsync: async key => storage.delete(key) };
       if (request === "./api") return { api: { put: async (...args) => puts.push(args) } };
+      if (request === "./queryClient") return { queryClient: { invalidateQueries: async () => {} } };
       if (request === "expo-notifications") return notifications;
     }
     return originalLoad.call(this, request, parent, ...rest);

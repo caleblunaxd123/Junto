@@ -13,7 +13,7 @@ export function createPushTransport(request: typeof fetch = fetch, accessToken =
       const response = await request(`https://exp.host/--/api/v2/push/${path}`, {
         // @types/react-native leaks a second fetch/AbortSignal declaration into this
         // monorepo. The API runs Node 22: its native signal is valid at this boundary.
-        method: "POST", headers, body: JSON.stringify(payload), signal: AbortSignal.timeout(8000) as NonNullable<Parameters<typeof fetch>[1]>["signal"],
+        method: "POST", headers, body: JSON.stringify(payload), signal: AbortSignal.timeout(5000) as NonNullable<Parameters<typeof fetch>[1]>["signal"],
       });
       if (!response.ok) throw new Error(`PushHTTP${response.status}`);
       return await response.json() as unknown;

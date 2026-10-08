@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, Modal, Pressable, ScrollView, View, useWindow
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
 import { Screen, Card, Label, Button, ErrorBox, Avatar, palette, design } from "../../../src/components/ui/Design";
@@ -26,7 +27,8 @@ export default function PaymentDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const user = useAuthStore((s) => s.usuario);
   const qc = useQueryClient();
-  const { data: pago, isLoading, isError, refetch, isRefetching } = usePago(id);
+  const focused = useIsFocused();
+  const { data: pago, isLoading, isError, refetch, isRefetching } = usePago(id, focused);
   const { data: group } = useGrupo(pago?.grupoId || "");
   const canSee = !!pago?.permisos.verComprobante && !!pago.comprobante?.imagenDisponible;
   const image = useComprobanteImagen(id, canSee);
@@ -100,6 +102,13 @@ export default function PaymentDetail() {
     );
   }
 
+  const imageUri = image.data ? `data:${image.data.mime};base64,${image.data.imagen}` : null;
+  // Real proportions of the voucher for the full-screen view.
+  const [ratio, setRatio] = React.useState(2.2);
+  React.useEffect(() => {
+    if (imageUri) Image.getSize(imageUri, (w, h) => { if (w > 0 && h > 0) setRatio(h / w); }, () => undefined);
+  }, [imageUri]);
+
   if (isLoading) return <Screen title="Pago" back><ActivityIndicator color={palette.primary} /></Screen>;
   if (isError || !pago)
     return (
@@ -113,7 +122,6 @@ export default function PaymentDetail() {
   const tone = tones[headline.tone];
   const voucher = pago.comprobante;
   const amountMismatch = voucher?.montoLeido != null && voucher.montoLeido !== pago.monto;
-  const imageUri = image.data ? `data:${image.data.mime};base64,${image.data.imagen}` : null;
   const approvers = pago.aprobadores.map((a) => `${Nombre(a.id)}${a.rol === "administrador" ? " (administración)" : " (quien recibe)"}`);
 
   // The decision stays on screen while the approver looks at the voucher.
@@ -179,9 +187,9 @@ export default function PaymentDetail() {
         ) : image.isError || !imageUri ? (
           <Button title="Reintentar cargar la imagen" secondary compact onPress={() => image.refetch()} />
         ) : (
-          <Pressable accessibilityRole="imagebutton" accessibilityLabel="Ver el comprobante en grande" onPress={() => setZoom(true)}>
+          <Pressable accessibilityRole="imagebutton" accessibilityLabel="Ver el comprobante completo" onPress={() => setZoom(true)}>
             <Image source={{ uri: imageUri }} accessibilityIgnoresInvertColors style={{ width: "100%", height: 320, borderRadius: 14, backgroundColor: "#F2F3F5" }} resizeMode="contain" />
-            <Label size={12} weight="bold" color={palette.purple} style={{ textAlign: "center", marginTop: 4 }}>Toca para ampliar</Label>
+            <Label size={12} weight="bold" color={palette.purple} style={{ textAlign: "center", marginTop: 4 }}>Toca para verla completa</Label>
           </Pressable>
         )}
         {voucher && pago.permisos.verComprobante && (
@@ -223,8 +231,10 @@ export default function PaymentDetail() {
           <Pressable accessibilityRole="button" accessibilityLabel="Cerrar comprobante" onPress={() => setZoom(false)} style={{ alignSelf: "flex-end", padding: 16, minHeight: 48 }}>
             <Ionicons name="close" size={30} color="white" />
           </Pressable>
-          <ScrollView maximumZoomScale={4} minimumZoomScale={1} centerContent contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}>
-            {imageUri && <Image source={{ uri: imageUri }} accessibilityLabel="Comprobante del pago" style={{ width, height: height * 0.8 }} resizeMode="contain" />}
+          {/* Full width at its real proportions: a tall screenshot is read by scrolling (Android has no
+              pinch zoom in a ScrollView); iOS can still zoom. */}
+          <ScrollView maximumZoomScale={4} minimumZoomScale={1} contentContainerStyle={{ flexGrow: 1, justifyContent: "center", paddingBottom: 24 }}>
+            {imageUri && <Image source={{ uri: imageUri }} accessibilityLabel="Comprobante del pago" style={{ width, height: Math.max(width * ratio, height * 0.5) }} resizeMode="contain" />}
           </ScrollView>
         </SafeAreaView>
       </Modal>

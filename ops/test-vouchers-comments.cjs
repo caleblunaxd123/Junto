@@ -7,9 +7,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { PrismaClient } = require("@prisma/client");
 const origin = require("./local-qa.cjs").localQa();
+const { acceptInvite } = require("./accept-invite.cjs");
 const db = new PrismaClient();
 const suffix = Date.now();
-const voucher = fs.readFileSync(path.join(__dirname, "qa-voucher.png")).toString("base64");
+const voucherBytes = fs.readFileSync(path.join(__dirname, "qa-voucher.png"));
+const voucher = voucherBytes.toString("base64");
 
 async function call(route, token, method = "GET", body) {
   const response = await fetch(origin + route, { method, headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
@@ -30,6 +32,10 @@ async function account(name, fullName) {
 const owes = async (token, groupId, from, to) => ((await ok(`/grupos/${groupId}`, token)).saldos.find((s) => s.deudorId === from && s.acreedorId === to) || { monto: 0 }).monto;
 
 async function run() {
+  // Re-runnable on the same local QA database: an earlier run left this fictitious voucher backing an
+  // approved payment, which (correctly) blocks it. Release it so this run starts from the same state.
+  const hash = require("node:crypto").createHash("sha256").update(voucherBytes).digest("hex");
+  await db.pago.updateMany({ where: { estado: { in: ["reportado", "exitoso"] }, comprobante: { OR: [{ hash }, { app: "yape", operacion: "03416872" }] } }, data: { estado: "rechazado" } });
   const ana = await account("ana", "Ana Admin");
   const luis = await account("luis", "Luis Pagador");
   const marta = await account("marta", "Marta Ríos");
@@ -39,7 +45,10 @@ async function run() {
   // Ana creates the group and lets admins approve payments.
   const group = await ok("/grupos", ana.accessToken, "POST", { nombre: `QA comprobantes ${suffix}`, tipo: "amigos", aprobacionPagos: "administrador" }, 201);
   assert.equal(group.aprobacionPagos, "administrador");
-  for (const person of [luis, marta, pedro]) await ok(`/grupos/${group.id}/invitar`, ana.accessToken, "POST", { identificador: person.email });
+  for (const person of [luis, marta, pedro]) {
+    await ok(`/grupos/${group.id}/invitar`, ana.accessToken, "POST", { identificador: person.email });
+    await acceptInvite(origin, person.accessToken, group.id);
+  }
   // Marta paid S/ 75 for Luis, Marta and Pedro: Luis and Pedro owe her S/ 25 each. Ana is not involved.
   const expense = await ok(`/grupos/${group.id}/gastos`, marta.accessToken, "POST", { descripcion: "Pollada", montoTotal: 7500, pagadoPor: marta.usuario.id, participantes: [luis, marta, pedro].map((p) => ({ usuarioId: p.usuario.id })) }, 201);
   assert.equal(await owes(luis.accessToken, group.id, luis.usuario.id, marta.usuario.id), 2500);
@@ -62,6 +71,10 @@ async function run() {
   assert.equal(read.fecha, "2026-10-07");
   assert.equal(read.sugerenciaReceptorId, marta.usuario.id);
   assert.equal(read.duplicado, null);
+  // Everyone sends their voucher at the same time: each one waits its turn and is read, none is
+  // turned away as "busy" (the reader runs one image at a time).
+  const together = await Promise.all([pedro, marta, ana].map((person) => ok("/pagos/comprobantes", person.accessToken, "POST", { grupoId: group.id, imagen: voucher }, 201)));
+  assert.deepEqual(together.map((r) => [r.leido, r.monto]), [[true, 2500], [true, 2500], [true, 2500]]);
 
   // Reporting with the voucher. Only the uploader can use their draft.
   await ok("/pagos/reportar", pedro.accessToken, "POST", { grupoId: group.id, receptorId: marta.usuario.id, monto: 2500, metodo: "yape", comprobanteId: read.comprobanteId }, 409);
@@ -193,6 +206,7 @@ async function run() {
     for (let i = 0; i < 2; i++) {
       const separate = await ok("/grupos", ana.accessToken, "POST", { nombre: `QA carrera ${same} ${suffix} ${i}`, tipo: "amigos" }, 201);
       await ok(`/grupos/${separate.id}/invitar`, ana.accessToken, "POST", { identificador: pedro.email });
+      await acceptInvite(origin, pedro.accessToken, separate.id);
       await ok(`/grupos/${separate.id}/gastos`, pedro.accessToken, "POST", { descripcion: "QA carrera", montoTotal: 5000, pagadoPor: pedro.usuario.id, participantes: [ana, pedro].map((p) => ({ usuarioId: p.usuario.id })) }, 201);
       const draft = await db.comprobante.create({ data: { grupoId: separate.id, subidoPor: ana.usuario.id, hash: same === "image" ? `qa-image-${suffix}` : `qa-operation-${suffix}-${i}`, app: "yape", operacion: same === "operation" ? `QA${suffix}` : null } });
       duplicateDrafts.push({ grupoId: separate.id, receptorId: pedro.usuario.id, monto: 2500, metodo: "yape", comprobanteId: draft.id });
@@ -209,6 +223,6 @@ async function run() {
   // The payments themselves stay, so Marta's balance does not change.
   assert.equal(await db.pago.count({ where: { pagadorId: luis.usuario.id } }), 3);
 
-  console.log(JSON.stringify({ result: "PASS", ocrMs, checks: "OCR proposal, recipient match, draft ownership, duplicate voucher, image visibility, admin approval, receiver revert, freed voucher, approval race, setting off, comments limits/moderation, draft purge, account deletion" }));
+  console.log(JSON.stringify({ result: "PASS", ocrMs, checks: "OCR proposal, simultaneous uploads all read, recipient match, draft ownership, duplicate voucher, image visibility, admin approval, receiver revert, freed voucher, approval race, setting off, comments limits/moderation, draft purge, account deletion" }));
 }
 run().finally(() => db.$disconnect()).catch((error) => { console.error(error); process.exit(1); });

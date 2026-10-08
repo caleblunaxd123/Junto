@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 const origin = require("./local-qa.cjs").localQa();
+const { acceptInvite } = require("./accept-invite.cjs");
 const db = new PrismaClient();
 const suffix = Date.now();
 const password = `JuntoQA${suffix}!`;
@@ -121,10 +122,12 @@ async function run() {
     { nombre: `QA seguridad y corrección ${suffix}`, tipo: "amigos" },
     201,
   );
-  for (const person of [a, l])
+  for (const person of [a, l]) {
     await request(`/grupos/${group.id}/invitar`, c.accessToken, "POST", {
       identificador: person.usuario.email,
     });
+    await acceptInvite(origin, person.accessToken, group.id);
+  }
   const participantes = [c, a, l].map((s) => ({ usuarioId: s.usuario.id }));
   await request(
     `/grupos/invitacion/${group.linkInvitacion}`,

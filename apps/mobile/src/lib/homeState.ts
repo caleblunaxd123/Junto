@@ -4,7 +4,7 @@ type QueryState = { loading: boolean; error: boolean; hasData: boolean };
 export function homeState(groups: QueryState, payments: QueryState, bills: QueryState, groupCount: number, openBillCount: number) {
   const queries = [groups, payments, bills];
   return {
-    unavailable: queries.every((query) => query.error && !query.hasData),
+    unavailable: queries.every((query) => query.error),
     empty: queries.every((query) => query.hasData && !query.loading && !query.error) && groupCount === 0 && openBillCount === 0,
     canShowAllClear: groupCount > 0 && [groups, payments].every((query) => query.hasData && !query.loading && !query.error),
   };

@@ -15,10 +15,10 @@ test("empty home requires all queries to succeed, not merely zero default counts
   }
   assert.equal(homeState(loaded, loaded, loaded, 0, 1).empty, false);
 });
-test("one unavailable state replaces total failure, while partial and cached data stay visible", () => {
+test("one unavailable state replaces total failure, including stale cached records", () => {
   assert.equal(homeState(failed, failed, failed, 0, 0).unavailable, true);
   assert.equal(homeState(loaded, failed, failed, 2, 0).unavailable, false);
-  assert.equal(homeState({ ...failed, hasData: true }, failed, failed, 2, 0).unavailable, false);
+  assert.equal(homeState({ ...failed, hasData: true }, failed, failed, 2, 0).unavailable, true);
 });
 test("unknown or stale pending payments never claim that the user is all clear", () => {
   assert.equal(homeState(loaded, loaded, loaded, 1, 0).canShowAllClear, true);

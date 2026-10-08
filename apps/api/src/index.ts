@@ -15,6 +15,7 @@ import cuentasRoutes from './routes/cuentas.routes';
 import publicRoutes from './routes/public.routes';
 import compartirRoutes from './routes/compartir.routes';
 import comentariosRoutes from './routes/comentarios.routes';
+import invitacionesRoutes from './routes/invitaciones.routes';
 import { emailProvider } from './lib/email';
 import { authMiddleware } from './middleware/auth';
 import { getActivity } from './services/activity.service';
@@ -45,8 +46,10 @@ app.use(
 );
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-// Body parsing
-app.use(express.json({ limit: '10mb' }));
+// Body parsing. Only the two image readers take large bodies (a 3–4 MB photo in base64); every
+// other route, including sign-in, stays small so nobody can make the API parse megabytes for free.
+app.use(['/api/pagos/comprobantes', '/api/cuentas-rapidas/leer-boleta'], express.json({ limit: '6mb' }));
+app.use(express.json({ limit: '256kb' }));
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -57,6 +60,7 @@ app.use('/api/ia', aiRoutes);
 app.use('/api/cuentas-rapidas', cuentasRoutes);
 app.use('/api/compartir', compartirRoutes);
 app.use('/api/comentarios', comentariosRoutes);
+app.use('/api/invitaciones', invitacionesRoutes);
 app.get('/api/actividad', authMiddleware, async (req, res, next) => {
   try { res.json(await getActivity(req.user!.userId, typeof req.query.grupoId === 'string' ? req.query.grupoId : undefined)); }
   catch (error) { next(error); }

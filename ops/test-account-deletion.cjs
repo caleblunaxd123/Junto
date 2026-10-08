@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const { PrismaClient } = require("@prisma/client");
 const origin = require("./local-qa.cjs").localQa();
+const { acceptInvite } = require("./accept-invite.cjs");
 const db = new PrismaClient();
 const suffix = Date.now();
 const password = `JuntoQA${suffix}!`;
@@ -27,6 +28,7 @@ async function run() {
   await db.reciboPush.create({ data: { ticketId: `delete-${suffix}`, usuarioId: ana.usuario.id, token: "ExponentPushToken[fictional-only]" } });
   const group = await request("/grupos", ana.accessToken, "POST", { nombre: `QA · Depa ${suffix}`, tipo: "roomies" }, 201);
   await request(`/grupos/${group.id}/invitar`, ana.accessToken, "POST", { identificador: luis.email });
+  await acceptInvite(origin, luis.accessToken, group.id);
   await request(`/grupos/${group.id}/gastos`, ana.accessToken, "POST", {
     descripcion: "Luz", montoTotal: 12000, pagadoPor: ana.usuario.id, participantes: [{ usuarioId: ana.usuario.id }, { usuarioId: luis.usuario.id }],
   }, 201);
