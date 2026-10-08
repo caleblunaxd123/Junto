@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma";
 import { UserError as Error } from "../domain/errors";
-import { calcularSaldosGrupo } from "./balance.service";
+import { resumenCuentasGrupo } from "./balance.service";
+import { payableLimit } from "@junto/shared/payable";
 import { sendPushNotification } from "../lib/firebase";
 import { voucherInUse } from "./vouchers.service";
 import { transactionLock } from "../lib/transactionLock";
@@ -15,6 +16,8 @@ const pagoInclude = {
   comprobante: { select: { id: true, app: true, montoLeido: true } },
   _count: { select: { comentarios: { where: { eliminado: false } } } },
 } as const;
+// Resolved payments returned by /pagos/historial (pending ones are always all included).
+export const HISTORY_LIMIT = 200;
 // A receiver can say "it never arrived" about a payment an admin approved for them, for this long.
 const REVERT_DAYS = 30;
 const money = (cents: number) => `S/ ${(cents / 100).toFixed(2)}`;
@@ -67,15 +70,16 @@ export async function reportarPago(
     if (miembros !== 2)
       throw new Error("Ambas personas deben pertenecer al grupo");
 
-    const saldo = (await calcularSaldosGrupo(input.grupoId)).find(
-      (item) =>
-        item.deudorId === pagadorId && item.acreedorId === input.receptorId,
-    );
-    if (!saldo)
-      throw new Error("No tienes una deuda pendiente con esta persona");
-    if (input.monto > saldo.monto) {
+    // Read the ledger through this transaction (one pool connection, consistent with the lock).
+    const { cuentas } = await resumenCuentasGrupo(input.grupoId, tx);
+    const waiting = await tx.pago.findMany({ where: { grupoId: input.grupoId, estado: "reportado" }, select: { pagadorId: true, receptorId: true, monto: true } });
+    const { owes, owed, limit } = payableLimit(cuentas, waiting, pagadorId, input.receptorId);
+    if (!owes) throw new Error("No tienes una deuda pendiente en este grupo");
+    if (!owed) throw new Error("Esta persona no tiene dinero por recibir en el grupo. Págale a quien te indica la app.");
+    if (!limit) throw new Error("Ya hay pagos esperando aprobación que cubren este monto. Espera a que los revisen.");
+    if (input.monto > limit) {
       throw new Error(
-        `El pago no puede superar tu saldo pendiente de S/ ${(saldo.monto / 100).toFixed(2)}`,
+        `El pago no puede superar S/ ${(limit / 100).toFixed(2)}: es lo que aún debes y lo que esta persona tiene por recibir`,
       );
     }
 
@@ -123,7 +127,7 @@ export async function reportarPago(
 
   const payer = first(pago.pagador.nombre);
   const evidence = pago.comprobante ? " con comprobante" : "";
-  await notify(
+  void notify(
     [input.receptorId],
     "Pago por confirmar",
     `${payer} registró un pago de ${money(input.monto)}${evidence}. Confírmalo cuando lo veas en tu cuenta.`,
@@ -131,7 +135,7 @@ export async function reportarPago(
   );
   if (pago.grupo.aprobacionPagos === "administrador") {
     const reviewers = (await admins(input.grupoId)).filter((id) => id !== pagadorId && id !== input.receptorId);
-    await notify(
+    void notify(
       reviewers,
       "Pago por revisar",
       `${payer} subió un pago de ${money(input.monto)}${evidence} para ${first(pago.receptor.nombre)} en ${pago.grupo.nombre}. Revísalo.`,
@@ -182,7 +186,7 @@ export async function resolverPago(
   const decider = first(resuelto.resolutor?.nombre || pago.receptor.nombre);
   const receiver = first(pago.receptor.nombre);
   const data = { grupoId: pago.grupoId, pagoId: pago.id, type: confirmar ? "pago_confirmado" : "pago_rechazado" };
-  await notify(
+  void notify(
     [pago.pagadorId],
     confirmar ? "Pago confirmado" : "Pago no confirmado",
     confirmar
@@ -191,7 +195,7 @@ export async function resolverPago(
     data,
   );
   if (byAdmin)
-    await notify(
+    void notify(
       [pago.receptorId],
       confirmar ? "Aprobaron un pago para ti" : "Rechazaron un pago para ti",
       confirmar
@@ -209,7 +213,7 @@ async function marcarNoRecibido(pago: { id: string; grupoId: string; pagadorId: 
     data: { estado: "rechazado", fechaResolucion: new Date(), resueltoPor: userId },
   });
   if (result.count !== 1) throw new Error("Este pago cambió. Actualiza el grupo.", 409);
-  await notify(
+  void notify(
     [pago.pagadorId, ...(pago.resueltoPor ? [pago.resueltoPor] : [])],
     "Pago no recibido",
     `${first(pago.receptor.nombre)} indicó que no recibió el pago de ${money(pago.monto)} en ${pago.grupo.nombre}. La deuda vuelve a estar pendiente.`,
@@ -228,17 +232,20 @@ function withRules<T extends Rules>(pago: T, userId: string, adminGroups: Set<st
  */
 export async function getHistorial(usuarioId: string) {
   const adminGroups = new Set((await prisma.grupoMiembro.findMany({ where: { usuarioId, activo: true, rol: "admin" }, select: { grupoId: true } })).map((m) => m.grupoId));
-  const pagos = await prisma.pago.findMany({
-    where: {
-      OR: [
-        { pagadorId: usuarioId },
-        { receptorId: usuarioId },
-        { estado: "reportado", grupoId: { in: [...adminGroups] }, grupo: { aprobacionPagos: "administrador", activo: true } },
-      ],
-    },
-    include: pagoInclude,
-    orderBy: { fechaPago: "desc" },
-  });
+  const mine = {
+    OR: [
+      { pagadorId: usuarioId },
+      { receptorId: usuarioId },
+      { estado: "reportado", grupoId: { in: [...adminGroups] }, grupo: { aprobacionPagos: "administrador", activo: true } },
+    ],
+  };
+  // Everything still waiting (the app needs all of it) plus the latest resolved ones: history no
+  // longer grows without bound on every refresh.
+  const [waiting, resolved] = await Promise.all([
+    prisma.pago.findMany({ where: { AND: [mine, { estado: "reportado" }] }, include: pagoInclude, orderBy: { fechaPago: "desc" } }),
+    prisma.pago.findMany({ where: { AND: [mine, { estado: { not: "reportado" } }] }, include: pagoInclude, orderBy: { fechaPago: "desc" }, take: HISTORY_LIMIT }),
+  ]);
+  const pagos = [...waiting, ...resolved].sort((a, b) => b.fechaPago.getTime() - a.fechaPago.getTime());
   return pagos.map((p) => withRules(p, usuarioId, adminGroups, p.grupoId));
 }
 

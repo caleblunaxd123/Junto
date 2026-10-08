@@ -7,6 +7,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { PrismaClient } = require("@prisma/client");
 const origin = require("./local-qa.cjs").localQa();
+const { acceptInvite } = require("./accept-invite.cjs");
 const db = new PrismaClient();
 const suffix = Date.now();
 const voucherBytes = fs.readFileSync(path.join(__dirname, "qa-voucher.png"));
@@ -44,7 +45,10 @@ async function run() {
   // Ana creates the group and lets admins approve payments.
   const group = await ok("/grupos", ana.accessToken, "POST", { nombre: `QA comprobantes ${suffix}`, tipo: "amigos", aprobacionPagos: "administrador" }, 201);
   assert.equal(group.aprobacionPagos, "administrador");
-  for (const person of [luis, marta, pedro]) await ok(`/grupos/${group.id}/invitar`, ana.accessToken, "POST", { identificador: person.email });
+  for (const person of [luis, marta, pedro]) {
+    await ok(`/grupos/${group.id}/invitar`, ana.accessToken, "POST", { identificador: person.email });
+    await acceptInvite(origin, person.accessToken, group.id);
+  }
   // Marta paid S/ 75 for Luis, Marta and Pedro: Luis and Pedro owe her S/ 25 each. Ana is not involved.
   const expense = await ok(`/grupos/${group.id}/gastos`, marta.accessToken, "POST", { descripcion: "Pollada", montoTotal: 7500, pagadoPor: marta.usuario.id, participantes: [luis, marta, pedro].map((p) => ({ usuarioId: p.usuario.id })) }, 201);
   assert.equal(await owes(luis.accessToken, group.id, luis.usuario.id, marta.usuario.id), 2500);
@@ -202,6 +206,7 @@ async function run() {
     for (let i = 0; i < 2; i++) {
       const separate = await ok("/grupos", ana.accessToken, "POST", { nombre: `QA carrera ${same} ${suffix} ${i}`, tipo: "amigos" }, 201);
       await ok(`/grupos/${separate.id}/invitar`, ana.accessToken, "POST", { identificador: pedro.email });
+      await acceptInvite(origin, pedro.accessToken, separate.id);
       await ok(`/grupos/${separate.id}/gastos`, pedro.accessToken, "POST", { descripcion: "QA carrera", montoTotal: 5000, pagadoPor: pedro.usuario.id, participantes: [ana, pedro].map((p) => ({ usuarioId: p.usuario.id })) }, 201);
       const draft = await db.comprobante.create({ data: { grupoId: separate.id, subidoPor: ana.usuario.id, hash: same === "image" ? `qa-image-${suffix}` : `qa-operation-${suffix}-${i}`, app: "yape", operacion: same === "operation" ? `QA${suffix}` : null } });
       duplicateDrafts.push({ grupoId: separate.id, receptorId: pedro.usuario.id, monto: 2500, metodo: "yape", comprobanteId: draft.id });

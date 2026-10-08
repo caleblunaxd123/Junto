@@ -74,3 +74,4 @@ jobs:
           node ops/test-hardening.cjs || (cat api.log && exit 1)
           node ops/test-security-ux.cjs || (cat api.log && exit 1)
           node ops/test-redesign.cjs || (cat api.log && exit 1)
+          node ops/test-groups-ledger.cjs || (cat api.log && exit 1)

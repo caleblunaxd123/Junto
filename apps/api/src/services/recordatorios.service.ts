@@ -1,6 +1,17 @@
 import { prisma } from '../lib/prisma';
 import { sendPushNotification } from '../lib/firebase';
 import { calcularSaldosGrupo } from './balance.service';
+import { UserError as Error } from '../domain/errors';
+import { transactionLock } from '../lib/transactionLock';
+
+// One manual reminder per creditor and debtor in this window; reminders are a nudge, not spam.
+export const REMINDER_COOLDOWN_HOURS = 12;
+
+/** What is still unpaid after the payments the debtor already reported to this creditor. */
+async function unpaidAfterReported(grupoId: string, deudorId: string, acreedorId: string, monto: number) {
+  const reported = await prisma.pago.aggregate({ where: { grupoId, pagadorId: deudorId, receptorId: acreedorId, estado: 'reportado' }, _sum: { monto: true } });
+  return monto - (reported._sum.monto ?? 0);
+}
 
 type Tono = 'suave' | 'directo' | 'urgente';
 
@@ -38,7 +49,10 @@ export async function enviarRecordatorio(
   // Calculate actual debt amount
   const saldos = await calcularSaldosGrupo(grupoId);
   const deuda = saldos.find((s) => s.deudorId === deudorId && s.acreedorId === acreedorId);
-  if (!deuda || deuda.monto <= 0) throw new Error('No existe deuda de este usuario hacia ti');
+  if (!deuda || deuda.monto <= 0) throw new Error('Esta persona ya no te debe nada en este grupo. Actualiza para ver las cuentas.', 409);
+  // A payment already reported (waiting for your answer) is not a reason to nag: answer it instead.
+  const pendiente = await unpaidAfterReported(grupoId, deudorId, acreedorId, deuda.monto);
+  if (pendiente <= 0) throw new Error('Esta persona ya registró un pago por lo que te debe. Revisa si lo recibiste.', 409);
 
   // Count previous reminders for escalation
   const numRecordatorios = await prisma.recordatorio.count({
@@ -54,32 +68,41 @@ export async function enviarRecordatorio(
     prisma.grupo.findUnique({ where: { id: grupoId }, select: { nombre: true } }),
   ]);
 
-  if (!acreedor || !deudor || !grupo) throw new Error('Datos no encontrados');
+  if (!acreedor || !deudor || !grupo) throw new Error('Datos no encontrados', 404);
 
   const mensaje = buildMensaje(
     acreedor.nombre,
     deudor.nombre,
-    deuda.monto,
+    pendiente,
     grupo.nombre,
     tono,
     numRecordatorios
   );
 
-  const recordatorio = await prisma.recordatorio.create({
-    data: {
-      enviadoPor: acreedorId,
-      enviadoA: deudorId,
-      grupoId,
-      monto: deuda.monto,
-      tipo: 'manual',
-      tono,
-      mensaje,
-    },
+  // Check-and-record under a lock so two taps (or two devices) cannot both send.
+  const recordatorio = await prisma.$transaction(async (tx) => {
+    await transactionLock(tx, `reminder:${grupoId}:${acreedorId}:${deudorId}`);
+    const reciente = await tx.recordatorio.findFirst({
+      where: { enviadoPor: acreedorId, enviadoA: deudorId, grupoId, fechaEnvio: { gte: new Date(Date.now() - REMINDER_COOLDOWN_HOURS * 3_600_000) } },
+      select: { id: true },
+    });
+    if (reciente) throw new Error(`Ya le recordaste hace poco. Podrás enviar otro recordatorio dentro de ${REMINDER_COOLDOWN_HOURS} horas.`, 429);
+    return tx.recordatorio.create({
+      data: {
+        enviadoPor: acreedorId,
+        enviadoA: deudorId,
+        grupoId,
+        monto: pendiente,
+        tipo: 'manual',
+        tono,
+        mensaje,
+      },
+    });
   });
 
-  // Send push notification
+  // Send push notification (never holds the request).
   if (deudor.expoPushToken) {
-    await sendPushNotification(
+    void sendPushNotification(
       deudor.expoPushToken,
       'Recordatorio de deuda',
       mensaje,
@@ -101,13 +124,14 @@ export async function configurarRecordatorioAutomatico(
   });
   if (!miembro) throw new Error('No perteneces a este grupo');
 
-  const config = await prisma.configRecordatorio.upsert({
-    where: { id: (await prisma.configRecordatorio.findFirst({ where: { grupoId, configuradoPor: usuarioId } }))?.id || '' },
-    create: { grupoId, configuradoPor: usuarioId, frecuenciaDias, activo },
-    update: { frecuenciaDias, activo },
+  // (An upsert keyed on an empty id failed for everyone: an empty string is not a uuid.)
+  return prisma.$transaction(async (tx) => {
+    await transactionLock(tx, `reminder-config:${grupoId}:${usuarioId}`);
+    const existing = await tx.configRecordatorio.findFirst({ where: { grupoId, configuradoPor: usuarioId } });
+    return existing
+      ? tx.configRecordatorio.update({ where: { id: existing.id }, data: { frecuenciaDias, activo } })
+      : tx.configRecordatorio.create({ data: { grupoId, configuradoPor: usuarioId, frecuenciaDias, activo } });
   });
-
-  return config;
 }
 
 export async function getHistorialRecordatorios(deudorId: string, acreedorId: string, grupoId: string) {
@@ -124,32 +148,32 @@ export async function getHistorialRecordatorios(deudorId: string, acreedorId: st
 export async function ejecutarRecordatoriosAutomaticos() {
   console.info('[Cron] Running automatic reminders...');
 
+  // Only for people still in an active group, and only for money owed to whoever configured it:
+  // a reminder says "<acreedor> te recuerda", so nobody else may turn it on in their name.
   const configs = await prisma.configRecordatorio.findMany({
-    where: { activo: true },
+    where: { activo: true, grupo: { activo: true }, configurador: { activo: true, grupoMiembros: { some: { activo: true } } } },
     include: { grupo: { include: { miembros: { where: { activo: true } } } } },
   });
 
   for (const config of configs) {
+    if (!config.grupo.miembros.some((m) => m.usuarioId === config.configuradoPor)) continue;
     const saldos = await calcularSaldosGrupo(config.grupoId);
+    const activos = new Set(config.grupo.miembros.map((m) => m.usuarioId));
 
     for (const saldo of saldos) {
-      if (saldo.monto <= 0) continue;
+      if (saldo.monto <= 0 || saldo.acreedorId !== config.configuradoPor || !activos.has(saldo.deudorId)) continue;
+      const pendiente = await unpaidAfterReported(config.grupoId, saldo.deudorId, saldo.acreedorId, saldo.monto);
+      if (pendiente <= 0) continue;
 
       // Check if enough days have passed since last reminder
-      const ultimoRecordatorio = await prisma.recordatorio.findFirst({
-        where: {
-          enviadoA: saldo.deudorId,
-          grupoId: config.grupoId,
-          tipo: 'automatico',
-        },
-        orderBy: { fechaEnvio: 'desc' },
-      });
-
-      const diasDesdeUltimo = ultimoRecordatorio
-        ? (Date.now() - ultimoRecordatorio.fechaEnvio.getTime()) / (1000 * 60 * 60 * 24)
-        : Infinity;
-
-      if (diasDesdeUltimo < config.frecuenciaDias) continue;
+      const tooSoon = async (db: typeof prisma | Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => {
+        const ultimo = await db.recordatorio.findFirst({
+          where: { enviadoA: saldo.deudorId, grupoId: config.grupoId, tipo: 'automatico' },
+          orderBy: { fechaEnvio: 'desc' },
+        });
+        return !!ultimo && (Date.now() - ultimo.fechaEnvio.getTime()) / 86_400_000 < config.frecuenciaDias;
+      };
+      if (await tooSoon(prisma)) continue;
 
       // Count all reminders for escalation
       const numRecordatorios = await prisma.recordatorio.count({
@@ -171,25 +195,31 @@ export async function ejecutarRecordatoriosAutomaticos() {
       const mensaje = buildMensaje(
         acreedor.nombre,
         deudor.nombre,
-        saldo.monto,
+        pendiente,
         grupo.nombre,
         tono,
         numRecordatorios
       );
 
-      await prisma.recordatorio.create({
-        data: {
-          enviadoPor: saldo.acreedorId,
-          enviadoA: saldo.deudorId,
-          grupoId: config.grupoId,
-          monto: saldo.monto,
-          tipo: 'automatico',
-          tono,
-          mensaje,
-        },
+      // Several API instances run this job: the lock and re-check let only one of them send.
+      const created = await prisma.$transaction(async (tx) => {
+        await transactionLock(tx, `auto-reminder:${config.grupoId}:${saldo.deudorId}`);
+        if (await tooSoon(tx)) return false;
+        await tx.recordatorio.create({
+          data: {
+            enviadoPor: saldo.acreedorId,
+            enviadoA: saldo.deudorId,
+            grupoId: config.grupoId,
+            monto: pendiente,
+            tipo: 'automatico',
+            tono,
+            mensaje,
+          },
+        });
+        return true;
       });
 
-      if (deudor.expoPushToken) {
+      if (created && deudor.expoPushToken) {
         await sendPushNotification(deudor.expoPushToken, 'Recordatorio de deuda', mensaje, {
           grupoId: config.grupoId,
           type: 'recordatorio_automatico',

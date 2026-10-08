@@ -41,6 +41,8 @@ model Usuario {
   refreshTokens       RefreshToken[]
   cuentasRapidas      CuentaRapida[]
   correosCompartidos  CorreoCompartido[]
+  invitacionesRecibidas Invitacion[]    @relation("InvitacionInvitado")
+  invitacionesEnviadas  Invitacion[]    @relation("InvitacionAnfitrion")
   pagosResueltos      Pago[]            @relation("PagoResolutor")
   comprobantes        Comprobante[]
   comentarios         Comentario[]
@@ -92,6 +94,7 @@ model Grupo {
   configRecordatorio ConfigRecordatorio[]
   comprobantes    Comprobante[]
   comentarios     Comentario[]
+  invitaciones    Invitacion[]
 
   @@map("grupos")
 }
@@ -183,6 +186,9 @@ model Pago {
   comentarios     Comentario[]
 
   @@index([pagadorId])
+  // The ledger reads every payment of a group; approvers look up payments addressed to them.
+  @@index([grupoId])
+  @@index([receptorId])
   @@map("pagos")
 }
 
@@ -335,4 +341,26 @@ model ReporteComentario {
 
   @@unique([comentarioId, usuarioId])
   @@map("reportes_comentarios")
+}
+
+// Someone added by e-mail or phone is only invited: nothing of the group is shared with them, and
+// they are not shared with the group, until they accept.
+model Invitacion {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  grupoId        String    @map("grupo_id") @db.Uuid
+  invitadoId     String    @map("invitado_id") @db.Uuid
+  invitadoPor    String    @map("invitado_por") @db.Uuid
+  // pendiente | aceptada | rechazada
+  estado         String    @default("pendiente") @db.VarChar(12)
+  fechaCreacion  DateTime  @default(now()) @map("fecha_creacion")
+  fechaRespuesta DateTime? @map("fecha_respuesta")
+
+  grupo          Grupo     @relation(fields: [grupoId], references: [id])
+  invitado       Usuario   @relation("InvitacionInvitado", fields: [invitadoId], references: [id])
+  anfitrion      Usuario   @relation("InvitacionAnfitrion", fields: [invitadoPor], references: [id])
+
+  @@unique([grupoId, invitadoId])
+  @@index([invitadoId, estado])
+  @@index([invitadoPor, fechaCreacion])
+  @@map("invitaciones")
 }

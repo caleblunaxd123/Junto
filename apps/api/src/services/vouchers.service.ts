@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
+import { transactionLock } from "../lib/transactionLock";
 import { UserError } from "../domain/errors";
 import { matchRecipient, readVoucher, type VoucherReading } from "../domain/voucher";
 import { decodeImage, recognizeText, PSM } from "./ocr.service";
@@ -78,13 +79,6 @@ export async function uploadVoucher(userId: string, input: { grupoId: string; im
     select: { id: true },
   });
   if (!member) throw new UserError("No perteneces a este grupo.", 403);
-  const now = Date.now();
-  const [recent, today] = await Promise.all([
-    prisma.comprobante.count({ where: { subidoPor: userId, fechaCreacion: { gte: new Date(now - 10 * 60_000) } } }),
-    prisma.comprobante.count({ where: { subidoPor: userId, fechaCreacion: { gte: new Date(now - 86_400_000) } } }),
-  ]);
-  if (recent >= VOUCHER_LIMITS.per10Minutes || today >= VOUCHER_LIMITS.perDay)
-    throw new UserError("Subiste muchos comprobantes seguidos. Espera unos minutos.", 429);
 
   const { buffer, mime } = decodeImage(input.imagen, {
     tooHeavy: "La captura supera 3 MB. Recórtala o elige una más liviana.",
@@ -92,25 +86,39 @@ export async function uploadVoucher(userId: string, input: { grupoId: string; im
     tooLarge: "La imagen es demasiado grande. Recorta el comprobante.",
   }, VOUCHER_LIMITS.maxBytes);
   const hash = createHash("sha256").update(buffer).digest("hex");
-  await purgeVouchers().catch(() => undefined);
+
+  // Count and store under one lock: parallel uploads cannot slip past the limit while OCR runs.
+  const stored = await prisma.$transaction(async (tx) => {
+    await transactionLock(tx, `vouchers:${userId}`);
+    const now = Date.now();
+    // This person's own stale drafts (the daily job purges everyone's).
+    await tx.comprobante.deleteMany({ where: { subidoPor: userId, pagoId: null, fechaCreacion: { lt: new Date(now - VOUCHER_LIMITS.draftHours * 3_600_000) } } });
+    const [recent, today] = await Promise.all([
+      tx.comprobante.count({ where: { subidoPor: userId, fechaCreacion: { gte: new Date(now - 10 * 60_000) } } }),
+      tx.comprobante.count({ where: { subidoPor: userId, fechaCreacion: { gte: new Date(now - 86_400_000) } } }),
+    ]);
+    if (recent >= VOUCHER_LIMITS.per10Minutes || today >= VOUCHER_LIMITS.perDay)
+      throw new UserError("Subiste muchos comprobantes seguidos. Espera unos minutos.", 429);
+    return tx.comprobante.create({
+      data: { subidoPor: userId, grupoId: input.grupoId, hash, imagen: { create: { mime, datos: buffer } } },
+      select: { id: true },
+    });
+  });
 
   const { reading, aviso } = await read(buffer);
   const others = await prisma.grupoMiembro.findMany({
     where: { grupoId: input.grupoId, activo: true, usuarioId: { not: userId } },
     select: { usuario: { select: { id: true, nombre: true } } },
   });
-  const voucher = await prisma.comprobante.create({
+  const voucher = await prisma.comprobante.update({
+    where: { id: stored.id },
     data: {
-      subidoPor: userId,
-      grupoId: input.grupoId,
-      hash,
       app: reading?.app ?? null,
       montoLeido: reading?.monto ?? null,
       operacion: reading?.operacion ?? null,
       destinatarioLeido: reading?.destinatario ?? null,
       fechaLeida: reading?.fecha ? new Date(`${reading.fecha}T00:00:00Z`) : null,
       codigoSeguridad: reading?.codigoSeguridad ?? null,
-      imagen: { create: { mime, datos: buffer } },
     },
     select: { id: true, hash: true, app: true, operacion: true },
   });

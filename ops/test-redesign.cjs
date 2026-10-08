@@ -5,6 +5,7 @@ const bcrypt = require("bcryptjs");
 const crypto = require("node:crypto");
 const db = new PrismaClient();
 const origin = require("./local-qa.cjs").localQa();
+const { acceptInvite } = require("./accept-invite.cjs");
 const suffix = Date.now();
 const password = `JuntoQA${suffix}!`;
 async function request(path, token, method = "GET", body, expected = 200) {
@@ -81,10 +82,12 @@ async function run() {
     { nombre: `QA · Cusco ${suffix}`, tipo: "viaje" },
     201,
   );
-  for (const person of [a, l])
+  for (const person of [a, l]) {
     await request(`/grupos/${group.id}/invitar`, c.accessToken, "POST", {
       identificador: person.usuario.email,
     });
+    await acceptInvite(origin, person.accessToken, group.id);
+  }
   const proposal = await request(
     "/ia/gastos/interpretar",
     c.accessToken,
