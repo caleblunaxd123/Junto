@@ -1,17 +1,22 @@
 # JUNTO: acceso, HTTPS y correo
 
-## Estado comprobado el 7 de octubre de 2026
+## Estado comprobado el 8 de octubre de 2026
 
-- VPS de Contabo: `217.216.82.43`, usuario `root`. El servidor SSH ofrece únicamente autenticación por clave pública. La clave local `contabo_vps` fue rechazada. Una contraseña no sirve mientras el servidor solo acepte claves.
-- Cloudflare: zona `lunalav.pe`, sin registro JUNTO al inspeccionarla. No se cambiaron DNS, MX, SPF, modo TLS ni servicios de otros proyectos.
+- VPS de Contabo: `217.216.82.43`. SSH funciona con **`deploy`** y la clave local `contabo_vps`; `root` está restringido por política. No se habilitaron contraseñas ni root SSH. No hizo falta cambiar la clave existente.
+- Cloudflare: creado, con aprobación específica del propietario, el registro A `junto.lunalav.pe → 217.216.82.43`, Solo DNS. No se cambiaron MX, SPF ni el modo TLS de la zona.
+- API publicada en `https://junto.lunalav.pe`: certificado validado sin omitir TLS, redirección HTTP 308, `/ready` 200, rutas privadas 401 y páginas públicas disponibles. Estas páginas **no son la aplicación web para iPhone**.
+- Contenedores separados en `/opt/junto`, base privada sin puertos públicos, API como usuario `node`, disco de solo lectura y rol `junto_app` sin permisos de dueño. Ocho migraciones aplicadas. Respaldo comprobado mediante restauración real en una base de ensayo; esa base temporal se retiró después de comprobarla.
+- LunaLav y AlcancIA siguieron respondiendo tras la recarga del proxy. Se conservó `/opt/stack/Caddyfile.before-junto-20261008` para rollback.
+- Imagen desplegada `junto-api:20261008-release`: digest `sha256:f90782f38fdbf3ea3b2b0e9fdf576cda5da6d9f1956836944bcae05f6140099f`. Auditoría de dependencias de esta imagen: 0 vulnerabilidades; **no equivale** a certificar Expo, el sistema operativo o toda la app. OCR real sin red leyó la boleta sintética S/180.00 en 4.36 segundos.
+- El gateway IA privado fue accesible desde la API: llamadas sin clave rechazadas, clave de la API aceptada. No se ejecutó inferencia en esta comprobación; no acredita una mejora en la latencia del modelo.
 - SMTP de Gmail: conexión de comprobación sin envío; autenticación rechazada (`EAUTH`, `535`). No se acreditó recepción real ni se enviaron mensajes a terceros.
-- El panel nuevo confirma el VPS en ejecución y ofrece `Más → Restablecer credenciales → Clave SSH`. Se dejó esta opción abierta sin introducir ni aplicar ninguna credencial. El propietario debe completar la restauración; no hace falta cambiar la contraseña para resolver la autenticación solo por clave.
+- La API está intencionalmente sin proveedor de correo hasta corregir la autenticación. El registro/verificación y recuperación no deben considerarse operativos todavía. El emulador sigue con su API local, no se recompiló una distribución para amigos.
 
 ## Desbloquear acceso sin reducir seguridad
 
-El propietario debe proporcionar la ruta de una clave privada ya autorizada para ese servidor, o autorizar desde la consola del VPS la clave **pública** existente en `C:\Users\Caleb\.ssh\contabo_vps.pub` para `root`. No compartir claves privadas ni contraseñas en el chat. No habilitar autenticación por contraseña ni reinstalar/reiniciar el servidor para resolver esto. Cambiar la contraseña compartida en el chat desde un canal privado cuando se recupere el acceso.
+Usar el usuario `deploy`, no `root`, con `C:\Users\Caleb\.ssh\contabo_vps`. No compartir claves privadas ni contraseñas en el chat. Mantener restringido root SSH, Fail2Ban activo y la verificación estricta del host. La contraseña publicada previamente en el chat debe mantenerse reemplazada mediante un canal privado.
 
-Antes de desplegar: identificar el reverse proxy y las apps existentes, la carpeta de JUNTO, el gestor de procesos, la base de producción y los respaldos. No usar `docker-compose.yml` local como receta de producción: contiene credenciales de desarrollo y expone PostgreSQL.
+La receta de producción y las comprobaciones están en [contabo/README.md](contabo/README.md). No usar `docker-compose.yml` local: contiene credenciales de desarrollo y expone PostgreSQL. No tocar `/opt/stack`, bases o volúmenes de otras apps salvo el bloque exclusivo de JUNTO en el Caddyfile, respaldado y validado antes de recargar.
 
 ## Comprobar SMTP sin enviar mensajes
 
@@ -27,13 +32,12 @@ node -r dotenv/config dist/scripts/check-email.js dotenv_config_path=.env.smtp.l
 
 Para Gmail configurar `EMAIL_FROM` con la cuenta remitente o un alias autorizado; no usar un dominio arbitrario como remitente. Los registros MX/SPF de Cloudflare Email Routing no habilitan SMTP de salida ni necesitan cambiarse para usar Gmail.
 
-## Aplicación en producción, cuando haya acceso
+## Pendientes antes de distribuir a amigos
 
-1. Respaldar la base y comprobar su estado de migraciones; seguir `apps/api/prisma/MIGRATIONS.md`. No ejecutar `migrate dev`, `db push` ni reinicializar datos.
-2. Instalar el lockfile, generar Prisma y compilar con Node 22. Instalar OpenSSL antes de generar Prisma si se usa una imagen Linux mínima. Aplicar las migraciones versionadas con `prisma migrate deploy`; la nueva tabla `recibos_push` es aditiva.
-3. Configurar secretos en el servidor, nunca en variables públicas de Expo. Mantener `EMAIL_DEV_LOG` desactivado y un proveedor real en producción.
-4. Preparar un host exclusivo de JUNTO en el proxy existente, certificado válido y renovación. Confirmar el host antes de agregar DNS. No apuntar a un virtual host por defecto ni cambiar el modo TLS de toda la zona.
-5. Verificar HTTPS en `/health`, registro/verificación y recuperación de una cuenta ficticia, resumen de gastos recibido en Gmail y Outlook y estado de aceptación honesto. Revisar el correo recibido, no solo la respuesta del proveedor.
-6. Ajustar las URLs públicas de API, privacidad, eliminación e invitaciones y recompilar la app distribuida. Comprobar App Links y OAuth para el certificado de firma.
+1. Corregir SMTP, comprobar autenticación y después entrega real, registro/OTP y recuperación. Revisar bandeja y spam del destinatario autorizado.
+2. Configurar el proyecto EAS, firma Android, cliente OAuth compatible, FCM y App Links. Ajustar la API pública a `https://junto.lunalav.pe` al compilar; no distribuir el build local con `10.0.2.2`.
+3. Probar la APK en dispositivos externos reales con datos ficticios, incluyendo invitaciones, cuentas, confirmaciones y envío de resumen. El SMTP disponible no acredita recepción ni lectura.
+4. Implementar y verificar una versión web si se elige esa vía para iPhone sin membresía Apple Developer. El host HTTPS existente sirve de base, pero aún no ofrece ese cliente.
+5. Configurar responsable legal real, monitoreo y copias externas cifradas/automáticas con restauración periódica. No se instaló una tarea automática de backup en esta validación.
 
 FCM v1 y el proyecto EAS siguen siendo necesarios para notificaciones reales en Android. La API comprueba tickets y recibos de Expo y elimina metadatos tras 24 horas; eso no prueba que alguien haya leído un aviso.

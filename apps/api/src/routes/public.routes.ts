@@ -8,7 +8,19 @@ import { Router, Response } from 'express';
 const router = Router();
 
 const androidPackage = () => process.env.ANDROID_PACKAGE || 'com.junto.app';
-const playStoreUrl = () => process.env.PLAY_STORE_URL || `https://play.google.com/store/apps/details?id=${androidPackage()}`;
+// Do not send beta testers to a store listing that has not been published.
+const playStoreUrl = () => {
+  try {
+    const url = new URL(process.env.PLAY_STORE_URL || '');
+    return url.protocol === 'https:' && url.hostname === 'play.google.com' && !url.username && !url.password ? url.href : '';
+  } catch { return ''; }
+};
+const publicHome = () => {
+  try {
+    const url = new URL(process.env.PUBLIC_WEB_URL || '');
+    return url.protocol === 'https:' && !url.username && !url.password ? url.origin + '/' : '';
+  } catch { return ''; }
+};
 const supportEmail = () => process.env.SUPPORT_EMAIL || '';
 const legalOwner = () => process.env.LEGAL_OWNER || 'el equipo de JUNTO';
 
@@ -47,13 +59,14 @@ router.get('/unirse/:code', (req, res) => {
     page(res, 'Invitación', '<h1>Este enlace no es válido</h1><p>Pide a quien te invitó que comparta el enlace de nuevo.</p>', 404);
     return;
   }
-  // Chrome on Android opens the app if installed, otherwise falls back to Google Play.
-  const intent = `intent://unirse/${code}#Intent;scheme=junto;package=${androidPackage()};S.browser_fallback_url=${encodeURIComponent(playStoreUrl())};end`;
+  // Installed Android builds open directly. Beta users get an honest landing, not a fake listing.
+  const fallback = playStoreUrl() || publicHome();
+  const intent = `intent://unirse/${code}#Intent;scheme=junto;package=${androidPackage()};${fallback ? `S.browser_fallback_url=${encodeURIComponent(fallback)};` : ''}end`;
   page(res, 'Invitación', `<h1>Te invitaron a un grupo en JUNTO</h1>
 <p>Comparte gastos con tu grupo y mira en todo momento quién le debe a quién.</p>
 <div class="card">
 <a class="btn primary" href="${escapeHTML(intent)}">Abrir en JUNTO</a>
-<a class="btn secondary" href="${escapeHTML(playStoreUrl())}">Descargar en Google Play</a>
+${playStoreUrl() ? `<a class="btn secondary" href="${escapeHTML(playStoreUrl())}">Descargar en Google Play</a>` : '<p class="muted">JUNTO está en fase de pruebas y aún no está publicado en Google Play. Pide la versión de prueba a quien te invitó.</p>'}
 <p class="muted">¿Acabas de instalar la app? Vuelve a tocar el enlace de invitación, o abre JUNTO, toca «+» → «Unirme con un enlace» y pega este código: <code>${escapeHTML(code)}</code></p>
 </div>`);
 });
@@ -95,7 +108,7 @@ router.get('/eliminar-cuenta', (_req, res) => {
 router.get('/', (_req, res) => {
   page(res, 'Divide sin drama', `<h1>Las cuentas claras, los buenos momentos juntos</h1>
 <p>Divide la cuenta de hoy o lleva los gastos de tu depa, pareja o viaje.</p>
-<a class="btn primary" href="${escapeHTML(playStoreUrl())}">Descargar en Google Play</a>
+${playStoreUrl() ? `<a class="btn primary" href="${escapeHTML(playStoreUrl())}">Descargar en Google Play</a>` : '<div class="card"><h2>Estamos preparando JUNTO para ti</h2><p>La app está en fase de pruebas. Esta página no es todavía la aplicación web ni una descarga de Google Play.</p><p class="muted">Si te invitaron a probarla, solicita la versión de prueba a quien organiza tu grupo.</p></div>'}
 <p class="muted"><a href="/privacidad">Privacidad</a> · <a href="/eliminar-cuenta">Eliminar cuenta</a></p>`);
 });
 

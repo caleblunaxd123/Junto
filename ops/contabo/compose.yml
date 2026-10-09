@@ -1,0 +1,66 @@
+name: junto
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: junto
+      POSTGRES_DB: junto
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Generate the private server environment first}
+    volumes:
+      - database:/var/lib/postgresql/data
+    networks: [data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U junto -d junto']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    mem_limit: 768m
+    cpus: 1.0
+    logging: &logging
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+  api:
+    image: ${JUNTO_IMAGE:?Specify the validated API image}
+    restart: unless-stopped
+    init: true
+    env_file: [./runtime.env]
+    depends_on:
+      db: {condition: service_healthy}
+    # Only Caddy can reach this service; there are no published API or database ports.
+    networks:
+      data:
+      web:
+        aliases: [junto-api]
+    read_only: true
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=256m,mode=1777']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/ready',{signal:AbortSignal.timeout(5000)}).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 6s
+      start_period: 20s
+      retries: 3
+    mem_limit: 1536m
+    cpus: 2.0
+    logging: *logging
+  migrate:
+    image: ${JUNTO_IMAGE:?Specify the validated API image}
+    profiles: [maintenance]
+    env_file: [./migration.env]
+    command: [npx, --no-install, prisma, migrate, deploy]
+    networks: [data]
+    read_only: true
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=64m,mode=1777']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging: *logging
+networks:
+  data:
+    internal: true
+  web:
+    external: true
+    name: stack_web
+volumes:
+  database:

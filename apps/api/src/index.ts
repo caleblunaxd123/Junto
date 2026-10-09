@@ -22,6 +22,7 @@ import { getActivity } from './services/activity.service';
 import { errorHandler } from './middleware/errorHandler';
 import { initPushReceiptsJob } from './jobs/pushReceipts.job';
 import { initRemindersJob } from './jobs/reminders.job';
+import { prisma } from './lib/prisma';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -69,6 +70,23 @@ app.get('/api/actividad', authMiddleware, async (req, res, next) => {
 // Health check
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', env: process.env.NODE_ENV, email: emailProvider() ?? 'sin configurar', timestamp: new Date().toISOString() });
+});
+
+// Liveness must not claim the API is ready when PostgreSQL is unreachable.
+// Return no connection details or secrets on this public probe.
+app.get('/ready', async (_req, res) => {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      prisma.$queryRaw`SELECT 1`,
+      new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('Database probe timeout')), 3000); }),
+    ]);
+    res.json({ status: 'ready' });
+  } catch {
+    res.status(503).json({ status: 'not_ready' });
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 });
 
 // Public web: invitation landing, App Links, privacy and account deletion.

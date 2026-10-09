@@ -18,6 +18,7 @@
     "email:check": "node dist/scripts/check-email.js"
   },
   "dependencies": {
+    "@junto/shared": "1.0.0",
     "@prisma/client": "^5.14.0",
     "@sentry/node": "~10.75.3",
     "@tesseract.js-data/spa": "^1.0.0",
