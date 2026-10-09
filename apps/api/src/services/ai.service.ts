@@ -31,6 +31,7 @@ const gatewayProposalSchema = z.object({
   explicacion: z.string().min(1).max(500),
   requiere_revision: z.boolean(),
   confirmacion_requerida: z.literal(true),
+  modelo: z.string().max(100).optional(),
 });
 
 export class AiServiceError extends Error {
@@ -63,12 +64,21 @@ export async function interpretarGasto(
   }));
   const explicitAmount = extractLikelyAmountCents(input.texto);
   const deterministicPayerId =
-    inferPayerId(input.texto, directory, userId) || userId;
+    inferPayerId(input.texto, directory, userId);
   const mentionedIds = findMentionedMemberIds(input.texto, directory);
   const normalizedText = input.texto
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase("es-PE");
+  if (/\b(?:invitad[oa]s?|cumplean(?:os|ero)|propina|consumio|consumimos|porcentaje|por montos|partes distintas|reparto desigual)\b|%/.test(normalizedText)) {
+    throw new AiServiceError("Este gasto necesita un reparto especial. Usa «Dividir una cuenta» para invitados, consumos y extras, o revisa las partes manualmente en este formulario.", 422);
+  }
+  if (/\b(?:usd|dolares|euros)\b|[$€]/.test(normalizedText)) {
+    throw new AiServiceError("Por ahora interpreta montos en soles. Escribe el total en PEN antes de continuar.", 422);
+  }
+  if (!explicitAmount) {
+    throw new AiServiceError("Necesito un total claro en soles. Escríbelo como S/120.50; no voy a inventarlo ni calcularlo a partir de datos incompletos.", 422);
+  }
   const includesSelf =
     /\b(?:yo|conmigo|yo solo|yo sola)\b/.test(normalizedText) ||
     (/\b(?:pague|gaste|compre)\b/.test(normalizedText) &&
@@ -125,26 +135,18 @@ export async function interpretarGasto(
     );
   }
 
-  const memberDirectory = members
-    .map(({ usuario }) => usuario.nombre)
-    .join(", ");
-  const contextualizedText = [
-    `Miembros válidos del grupo: ${memberDirectory}.`,
-    "Usa únicamente esos nombres para pagador y participantes.",
-    `Gasto descrito por el usuario: ${input.texto}`,
-  ].join("\n");
-
   try {
     const response = await axios.post(
       `${baseUrl.replace(/\/$/, "")}/v1/extract-expense`,
-      { text: contextualizedText },
+      { text: input.texto, members: directory.map(member => member.nombre),
+        amount_cents: explicitAmount, current_user_index: directory.findIndex(member => member.id === userId) },
       {
         headers: { Authorization: `Bearer ${apiKey}` },
-        timeout: 15_000,
+        timeout: 12_000,
       },
     );
     const proposal = gatewayProposalSchema.parse(response.data);
-    const payerId = matchMemberId(proposal.pagador, directory, userId);
+    const payerId = deterministicPayerId || matchMemberId(proposal.pagador, directory, userId);
     const participantMatches = proposal.participantes.map((name) => ({
       name,
       id: matchMemberId(name, directory, userId),
@@ -157,8 +159,10 @@ export async function interpretarGasto(
     const unmatchedNames = participantMatches
       .filter((match) => !match.id)
       .map((match) => match.name);
-    const amountCents =
-      extractLikelyAmountCents(input.texto) || proposal.total_centimos;
+    const amountCents = explicitAmount;
+    if (!payerId || participantIds.length === 0 || unmatchedNames.length > 0) {
+      throw new AiServiceError("Revisa quién pagó y para quién fue el gasto. No puedo identificar a todas las personas con seguridad.", 422);
+    }
     const category = inferExpenseCategory(input.texto, proposal.categoria);
     const payerName =
       directory.find((member) => member.id === payerId)?.nombre || null;
@@ -179,16 +183,17 @@ export async function interpretarGasto(
         payerName,
         participantNames,
       }),
-      requiereRevision:
-        proposal.requiere_revision ||
-        !payerId ||
-        participantIds.length === 0 ||
-        unmatchedNames.length > 0,
+      requiereRevision: true,
       nombresSinCoincidencia: unmatchedNames,
       confirmacionRequerida: true as const,
+      fuente: "ia_local" as const,
+      modelo: proposal.modelo,
     };
   } catch (error) {
     if (error instanceof AiServiceError) throw error;
+    if (axios.isAxiosError(error) && error.response?.data?.code === "AI_NEEDS_REVIEW") {
+      throw new AiServiceError("¿Quién pagó y para quién fue? Añade sus nombres al mensaje o selecciónalos en el formulario.", 422);
+    }
     console.error(
       "[AI] Expense interpretation failed",
       error instanceof Error ? error.message : error,

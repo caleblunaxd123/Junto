@@ -234,10 +234,10 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       setProposal(
         `${p.explicacion}${p.nombresSinCoincidencia.length ? ` Revisa: ${p.nombresSinCoincidencia.join(", ")}.` : ""}`,
       );
-    } catch {
+    } catch (err) {
       if (request.signal.aborted) return;
       setError(
-        "No pudimos preparar la propuesta. Puedes completar el formulario manualmente.",
+        errorMessage(err, "No pudimos preparar la propuesta. Puedes completar el formulario manualmente."),
       );
     } finally {
       if (proposalRequest.current === request) {

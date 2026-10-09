@@ -14,7 +14,14 @@ hasta su confirmación por quien tenga permiso.
 
 ## Estado real
 
-- Ollama y Qwen3 1.7B configurados en el gateway privado de Contabo.
+Véase `DEEPSEEK-EVALUACION.md`: primera prueba externa autorizada solo con datos
+ficticios, 8/12 casos aprobados y mediana de 1.12 s. No habilitada para usuarios reales.
+La decisión anterior de no contratar servicios se conserva para producción;
+la excepción autorizada fue esta prueba acotada, sin recargas.
+
+- Producción: Ollama y Qwen3 1.7B configurados en el gateway privado de Contabo.
+  Fuente candidata: Qwen2.5 1.5B, extracción corta sin aritmética del modelo.
+  Las pruebas iniciales del candidato no implican despliegue ni certificación completa.
 - El texto sencillo con monto explícito puede resolverse mediante reglas locales.
 - La última inferencia directa de prueba respondió HTTP 502 tras unos 54 segundos.
   La API tiene un timeout de 15 segundos y el cliente de interpretación 20 segundos.
