@@ -72,6 +72,17 @@ envía un mensaje técnico al único destinatario autorizado; requiere decisión
 un healthcheck ni debe ejecutarse en bucle. Comprobar su Message-ID en Gmail distingue una
 recepción real de la simple aceptación SMTP.
 
+`send-all-email-tests.cjs` valida las seis plantillas reales y puede enviar un lote ficticio
+acotado: seis mensajes por destinatario, máximo dos destinatarios. Ejecutar desde `apps/api`
+sin `--send` para validar sin enviar. Para una prueba **autorizada expresamente** proporcionar
+`--send --to=<dirección-autorizada>` (otra opción `--to=` solo para un segundo destinatario).
+No guardar las direcciones privadas en Git. Los códigos son `000000`, sin estado OTP ni cuentas
+reales; los mensajes llevan un aviso visible y asunto PRUEBA. No hay reintentos automáticos:
+ante un fallo revisar primero los Message-ID aceptados. Esto prueba plantilla/transporte,
+no reemplaza probar los controladores de cuenta y compartir con base y SMTP de QA.
+`ops/test-account-email-api.cjs` y `ops/test-share-email-api.cjs` ejercitan esos controladores
+en una base local de QA, capturando SMTP en loopback: no envían mensajes externos.
+
 Antes de distribuir: SMTP/OTP real, EAS y firma Android, OAuth compatible con esa firma,
 App Links, FCM, legal responsable, pruebas en dispositivos. Para iPhone sin membresía Apple
 se necesita implementar y verificar una versión web; las páginas públicas de esta API no son esa app.
