@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
+import { errorMessage } from "../lib/errorMessage";
 import { AppDialog as Alert } from "./ui/AppDialog";
 import { Button, Card, ErrorBox, Label, palette } from "./ui/Design";
 
@@ -27,7 +28,7 @@ export function Invitations() {
       await Promise.all(["invitaciones", "grupos", "pagos", "actividad"].map((key) => qc.invalidateQueries({ queryKey: [key] })));
       if (accept) router.push(`/(app)/grupos/${invitation.grupo.id}`);
     } catch (err) {
-      setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "No pudimos responder la invitación. Revisa tu conexión y reintenta.");
+      setError(errorMessage(err, "No pudimos confirmar tu respuesta. Actualiza las invitaciones antes de volver a intentar."));
       void qc.invalidateQueries({ queryKey: ["invitaciones"] });
     } finally {
       setBusy("");

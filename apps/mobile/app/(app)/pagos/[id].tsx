@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../src/lib/errorMessage";
 import React from "react";
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -68,7 +69,7 @@ export default function PaymentDetail() {
               await resolve.mutateAsync({ pagoId: pago.id, confirmar: approve });
               await refetch();
             } catch (err) {
-              setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "No pudimos guardar tu decisión. Revisa tu conexión y reintenta.");
+              setError(errorMessage(err, "No pudimos guardar tu decisión. Revisa tu conexión y reintenta."));
               refetch();
             }
           },
@@ -94,7 +95,7 @@ export default function PaymentDetail() {
               await resolve.mutateAsync({ pagoId: pago.id, confirmar: false });
               await refetch();
             } catch (err) {
-              setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "No pudimos guardar tu respuesta. Reintenta.");
+              setError(errorMessage(err, "No pudimos guardar tu respuesta. Reintenta."));
             }
           },
         },

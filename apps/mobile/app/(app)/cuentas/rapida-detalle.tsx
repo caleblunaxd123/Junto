@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../src/lib/errorMessage";
 import React from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -47,7 +48,7 @@ export default function QuickBillDetail() {
   async function record(participanteId: string, monto: number) {
     if (!bill || disabled) return;
     try { setError(""); await mutation.mutateAsync({ participanteId, monto, version: bill.version }); setSelected(undefined); }
-    catch (err) { setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "No se confirmó el cambio. Actualiza antes de reintentar."); setSelected(undefined); await refetch(); }
+    catch (err) { setError(errorMessage(err, "No se confirmó el cambio. Actualiza antes de reintentar.")); setSelected(undefined); await refetch(); }
   }
   function confirmAmount() {
     if (!part || next.total === null) return;
@@ -74,7 +75,7 @@ export default function QuickBillDetail() {
     if (!bill || mutation.isPending || query.isError) return;
     Alert.alert(bill.archivada ? "¿Reactivar esta cuenta?" : "¿Archivar cuenta completada?", "El reparto y el historial se conservan. Archivar no borra registros ni mueve dinero.", [{ text: "Cancelar", style: "cancel" }, { text: bill.archivada ? "Reactivar" : "Archivar", onPress: async () => {
       try { await mutation.mutateAsync({ archivada: !bill.archivada, version: bill.version }); }
-      catch (err) { setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "No se confirmó el cambio. Actualiza la cuenta."); await refetch(); }
+      catch (err) { setError(errorMessage(err, "No se confirmó el cambio. Actualiza la cuenta.")); await refetch(); }
     } }]);
   }
   return <Screen compact title="Tu reparto" subtitle="Partes claras, aportes bajo tu control." back refreshing={query.isRefetching} onRefresh={() => refetch()}>

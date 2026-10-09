@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../src/lib/errorMessage";
 import React, { useState, useCallback } from "react";
 import {
   View,
@@ -85,7 +86,7 @@ export default function Group() {
             await qc.invalidateQueries({ queryKey: ["grupos"] });
             router.dismissTo("/(app)/(tabs)");
           } catch (err) {
-            setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "No pudimos sacarte del grupo. Reintenta.");
+            setError(errorMessage(err, "No pudimos sacarte del grupo. Reintenta."));
           }
         },
       },

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { validShareEmail } from '@junto/shared/share';
+const correo = z.string().trim().toLowerCase().max(254, 'Usa un correo de hasta 254 caracteres.').email('Usa un correo como nombre@correo.com, sin espacios.').refine(validShareEmail, 'Usa un solo correo válido, sin espacios.');
 
 const celularPeru = z
   .string()
@@ -6,7 +8,7 @@ const celularPeru = z
 
 export const registerSchema = z.object({
   nombre: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres').max(100),
-  email: z.string().trim().toLowerCase().email('Email inválido'),
+  email: correo,
   celular: celularPeru.optional(),
   password: z
     .string()
@@ -15,17 +17,17 @@ export const registerSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  email: z.string().trim().toLowerCase().email('Email inválido'),
+  email: correo,
   password: z.string().min(1, 'Contraseña requerida'),
 });
 
 export const forgotPasswordSchema = z.object({
-  email: z.string().trim().toLowerCase().email('Email inválido'),
+  email: correo,
 });
 
 export const resetPasswordSchema = z.object({
-  email: z.string().trim().toLowerCase().email('Email inválido'),
-  otp: z.string().regex(/^\d{6}$/, 'El código OTP debe tener 6 dígitos'),
+  email: correo,
+  otp: z.string().regex(/^\d{6}$/, 'Completa los 6 dígitos del código más reciente.'),
   newPassword: z
     .string()
     .min(8, 'La contraseña debe tener al menos 8 caracteres')
@@ -45,12 +47,12 @@ export const updatePushTokenSchema = z.object({
 });
 
 export const verifyEmailSchema = z.object({
-  email: z.string().trim().toLowerCase().email('Email inválido'),
+  email: correo,
   otp: z.string().regex(/^\d{6}$/, 'El código debe tener 6 dígitos'),
 });
 
 export const resendVerificationSchema = z.object({
-  email: z.string().trim().toLowerCase().email('Email inválido'),
+  email: correo,
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;

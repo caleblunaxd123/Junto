@@ -63,6 +63,11 @@ async function run() {
   const ageCode = () => db.usuario.update({where: {email}, data: {otpExpires: new Date(Date.now() + 13 * 60000)}});
   try {
     await waitFor(async () => { try { return (await fetch(origin + '/ready')).ok; } catch { return false; } });
+    const invalid = await call('/auth/register', {email:'not-an-email', nombre:'A', password:'short'}, 400);
+    assert.equal(invalid.code, 'VALIDATION_ERROR');
+    assert.ok(invalid.details.some(d => d.field === 'email' && d.label === 'Correo electrónico'));
+    assert.ok(invalid.details.some(d => d.field === 'nombre' && d.label === 'Nombre'));
+    assert.equal(inbox.length, 0, 'invalid form never sends a verification email');
     const registration = await call('/auth/register', {email, nombre: 'Cuenta QA <script>', password}, 201);
     assert.equal(registration.verificationRequired, true); assert.equal(registration.emailDelivery, true);
     assert.equal(registration.accessToken, undefined); assert.equal(registration.usuario.otpCode, undefined);

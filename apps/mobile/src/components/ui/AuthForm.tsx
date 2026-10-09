@@ -1,11 +1,9 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Image,
   TextInput,
   Pressable,
   View,
-  KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -24,6 +22,8 @@ import { authenticatedDestination } from "../../lib/invitation";
 import { googleConfigured } from "../../lib/google";
 import { useGoogleLogin } from "../../hooks/useGoogleLogin";
 import { GoogleButton, OrDivider } from "./GoogleButton";
+import { emailError, nameError, passwordError } from "../../lib/authValidation";
+import { errorMessage } from "../../lib/errorMessage";
 export function AuthForm({ register = false }: { register?: boolean }) {
   const auth = useAuthStore();
   const google = useGoogleLogin();
@@ -33,20 +33,17 @@ export function AuthForm({ register = false }: { register?: boolean }) {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const gate = useRef(false);
+  const errors = {email: emailError(email), name: register ? nameError(name) : "", password: register ? passwordError(password) : !password ? "Escribe tu contraseña para entrar." : ""};
+  const touch = (field: string) => setTouched(current => ({...current, [field]: true}));
   async function submit() {
-    if (busy) return;
+    if (gate.current || google.busy) return;
     setError("");
+    setTouched({email: true, name: true, password: true});
     const address = email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address))
-      return setError("Escribe un correo válido.");
-    if (!password) return setError("Escribe tu contraseña para iniciar sesión.");
-    if (
-      register &&
-      (name.trim().length < 2 || name.trim().length > 100)
-    )
-      return setError("Escribe tu nombre: así te reconocerán tus amigos.");
-    if (register && (password.length < 8 || !/\d/.test(password)))
-      return setError("Tu contraseña necesita al menos 8 caracteres y un número.");
+    if (Object.values(errors).some(Boolean)) return;
+    gate.current = true;
     try {
       setBusy(true);
       if (register) {
@@ -78,19 +75,13 @@ export function AuthForm({ register = false }: { register?: boolean }) {
           params: { email: address },
         });
       else
-        setError(
-          e.response?.data?.error ||
-            "No pudimos continuar. Revisa tu conexión y reintenta.",
-        );
+        setError(errorMessage(err, register ? "No sabemos si se creó tu cuenta. Revisa tu correo; si ya tienes un código, entra y verifica tu cuenta antes de registrarte otra vez." : "No pudimos iniciar sesión. Revisa tu conexión y vuelve a intentar."));
     } finally {
       setBusy(false);
+      gate.current = false;
     }
   }
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
       <Screen>
         <View style={{ minHeight: 150, marginTop: 4 }}>
           <Image
@@ -130,6 +121,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
               <Pressable
                 key={String(title)}
                 accessibilityRole="link"
+                disabled={busy || google.busy}
                 onPress={() =>
                   router.replace(
                     isRegister ? "/(auth)/register" : "/(auth)/login",
@@ -175,7 +167,10 @@ export function AuthForm({ register = false }: { register?: boolean }) {
               label="Nombre completo"
               icon="person-outline"
               value={name}
-              onChangeText={setName}
+              onChangeText={value => { setName(value); setError(""); }}
+              onBlur={() => touch("name")}
+              error={touched.name ? errors.name : undefined}
+              editable={!busy && !google.busy}
               autoComplete="name"
               placeholder="Ej. Camila Torres"
               maxLength={100}
@@ -183,9 +178,15 @@ export function AuthForm({ register = false }: { register?: boolean }) {
           )}
           <FormField
             label="Correo electrónico"
+            hint={register ? "Gmail, Outlook u otro correo. Recibirás un código para verificar tu cuenta; no usamos SMS." : undefined}
             icon="mail-outline"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={value => { setEmail(value); setError(""); }}
+            onBlur={() => touch("email")}
+            error={touched.email ? errors.email : undefined}
+            editable={!busy && !google.busy}
+            maxLength={254}
+            autoCorrect={false}
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
@@ -198,6 +199,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
             <View
               style={[
                 design.input,
+                touched.password && errors.password ? {borderColor: palette.coral} : undefined,
                 {
                   flexDirection: "row",
                   alignItems: "center",
@@ -210,7 +212,11 @@ export function AuthForm({ register = false }: { register?: boolean }) {
               <TextInput
                 accessibilityLabel="Contraseña"
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={value => { setPassword(value); setError(""); }}
+                onBlur={() => touch("password")}
+                editable={!busy && !google.busy}
+                autoCorrect={false}
+                accessibilityHint={touched.password ? errors.password : undefined}
                 secureTextEntry={!show}
                 autoCapitalize="none"
                 autoComplete={register ? "new-password" : "current-password"}
@@ -239,6 +245,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
               </Pressable>
             </View>
           </View>
+          {touched.password && !!errors.password && <Label accessibilityRole="alert" size={12} color="#BD2938">{errors.password}</Label>}
           {register ? (
             <>
               {!!password && (
@@ -281,13 +288,12 @@ export function AuthForm({ register = false }: { register?: boolean }) {
             title={register ? "Crear cuenta →" : "Iniciar sesión →"}
             onPress={submit}
             loading={busy}
-            disabled={!email.trim() || !password}
+            disabled={google.busy}
           />
         </Card>
         <Label size={11} color={palette.muted} style={{ textAlign: "center" }}>
           JUNTO no guarda ni transfiere dinero.
         </Label>
       </Screen>
-    </KeyboardAvoidingView>
   );
 }

@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../src/lib/errorMessage";
 import React from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
@@ -74,7 +75,7 @@ export default function Activity() {
               await resolve.mutateAsync({ pagoId: event.pagoId!, confirmar: received });
               refetch();
             } catch (err) {
-              setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "No pudimos guardar tu respuesta. Revisa tu conexión y reintenta.");
+              setError(errorMessage(err, "No pudimos guardar tu respuesta. Revisa tu conexión y reintenta."));
             }
           },
         },

@@ -1,3 +1,4 @@
+import { errorMessage } from "./errorMessage";
 export type DialogButton = {
   text: string;
   style?: "default" | "cancel" | "destructive";
@@ -41,8 +42,8 @@ export function createDialogQueue() {
     try {
       if (button) await button.onPress?.();
       else if (index === undefined) await current.onDismiss?.();
-    } catch {
-      alert("No pudimos completar la acción", "Revisa tu conexión y el estado de la cuenta antes de reintentar.", undefined, { tone: "danger" });
+    } catch (error) {
+      alert("No pudimos completar la acción", errorMessage(error, "Revisa tu conexión y el estado de la cuenta antes de reintentar."), undefined, { tone: "warning" });
     } finally {
       queue = queue.filter((item) => item.id !== id);
       publish();

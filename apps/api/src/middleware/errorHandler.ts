@@ -4,19 +4,14 @@ import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
 import { UserError } from '../domain/errors';
 import { reportError } from '../lib/monitoring';
+import { validationResponse } from '../domain/validationMessages';
 
 type HttpishError = Error & { type?: string; status?: number; statusCode?: number };
 
 export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction): void {
   if (err instanceof UserError) { res.status(err.status).json({ error: err.message, code: err.code }); return; }
   if (err instanceof ZodError) {
-    res.status(400).json({
-      error: 'Datos inválidos',
-      details: err.errors.map((e) => ({
-        field: e.path.join('.'),
-        message: e.message,
-      })),
-    });
+    res.status(400).json(validationResponse(err));
     return;
   }
 
@@ -35,5 +30,5 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
 
   console.error('[Error]', describeError(err), err.stack?.split('\n').slice(1, 6).join(' | '));
   reportError(err);
-  res.status(500).json({ error: 'Error interno del servidor' });
+  res.status(500).json({ error: 'No pudimos completar la solicitud. Revisa el estado de la cuenta antes de repetirla.', code: 'SERVER_ERROR' });
 }

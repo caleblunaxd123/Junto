@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../src/lib/errorMessage";
 import React, { useState } from "react";
 import { TextInput, View } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
@@ -48,8 +49,7 @@ export default function Invite() {
       qc.invalidateQueries({ queryKey: ["grupos"] });
     } catch (err) {
       setError(
-        (err as { response?: { data?: { error?: string } } }).response?.data?.error ||
-          "No pudimos enviar la invitación. Revisa el correo o celular.",
+        errorMessage(err, "No pudimos enviar la invitación. Revisa el correo o celular."),
       );
     } finally {
       inviteGate.current = false;

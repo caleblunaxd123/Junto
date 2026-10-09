@@ -13,6 +13,7 @@ import { useIsFocused } from "@react-navigation/native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../src/lib/api";
+import { errorMessage } from "../../../src/lib/errorMessage";
 import { router, useLocalSearchParams } from "expo-router";
 import {
   useGrupos,
@@ -296,10 +297,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       // so): the next attempt is a new request. With no answer (timeout, no signal) we keep the key,
       // so retrying cannot create a second copy.
       if (status && status >= 400 && status < 500) requestId.current = newRequestId();
-      setError(
-        e.response?.data?.error ||
-          (status ? "No se pudo guardar. Tus datos siguen aquí." : "No sabemos si se guardó: revisa tu conexión y vuelve a tocar Guardar. No se creará un gasto repetido."),
-      );
+      setError(errorMessage(err, "No sabemos si se guardó: revisa tu conexión y vuelve a tocar Guardar. Se comprobará la misma solicitud para evitar un gasto repetido."));
     } finally {
       saving.current = false;
     }

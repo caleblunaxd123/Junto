@@ -8,6 +8,7 @@ import { Screen, Card, Label, Button, ErrorBox, design, palette } from "../../..
 import { FormField, ReferenceHero } from "../../../src/components/ui/Reference";
 import { art } from "../../../src/components/ui/Artwork";
 import type { AprobacionPagos, GrupoTipo } from "../../../src/types";
+import { errorMessage } from "../../../src/lib/errorMessage";
 
 const types: { id: GrupoTipo; label: string; image: typeof art.travel }[] = [
   { id: "viaje", label: "Viaje", image: art.travel },
@@ -59,8 +60,7 @@ export default function EditGroup() {
       await update.mutateAsync({ nombre: draft.nombre.trim(), tipo: draft.tipo, descripcion: draft.descripcion.trim(), aprobacionPagos: draft.aprobacionPagos });
       router.dismissTo(`/(app)/grupos/${grupoId}`);
     } catch (err) {
-      const response = (err as { response?: { data?: { error?: string } } }).response;
-      setError(response?.data?.error || "No pudimos guardar los cambios. Tus datos siguen aquí; revisa tu conexión y reintenta.");
+      setError(errorMessage(err, "No pudimos confirmar los cambios. Tus datos siguen aquí; actualiza el grupo antes de volver a guardar."));
     }
   }
   return (

@@ -9,6 +9,7 @@ import { useAuthStore } from "../../../src/store/auth.store";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
 import { Screen, Card, Label, Button, ErrorBox, palette, design } from "../../../src/components/ui/Design";
 import { centavosASoles } from "../../../src/types";
+import { errorMessage } from "../../../src/lib/errorMessage";
 
 type Summary = {
   grupos: number;
@@ -64,8 +65,7 @@ export default function DeleteAccount() {
       router.replace("/(auth)/login");
       Alert.alert("Cuenta eliminada", "Borramos tus datos personales. Gracias por haber usado JUNTO.");
     } catch (err) {
-      const e = err as { response?: { data?: { error?: string } } };
-      setError(e.response?.data?.error || "No pudimos eliminar la cuenta. Revisa tu conexión y reintenta.");
+      setError(errorMessage(err, "No pudimos confirmar la eliminación. Comprueba tu conexión y el acceso a tu cuenta antes de repetirla."));
     } finally {
       setBusy(false);
     }

@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, router } from "expo-router";
 import { api } from "../../../src/lib/api";
+import { errorMessage as errorText } from "../../../src/lib/errorMessage";
 import { queryClient } from "../../../src/lib/queryClient";
 import { useGrupo } from "../../../src/hooks/useGrupos";
 import { useAuthStore } from "../../../src/store/auth.store";
@@ -26,7 +27,6 @@ const methods: { id: MetodoPago; name: string; icon: keyof typeof Ionicons.glyph
   { id: "efectivo", name: "Efectivo", icon: "cash", color: "#23BC8D" },
 ];
 const checkColors = { danger: { bg: palette.blush, fg: palette.coral }, warning: { bg: palette.yellow, fg: "#8A5B05" }, info: { bg: palette.lilac, fg: "#6942CA" } };
-const errorText = (err: unknown, fallback: string) => (err as { response?: { data?: { error?: string } } }).response?.data?.error || fallback;
 
 export default function Payment() {
   const params = useLocalSearchParams<{ grupoId: string; acreedorId?: string; subir?: string; compartido?: string }>();

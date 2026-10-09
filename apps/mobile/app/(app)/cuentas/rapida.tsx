@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../src/lib/errorMessage";
 import React from "react";
 import { ActivityIndicator, BackHandler, Keyboard, Pressable, Switch, TextInput, View } from "react-native";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
@@ -76,7 +77,7 @@ function BillWizard({ id, original, version }: { id?: string; original?: QuickBi
       setTypedBefore(d.billTotal.trim() && d.scanApproved && parseMoney(d.billTotal) !== proposal.totalPropuesto ? d.billTotal.trim() : "");
       setReceipt(proposal); update({ billTotal: proposed, scanApproved: false });
     } catch (err) {
-      if (!controller.signal.aborted && request.current === controller) setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "No pudimos leer la foto. Escribe el total para continuar.");
+      if (!controller.signal.aborted && request.current === controller) setError(errorMessage(err, "No pudimos leer la foto. Escribe el total para continuar."));
     } finally { if (request.current === controller) { request.current = null; setReading(false); } }
   }
   function count(value: number) {
@@ -109,7 +110,7 @@ function BillWizard({ id, original, version }: { id?: string; original?: QuickBi
     } catch (err) {
       const status = (err as { response?: { status?: number } }).response?.status;
       if (status && status >= 400 && status < 500 && status !== 401 && status !== 409) update({ pending: undefined, step: 0 });
-      setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "Guardado sin confirmar. Tu borrador sigue en este dispositivo. Reintenta con conexión: se enviará la misma solicitud, sin duplicarla.");
+      setError(errorMessage(err, "Guardado sin confirmar. Tu borrador sigue en este dispositivo. Reintenta con conexión: se enviará la misma solicitud, sin duplicarla."));
     } finally { submitting.current = false; }
   }
   function next() {

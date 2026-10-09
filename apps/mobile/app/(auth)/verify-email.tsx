@@ -4,12 +4,14 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useAuthStore } from "../../src/store/auth.store";
 import { api } from "../../src/lib/api";
 import { authenticatedDestination } from "../../src/lib/invitation";
+import { errorMessage } from "../../src/lib/errorMessage";
 import {
   Screen,
   Card,
   Label,
   Button,
   ErrorBox,
+  FeedbackBox,
   palette,
 } from "../../src/components/ui/Design";
 import { IconBubble } from "../../src/components/ui/Reference";
@@ -20,6 +22,7 @@ export default function Verify() {
   }>();
   const verify = useAuthStore((s) => s.completeVerification);
   const input = useRef<TextInput>(null);
+  const gate = useRef(false);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(
@@ -27,7 +30,7 @@ export default function Verify() {
       ? "Tu cuenta fue creada, pero no pudimos enviar el código. Reintenta con Reenviar código en un minuto. No necesitas registrarte otra vez."
       : "",
   );
-  const [seconds, setSeconds] = useState(60);
+  const [seconds, setSeconds] = useState(delivery ? 60 : 0);
   const [message, setMessage] = useState("");
   const [focused, setFocused] = useState(false);
   useEffect(() => {
@@ -36,7 +39,8 @@ export default function Verify() {
     return () => clearTimeout(timer);
   }, [seconds]);
   async function submit() {
-    if (busy || !/^\d{6}$/.test(code)) return;
+    if (gate.current || !/^\d{6}$/.test(code)) return;
+    gate.current = true;
     try {
       setBusy(true);
       setError("");
@@ -45,13 +49,10 @@ export default function Verify() {
         authenticatedDestination(useAuthStore.getState().pendingInvitation),
       );
     } catch (err) {
-      const e = err as { response?: { data?: { error?: string } } };
-      setError(
-        e.response?.data?.error ||
-          "Código incorrecto o expirado. Revisa e intenta de nuevo.",
-      );
+      setError(errorMessage(err, "No pudimos verificar el código. Revisa tu conexión; un fallo de red no significa que el código sea incorrecto."));
     } finally {
       setBusy(false);
+      gate.current = false;
     }
   }
   // Six digits are enough: no need to look for the button.
@@ -60,7 +61,8 @@ export default function Verify() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
   async function resend() {
-    if (busy || seconds > 0) return;
+    if (gate.current || seconds > 0) return;
+    gate.current = true;
     try {
       setBusy(true);
       setError("");
@@ -71,14 +73,11 @@ export default function Verify() {
         "Si tu cuenta está pendiente, enviaremos un código nuevo. Revisa también spam.",
       );
     } catch (err) {
-      const e = err as { response?: { data?: { error?: string } } };
-      setError(
-        e.response?.data?.error ||
-          "No pudimos enviar el código. Comprueba tu conexión antes de reintentar.",
-      );
+      setError(errorMessage(err, "No pudimos solicitar otro código. Comprueba tu conexión antes de reintentar."));
       setSeconds(60);
     } finally {
       setBusy(false);
+      gate.current = false;
     }
   }
   return (
@@ -88,10 +87,10 @@ export default function Verify() {
           <IconBubble name="mail-outline" size={50} />
           <View style={{ flex: 1 }}>
             <Label size={20} weight="extra">
-              Te enviamos un código
+              {delivery === "failed" ? "Tu cuenta espera verificación" : "Busca tu código de verificación"}
             </Label>
             <Label size={13} color={palette.muted}>
-              Escribe los 6 dígitos que llegaron a {email}. Si no lo ves, revisa Spam o Promociones.
+              Verifica {email} con el código del correo. Si no lo ves, revisa Spam o Promociones, o solicita otro abajo.
             </Label>
           </View>
         </View>
@@ -130,7 +129,8 @@ export default function Verify() {
             ref={input}
             accessibilityLabel="Código de verificación de 6 dígitos"
             value={code}
-            onChangeText={(v) => setCode(v.replace(/\D/g, "").slice(0, 6))}
+            editable={!busy}
+            onChangeText={(v) => { setCode(v.replace(/\D/g, "").slice(0, 6)); setError(""); setMessage(""); }}
             maxLength={6}
             keyboardType="number-pad"
             autoComplete="one-time-code"
@@ -147,11 +147,7 @@ export default function Verify() {
           />
         </Pressable>
         {!!error && <ErrorBox message={error} />}
-        {!!message && (
-          <Label size={12} color={palette.muted}>
-            {message}
-          </Label>
-        )}
+        {!!message && <FeedbackBox title="Nuevo código solicitado" message={message} />}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
           <Label size={12} color={palette.muted}>
             ¿No recibiste el código?

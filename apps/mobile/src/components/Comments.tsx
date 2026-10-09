@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
+import { errorMessage as errorText } from "../lib/errorMessage";
 import { AppDialog as Alert } from "./ui/AppDialog";
 import { Avatar, Card, ErrorBox, Label, palette } from "./ui/Design";
 import type { Comentario } from "../types";
@@ -14,8 +15,6 @@ const when = (date: string) => {
   const today = new Date().toDateString() === value.toDateString();
   return value.toLocaleString("es-PE", today ? { hour: "2-digit", minute: "2-digit" } : { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 };
-const errorText = (error: unknown, fallback: string) =>
-  (error as { response?: { data?: { error?: string } } }).response?.data?.error || fallback;
 
 /** A short thread under an expense or a payment. Everyone active in the group reads it. */
 export function Comments({ gastoId, pagoId, hint }: { gastoId?: string; pagoId?: string; hint?: string }) {
@@ -38,7 +37,7 @@ export function Comments({ gastoId, pagoId, hint }: { gastoId?: string; pagoId?:
       qc.invalidateQueries({ queryKey: key });
       qc.invalidateQueries({ queryKey: ["gastos"] });
     },
-    onError: (err) => setError(errorText(err, "No se envió tu comentario. Revisa tu conexión; tu texto sigue aquí.")),
+    onError: (err) => setError(errorText(err, "No sabemos si se publicó tu comentario. Actualiza la conversación antes de enviarlo otra vez; tu texto sigue aquí.")),
   });
   const trimmed = text.trim();
 

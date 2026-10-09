@@ -5,7 +5,8 @@ import { Ionicons } from "@expo/vector-icons";
 import * as MailComposer from "expo-mail-composer";
 import * as Clipboard from "expo-clipboard";
 import { captureRef, releaseCapture } from "react-native-view-shot";
-import { Avatar, Card, Label, Button, ErrorBox, palette } from "./Design";
+import { Avatar, Card, Label, Button, ErrorBox, FeedbackBox, palette } from "./Design";
+import { errorMessage } from "../../lib/errorMessage";
 import { FormField } from "./Reference";
 import { useQuery } from "@tanstack/react-query";
 import { shareFingerprint } from "@junto/shared/share";
@@ -208,7 +209,7 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
         recurso: resource, destinatario: email, solicitudId: mailRequest.current, huella: shareFingerprint(message),
       }, { timeout: 30_000 });
       setServerResult(data);
-      mailRequest.current = newMailRequestId();
+      if (data.estado === "aceptado" || data.estado === "fallido") mailRequest.current = newMailRequestId();
     } catch (err) {
       const e = err as { response?: { status?: number; data?: ServerMailResult & { error?: string; code?: string } } };
       const data = e.response?.data;
@@ -220,7 +221,7 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
       }
       if (data?.code === "EMAIL_NO_CONFIGURADO") availability.refetch();
       if (!e.response) throw new Error("No sabemos si se envió: revisa tu conexión y vuelve a tocar «Enviar desde JUNTO». Si ya había salido, no se enviará otra vez.");
-      throw new Error(data?.error || "No pudimos enviar el correo. Puedes abrirlo en tu app de correo.");
+      throw new Error(errorMessage(err, "No pudimos enviar el correo. Puedes abrirlo en tu app de correo."));
     }
   }
   function confirmSend() {
@@ -261,11 +262,13 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
             </Card>
             <FormField label={serverMail ? "Para" : "Destinatario (opcional)"} value={recipient} onChangeText={setRecipient} editable={!busy && !disabled} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" maxLength={254} placeholder="nombre@correo.com" error={invalidEmail ? "Escribe un solo correo válido." : undefined} />
             {!!error && <ErrorBox message={error} />}
+            {!!resource && availability.isFetching && <Label accessibilityLiveRegion="polite" size={12} color={palette.muted}>Comprobando si puedes enviar desde JUNTO…</Label>}
+            {!!resource && availability.isError && <><FeedbackBox title="No pudimos comprobar el envío directo" tone="warning" message="Puedes reintentar o preparar el mensaje en tu app de correo. Aún no se ha enviado nada desde esta pantalla." /><Button compact secondary title="Comprobar envío desde JUNTO" disabled={busy} onPress={() => {void availability.refetch();}} /></>}
             {!!serverResult && <MailOutcome result={serverResult} />}
             {serverMail ? <>
               <Button title={serverResult?.estado === "aceptado" ? "Enviado ✓" : "Enviar desde JUNTO"} loading={busy} disabled={disabled || !email || invalidEmail || serverResult?.estado === "aceptado"} onPress={confirmSend} />
               <Label size={11} color={palette.muted}>{serverResult?.estado === "aceptado" ? "Para enviarlo a otra persona, cambia el correo de arriba." : "Llega con el diseño del resumen, desde JUNTO y con tu nombre. Las respuestas van a tu correo."}</Label>
-              {serverResult?.estado === "incierto" && <Button title="Enviar de nuevo de todos modos" secondary disabled={busy} onPress={() => Alert.alert("¿Enviar otra vez?", "Si el primero sí llegó, la persona recibirá dos correos iguales.", [{ text: "Cancelar", style: "cancel" }, { text: "Enviar otra vez", onPress: () => { mailRequest.current = newMailRequestId(); run(sendFromJunto, ""); } }])} />}
+              {(serverResult?.estado === "incierto" || serverResult?.estado === "enviando") && <Button title="Comprobar sin enviar otra vez" secondary disabled={busy} onPress={() => run(sendFromJunto, "")} />}
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><View style={{ flex: 1, height: 1, backgroundColor: palette.line }} /><Label size={11} color={palette.muted}>o</Label><View style={{ flex: 1, height: 1, backgroundColor: palette.line }} /></View>
             </> : !!resource && availability.data?.disponible === false && <Label size={11} color={palette.muted}>El envío directo desde JUNTO no está activo en esta versión. Usa tu app de correo.</Label>}
             <Button title="Abrir en mi app de correo" secondary={serverMail} loading={busy && !serverMail} disabled={disabled || invalidEmail} onPress={() => run(mail, "Volviste de tu app de correo. Si no pulsaste enviar, el mensaje sigue sin compartir. JUNTO no puede comprobar la entrega.")} />
@@ -276,7 +279,7 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
               <Label size={11} color="#6543C4">El correo incluye el resumen visual como imagen adjunta para conservar el diseño.</Label>
             </>}
             {!!notice && <Card style={{ backgroundColor: palette.mint, padding: 12 }}><Label size={12} accessibilityLiveRegion="polite">{notice}</Label></Card>}
-            <Label size={11} color={palette.muted}>Solo preparas el mensaje: revisa el destinatario y pulsa enviar en tu app de correo. No necesitamos acceder a tu buzón ni a tus contactos.</Label>
+            <Label size={11} color={palette.muted}>{serverMail ? "«Enviar desde JUNTO» entrega el resumen al proveedor, pero no confirma su recepción o lectura. «Abrir en mi app» solo prepara el mensaje: tú pulsas enviar." : "Solo preparas el mensaje: revisa el destinatario y pulsa enviar en tu app de correo."} No necesitamos acceder a tu buzón ni a tus contactos.</Label>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>

@@ -10,6 +10,7 @@ import { guessGroupType } from "../../../src/lib/groupType";
 import { Screen, Label, Button, ErrorBox, palette, design } from "../../../src/components/ui/Design";
 import { FormField } from "../../../src/components/ui/Reference";
 import { art } from "../../../src/components/ui/Artwork";
+import { errorMessage } from "../../../src/lib/errorMessage";
 
 const types = [
   { id: "roomies", label: "Depa", image: art.home },
@@ -76,12 +77,12 @@ export default function CreateGroup() {
       // Invited people still have to accept, and anyone without an account needs the link.
       const invited = results.filter((r) => !r.alreadyMember).length;
       router.replace(`/(app)/grupos/agregar-personas?grupoId=${groupId}&nuevo=1${invited ? `&invitados=${invited}` : ""}`);
-    } catch {
-      setError(
+    } catch (err) {
+      setError(errorMessage(err,
         groupId
           ? "Tu grupo ya está creado, pero no pudimos agregar a todos. Reintenta: no se creará otro grupo."
-          : "No pudimos crear el grupo. Revisa tu conexión; tus datos siguen aquí.",
-      );
+          : "No sabemos si se creó el grupo. Revisa la lista de grupos antes de repetir; tus datos siguen aquí.",
+      ));
     } finally {
       setBusy(false);
     }

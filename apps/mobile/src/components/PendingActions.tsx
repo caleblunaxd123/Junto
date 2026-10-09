@@ -7,12 +7,11 @@ import { Button, Card, Label, ErrorBox, palette } from "./ui/Design";
 import { useEnviarRecordatorio, useResolverPago } from "../hooks/useGrupos";
 import { centavosASoles } from "../types";
 import type { PendingAction } from "../lib/pending";
+import { errorMessage as serverMessage } from "../lib/errorMessage";
 
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
 // The server explains what happened ("ya fue resuelto", "ya le recordaste hace poco"); a generic
 // connection message only when there is no answer at all.
-const serverMessage = (err: unknown, fallback: string) =>
-  (err as { response?: { data?: { error?: string } } }).response?.data?.error || fallback;
 const methods: Record<string, string> = { yape: "Yape", plin: "Plin", transferencia: "transferencia", efectivo: "efectivo" };
 
 /** One card per thing the viewer has to do, with the action right there. */

@@ -1,15 +1,17 @@
-import React, { useEffect, useState } from "react";
-import { TextInput } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Pressable } from "react-native";
 import { router } from "expo-router";
 import { api } from "../../src/lib/api";
+import { emailError, passwordError, codeError, confirmationError } from "../../src/lib/authValidation";
+import { errorMessage } from "../../src/lib/errorMessage";
+import { FormField } from "../../src/components/ui/Reference";
 import {
   Screen,
   Card,
   Label,
   Button,
   ErrorBox,
-  palette,
-  design,
+  FeedbackBox,
 } from "../../src/components/ui/Design";
 export default function Recovery() {
   const [email, setEmail] = useState("");
@@ -18,23 +20,26 @@ export default function Recovery() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [message, setMessage] = useState("");
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const gate = useRef(false);
+  const errors = {email: emailError(email), code: codeError(code), password: passwordError(password), confirm: confirmationError(password, confirm)};
+  const touch = (field: string) => setTouched(current => ({...current, [field]: true}));
   useEffect(() => {
     if (seconds <= 0) return;
     const timer = setTimeout(() => setSeconds((value) => value - 1), 1000);
     return () => clearTimeout(timer);
   }, [seconds]);
-  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const validPassword =
-    /^\d{6}$/.test(code) &&
-    password.length >= 8 &&
-    /\d/.test(password) &&
-    password === confirm;
+  const validEmail = !errors.email;
   async function submit() {
-    if (busy || !validEmail || (sent ? !validPassword : seconds > 0)) return;
+    if (gate.current || (!sent && seconds > 0)) return;
+    setTouched({email: true, ...(sent ? {code: true, password: true, confirm: true} : {})});
+    if (!validEmail || (sent && (errors.code || errors.password || errors.confirm))) return;
+    gate.current = true;
     try {
       setError("");
       setBusy(true);
@@ -53,17 +58,15 @@ export default function Recovery() {
         setDone(true);
       }
     } catch (err) {
-      const e = err as { response?: { data?: { error?: string } } };
-      setError(
-        e.response?.data?.error ||
-          "No pudimos continuar. Comprueba tu conexión e inténtalo de nuevo.",
-      );
+      setError(errorMessage(err, sent ? "No sabemos si se actualizó tu contraseña. Prueba entrar con la nueva antes de solicitar otro cambio." : "No pudimos solicitar el código. Revisa tu conexión y vuelve a intentar."));
     } finally {
       setBusy(false);
+      gate.current = false;
     }
   }
   async function resend() {
-    if (busy || seconds > 0 || !validEmail) return;
+    if (gate.current || seconds > 0 || !validEmail) return;
+    gate.current = true;
     setBusy(true);
     setError("");
     setMessage("");
@@ -72,33 +75,27 @@ export default function Recovery() {
         email: email.trim().toLowerCase(),
       });
       setCode("");
+      setTouched(current => ({...current, code: false}));
       setSeconds(60);
       setMessage(
         "Solicitud registrada. Si hay una cuenta con ese correo, enviaremos un nuevo código. Usa el más reciente.",
       );
     } catch (err) {
-      const e = err as { response?: { data?: { error?: string } } };
-      setError(
-        e.response?.data?.error ||
-          "No pudimos solicitar otro código. Revisa tu conexión.",
-      );
+      setError(errorMessage(err, "No pudimos solicitar otro código. Revisa tu conexión."));
     } finally {
       setBusy(false);
+      gate.current = false;
     }
   }
   return (
     <Screen
-      title="Recupera tu cuenta"
-      subtitle="Solo tú debes conocer tu contraseña."
+      title="Recupera tu acceso"
+      subtitle="Un código por correo. Una contraseña nueva."
       back
     >
       {done ? (
         <Card>
-          <Label weight="bold">Contraseña actualizada</Label>
-          <Label>
-            Ya puedes entrar con tu nueva contraseña. Cerramos las sesiones
-            anteriores para proteger tu cuenta.
-          </Label>
+          <FeedbackBox title="Contraseña actualizada" tone="success" message="Ya puedes entrar con tu nueva contraseña. Cerramos las sesiones anteriores para proteger tu cuenta." />
           <Button
             title="Ir a iniciar sesión"
             onPress={() => router.replace("/(auth)/login")}
@@ -106,64 +103,72 @@ export default function Recovery() {
         </Card>
       ) : (
         <Card>
-          <Label weight="bold">Correo electrónico</Label>
-          <TextInput
+          <FormField label="Correo electrónico" icon="mail-outline"
+            hint="Usa el correo de tu cuenta: Gmail, Outlook u otro proveedor. El código llega por correo, no por SMS."
             accessibilityLabel="Correo para recuperar cuenta"
             value={email}
-            editable={!sent}
-            onChangeText={setEmail}
+            editable={!sent && !busy}
+            onChangeText={value => {setEmail(value); setError("");}}
+            onBlur={() => touch("email")}
+            error={touched.email ? errors.email : undefined}
             autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="email"
+            maxLength={254}
+            placeholder="nombre@correo.com"
             keyboardType="email-address"
-            style={design.input}
           />
           {sent && (
             <>
-              <Label color={palette.muted}>
-                Si este correo tiene cuenta, recibirás un código de 6 dígitos.
-                Revisa también spam. Caduca en 15 minutos.
-              </Label>
-              <Label weight="bold">Código del correo</Label>
-              <TextInput
+              <FeedbackBox title="Solicitud registrada" message="Si este correo tiene una cuenta activa, recibirás un código de 6 dígitos. Revisa también Spam o Promociones. Vence en 15 minutos; no lo compartas." />
+              <FormField label="Código del correo" icon="key-outline"
                 accessibilityLabel="Código de recuperación"
                 value={code}
-                onChangeText={(v) => setCode(v.replace(/\D/g, ""))}
+                onChangeText={(v) => {setCode(v.replace(/\D/g, "").slice(0, 6)); setError("");}}
+                onBlur={() => touch("code")}
+                error={touched.code ? errors.code : undefined}
+                editable={!busy}
                 maxLength={6}
                 keyboardType="number-pad"
                 autoComplete="one-time-code"
-                style={design.input}
               />
-              <Label weight="bold">Nueva contraseña</Label>
-              <TextInput
+              <FormField label="Nueva contraseña" icon="lock-closed-outline"
                 accessibilityLabel="Nueva contraseña"
                 value={password}
-                onChangeText={setPassword}
-                secureTextEntry
+                onChangeText={value => {setPassword(value); setError("");}}
+                onBlur={() => touch("password")}
+                error={touched.password ? errors.password : undefined}
+                hint="Al menos 8 caracteres y un número."
+                editable={!busy}
+                secureTextEntry={!showPassword}
                 autoCapitalize="none"
-                style={design.input}
+                autoCorrect={false}
+                autoComplete="new-password"
               />
-              <Label size={12}>Al menos 8 caracteres y un número.</Label>
-              <Label weight="bold">Repite la contraseña</Label>
-              <TextInput
+              <FormField label="Repite la contraseña" icon="lock-closed-outline"
                 accessibilityLabel="Confirmar nueva contraseña"
                 value={confirm}
-                onChangeText={setConfirm}
-                secureTextEntry
+                onChangeText={value => {setConfirm(value); setError("");}}
+                onBlur={() => touch("confirm")}
+                error={touched.confirm ? errors.confirm : undefined}
+                editable={!busy}
+                secureTextEntry={!showPassword}
                 autoCapitalize="none"
-                style={design.input}
+                autoCorrect={false}
+                autoComplete="new-password"
               />
+              <Pressable accessibilityRole="button" disabled={busy} onPress={() => setShowPassword(value => !value)} style={{minHeight: 44, justifyContent: "center"}}>
+                <Label size={13} weight="bold" color="#6543C4">{showPassword ? "Ocultar contraseñas" : "Mostrar contraseñas"}</Label>
+              </Pressable>
             </>
           )}
           {!!error && <ErrorBox message={error} />}
-          {!!message && (
-            <Label size={12} color={palette.muted}>
-              {message}
-            </Label>
-          )}
+          {!!message && <FeedbackBox title="Nuevo código solicitado" message={message} />}
           <Button
-            title={sent ? "Actualizar contraseña" : "Enviar código"}
+            title={sent ? "Actualizar contraseña" : "Solicitar código"}
             loading={busy}
             onPress={submit}
-            disabled={sent ? !validPassword : !validEmail || seconds > 0}
+            disabled={!sent && seconds > 0}
           />
           {sent && (
             <Button
@@ -189,6 +194,8 @@ export default function Recovery() {
                 setMessage("");
                 setPassword("");
                 setConfirm("");
+                setTouched({});
+                setSeconds(0);
               }}
             />
           )}
