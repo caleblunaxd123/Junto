@@ -9,8 +9,9 @@
 - LunaLav y AlcancIA siguieron respondiendo tras la recarga del proxy. Se conservó `/opt/stack/Caddyfile.before-junto-20261008` para rollback.
 - Imagen desplegada `junto-api:20261008-release`: digest `sha256:f90782f38fdbf3ea3b2b0e9fdf576cda5da6d9f1956836944bcae05f6140099f`. Auditoría de dependencias de esta imagen: 0 vulnerabilidades; **no equivale** a certificar Expo, el sistema operativo o toda la app. OCR real sin red leyó la boleta sintética S/180.00 en 4.36 segundos.
 - El gateway IA privado fue accesible desde la API: llamadas sin clave rechazadas, clave de la API aceptada. No se ejecutó inferencia en esta comprobación; no acredita una mejora en la latencia del modelo.
-- SMTP de Gmail: conexión de comprobación sin envío; autenticación rechazada (`EAUTH`, `535`). No se acreditó recepción real ni se enviaron mensajes a terceros.
-- La API está intencionalmente sin proveedor de correo hasta corregir la autenticación. El registro/verificación y recuperación no deben considerarse operativos todavía. El emulador sigue con su API local, no se recompiló una distribución para amigos.
+- SMTP de Gmail: autenticación y TLS correctos tanto localmente como desde Contabo. Solo se transfirieron los campos SMTP necesarios, no el `.env` local completo. Se configuró el remitente JUNTO con la misma cuenta autenticada y se reinició exclusivamente la API de JUNTO.
+- Entrega real comprobada: mensaje técnico ficticio enviado desde Contabo a `calebluna41@gmail.com`, encontrado por su Message-ID en Gmail con etiqueta `INBOX`, sin `SPAM`, el 8 de octubre aproximadamente a las 19:15 (Lima). No se crearon cuentas, gastos ni pagos. Esto acredita ese mensaje en Gmail, no entrega a Outlook ni todos los flujos OTP.
+- `/health` muestra `email: smtp`, `/ready` sigue disponible y las comprobaciones HTTPS/CORS/rutas protegidas pasaron después de activar correo. Falta validar registro/verificación y recuperación de extremo a extremo en un cliente distribuido. El emulador sigue con su API local; no se recompiló una distribución para amigos.
 
 ## Desbloquear acceso sin reducir seguridad
 
@@ -34,7 +35,7 @@ Para Gmail configurar `EMAIL_FROM` con la cuenta remitente o un alias autorizado
 
 ## Pendientes antes de distribuir a amigos
 
-1. Corregir SMTP, comprobar autenticación y después entrega real, registro/OTP y recuperación. Revisar bandeja y spam del destinatario autorizado.
+1. SMTP y entrega técnica a Gmail ya comprobados. Validar registro/OTP, recuperación y resumen de cuenta desde la app; falta un destinatario Outlook autorizado para acreditar entrega allí. No repetir mensajes de prueba automáticamente.
 2. Configurar el proyecto EAS, firma Android, cliente OAuth compatible, FCM y App Links. Ajustar la API pública a `https://junto.lunalav.pe` al compilar; no distribuir el build local con `10.0.2.2`.
 3. Probar la APK en dispositivos externos reales con datos ficticios, incluyendo invitaciones, cuentas, confirmaciones y envío de resumen. El SMTP disponible no acredita recepción ni lectura.
 4. Implementar y verificar una versión web si se elige esa vía para iPhone sin membresía Apple Developer. El host HTTPS existente sirve de base, pero aún no ofrece ese cliente.

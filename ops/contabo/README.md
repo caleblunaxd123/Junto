@@ -61,6 +61,17 @@ Google y la guarda en el archivo local privado. Nunca enviarla por chat o Git. E
 de Google Cloud sirve para login, **no** para SMTP. Probar entrega real únicamente al correo
 autorizado. Gmail/Outlook por compositor y WhatsApp no equivalen a envío confirmado por servidor.
 
+Para instalar/actualizar Gmail SMTP: `stage-smtp.cjs` filtra el archivo local a los únicos campos
+autorizados, valida destino/remitente/TLS y genera un archivo temporal privado. Transferirlo por
+SCP con host verificado a `/opt/junto/smtp.env.staged`, modo 600. Verificar SMTP en un contenedor
+efímero del servidor **antes** de aplicar. Montar `apply-smtp.cjs` y `stage-smtp.cjs` juntos en
+`/app/apps/api`, y `/opt/junto` con escritura, para aplicar la configuración conservando un
+rollback privado. Recrear solo `api`, comprobar `email:check`, `/ready` y `/health`, y retirar las
+copias temporales. No imprimir configuración ni activar `EMAIL_DEV_LOG`. `send-email-smoke.cjs`
+envía un mensaje técnico al único destinatario autorizado; requiere decisión explícita, no es
+un healthcheck ni debe ejecutarse en bucle. Comprobar su Message-ID en Gmail distingue una
+recepción real de la simple aceptación SMTP.
+
 Antes de distribuir: SMTP/OTP real, EAS y firma Android, OAuth compatible con esa firma,
 App Links, FCM, legal responsable, pruebas en dispositivos. Para iPhone sin membresía Apple
 se necesita implementar y verificar una versión web; las páginas públicas de esta API no son esa app.
