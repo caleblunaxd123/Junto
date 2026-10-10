@@ -101,6 +101,11 @@ model Grupo {
   // Who may approve a reported payment: "receptor" (only who receives it) or "administrador"
   // (who receives it or a group admin). The payer never approves their own payment.
   aprobacionPagos String    @default("receptor") @map("aprobacion_pagos") @db.VarChar(20)
+  // "cobranza": someone paid everything and the rest pay them back. "division": everyone puts in
+  // toward a goal amount. NULL: groups made before, free expenses.
+  modo            String?   @db.VarChar(12)
+  // Deadline to pay: people who still owe get automatic reminders as it approaches and after.
+  fechaLimite     DateTime? @map("fecha_limite")
 
   // Relations
   creador         Usuario           @relation("GrupoCreador", fields: [creadoPor], references: [id])
@@ -114,6 +119,7 @@ model Grupo {
   invitaciones    Invitacion[]
   avisos          AvisoGrupo[]
 
+  @@index([fechaLimite])
   @@map("grupos")
 }
 
@@ -123,6 +129,8 @@ model GrupoMiembro {
   usuarioId   String    @map("usuario_id") @db.Uuid
   rol         String    @default("miembro") @db.VarChar(10)
   fechaUnion  DateTime  @default(now()) @map("fecha_union")
+  // Last time this member opened the group chat: what came after is "unread".
+  ultimaLectura DateTime? @map("ultima_lectura")
   activo      Boolean   @default(true)
 
   // Relations
@@ -142,6 +150,7 @@ model AvisoGrupo {
   integranteId String   @map("integrante_id") @db.Uuid
   fecha        DateTime @default(now())
   leido        Boolean  @default(false)
+  parte        Int? // cents of the free part the newcomer took, if any
   grupo        Grupo    @relation(fields: [grupoId], references: [id], onDelete: Cascade)
   usuario      Usuario  @relation("AvisoDestinatario", fields: [usuarioId], references: [id], onDelete: Cascade)
   integrante   Usuario  @relation("AvisoIntegrante", fields: [integranteId], references: [id], onDelete: Cascade)
@@ -164,6 +173,8 @@ model Gasto {
   activo       Boolean   @default(true)
   // Client-generated key: a double tap or a retry after a timeout returns the same expense.
   solicitudId  String?   @map("solicitud_id") @db.VarChar(80)
+  // Equal split in N parts: parts nobody holds yet stay with whoever paid; each person who joins takes one.
+  partes       Int?
 
   // Relations
   grupo        Grupo               @relation(fields: [grupoId], references: [id])
@@ -361,6 +372,7 @@ model Comentario {
   @@index([gastoId, fechaCreacion])
   @@index([pagoId, fechaCreacion])
   @@index([autorId, fechaCreacion])
+  @@index([grupoId, fechaCreacion])
   @@map("comentarios")
 }
 

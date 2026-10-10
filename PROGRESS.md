@@ -1,6 +1,6 @@
 # JUNTO — estado real
 
-Actualizado el 8 de octubre de 2026 contrastando el código de `main` + esta rama, no el plan original por semanas (que estaba desactualizado: marcaba como pendiente casi todo lo que ya existe). Comprobantes, aprobación y comentarios se añadieron en la ronda siguiente.
+Actualizado el 10 de octubre de 2026 (grupos de cobranza/división, chat y fecha límite); antes el 8 de octubre de 2026 contrastando el código de `main` + esta rama, no el plan original por semanas (que estaba desactualizado: marcaba como pendiente casi todo lo que ya existe). Comprobantes, aprobación y comentarios se añadieron en la ronda siguiente.
 
 Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = funciona con límites conocidos · **Pendiente** = no existe o necesita algo externo.
 
@@ -11,6 +11,11 @@ Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = fu
 | Registro, verificación por código, login, recuperación, cerrar sesión | Hecho | `ops/test-redesign.cjs`, `ops/test-security-ux.cjs` (OTP de un solo uso, rotación de sesiones, límite de intentos) |
 | Continuar con Google | Parcial | Backend probado con claims (`ops/test-google-sign-in.cjs`); falta el inicio de sesión real en Android con la cuenta del propietario |
 | Probar sin cuenta (sin servidor) | Hecho | Nombres opcionales, invitados por persona, propina; conservar el cálculo con consentimiento (`ops/test-mobile-ux.cjs`) |
+| Dos tipos de grupo: cobranza y división de gastos | Hecho | Cobranza: alguien pagó todo y le devuelven su parte. División: entre todos juntan un monto meta. Dos mosaicos en Inicio y en «Nuevo grupo», con ejemplo (`ops/test-bill-parts.cjs`) |
+| Cuenta en partes (S/ 500 en 5 partes de S/ 100) | Hecho | Se define al crear el grupo o después; las partes libres quedan con quien pagó y cada persona que se une ocupa una automáticamente (enlace o invitación, sin duplicar). Corregir total/partes; un reparto manual detiene la asignación automática (`apps/api/src/domain/billParts.test.ts`, `ops/test-bill-parts.cjs`) |
+| Grupo como chat (estilo WhatsApp) | Hecho en app y web | Mensaje fijado con la cuenta y el avance de cobro, burbujas de pagos (✓ esperando / ✓✓ confirmado, «Sí, lo recibí» en la burbuja), uniones con su parte, recordatorios y mensajes de texto. Se actualiza cada 4 s con el chat abierto; no requiere servidor adicional. Probado en emulador Android y Chromium a 5 anchos (`ops/test-group-contribution-web.cjs`) |
+| Fecha límite y recordatorios automáticos | Hecho | Job cada hora: 3 días antes, últimas 24 h, el día que vence y cada 2 días de atraso (2 semanas). Uno por etapa y persona, nunca de 21:00 a 8:00 (Lima), solo a quien debe; push y correo (para usuarios web). Visible en el chat solo para deudor y acreedor (`apps/api/src/domain/deadline.test.ts`, `ops/test-bill-parts.cjs`) |
+| Avisos de nuevos integrantes y no leídos | Hecho | Aviso en Inicio agrupado por grupo («Ana, Luis y Marta se unieron… le toca S/ 100») y burbuja de novedades sin leer por grupo. Push depende de Firebase/EAS |
 | Grupos e invitaciones | Hecho en beta web | Enlace con aceptación; email HTML real por SMTP; celular prepara borrador WhatsApp, no SMS. Aviso interno separado. Recepción en Gmail autorizada, 10/oct/2026 (`ops/test-production-beta.cjs`) |
 | Navegación (pantallas de detalle apiladas) | Hecho | «Volver» y formularios limpios (`ops/e2e-web.cjs`, guarda en `ops/test-ui-patterns.cjs`) |
 | Tope de un pago, salida de grupo, gastos con ex-integrantes, recordatorios | Hecho | `ops/test-groups-ledger.cjs`, `apps/api/src/domain/payable.test.ts` |

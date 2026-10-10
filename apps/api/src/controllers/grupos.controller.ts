@@ -135,8 +135,10 @@ export async function invitacion(
     const grupo = await prisma.grupo.findFirst({
       where: { linkInvitacion: code, activo: true },
       select: {
+        id: true,
         nombre: true,
         tipo: true,
+        modo: true,
         _count: { select: { miembros: { where: { activo: true } } } },
       },
     });
@@ -148,10 +150,15 @@ export async function invitacion(
         });
       return;
     }
+    // What joining means in money: the part this person would take, if one is free.
+    const cuenta = await gruposService.cuentaPorPartes(grupo.id);
     res.json({
       nombre: grupo.nombre,
       tipo: grupo.tipo,
+      modo: grupo.modo,
       miembros: grupo._count.miembros,
+      // Only the first name of whoever paid: enough to know who to pay back, nothing more.
+      cuenta: cuenta && { descripcion: cuenta.descripcion, montoTotal: cuenta.montoTotal, partes: cuenta.partes, parte: cuenta.parte, libres: cuenta.libres, pagadorNombre: cuenta.pagadorNombre.trim().split(/\s+/)[0] },
     });
   } catch (error) {
     next(error);

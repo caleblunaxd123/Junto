@@ -32,6 +32,8 @@ import { pendingActions } from "../../../src/lib/pending";
 import { PendingActions } from "../../../src/components/PendingActions";
 import { Invitations } from "../../../src/components/Invitations";
 import { GroupNotices } from "../../../src/components/GroupNotices";
+import { ModeChoice } from "../../../src/components/ModeChoice";
+import { modeWords } from "../../../src/lib/groupMode";
 import { AddButton, CreateSheet } from "../../../src/components/CreateSheet";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
@@ -67,6 +69,11 @@ export default function Home() {
     void qc.invalidateQueries({ queryKey: ["notificaciones"] });
   }, [refetch, refetchPayments, refreshBills, qc]);
   useFocusEffect(refreshAll);
+  // While Home is open, groups refresh on their own so unread badges and balances stay current.
+  useFocusEffect(useCallback(() => {
+    const timer = setInterval(() => { refetch(); }, 15_000);
+    return () => clearInterval(timer);
+  }, [refetch]));
   // A calculation kept from "Probar sin cuenta" (only with consent, only on this phone).
   const [trial, setTrial] = useState<SavedTryBill | null>(null);
   useFocusEffect(useCallback(() => { loadTryBill().then(setTrial).catch(() => setTrial(null)); }, []));
@@ -126,6 +133,11 @@ export default function Home() {
 
         <Invitations />
         <GroupNotices />
+        {/* The two ways to start, always one tap away and explained in one line each. */}
+        <View style={{ gap: 8 }}>
+          <Label weight="bold" size={15}>Crear un grupo</Label>
+          <ModeChoice tiles onPick={(modo) => router.push(`/(app)/grupos/crear?modo=${modo}`)} />
+        </View>
         {trial && (
           <Card style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", gap: 8 }}>
             <Label weight="bold">Tu cálculo de prueba sigue aquí</Label>
@@ -153,10 +165,9 @@ export default function Home() {
             <View style={{ flex: desktop ? 1 : undefined, gap: 14, minWidth: 0 }}>
             <Label size={19} weight="extra">¿Por dónde empezamos?</Label>
             <Label size={14} color={palette.muted}>
-              Divide la cuenta de hoy en tres pasos, o crea un grupo para los gastos que se repiten.
+              Elige arriba el tipo de grupo. Si es solo una cena y tus amigos no usan JUNTO, divide una cuenta de hoy.
             </Label>
-            <Button title="Dividir una cuenta de hoy" onPress={() => router.push("/(app)/cuentas/rapida")} />
-            <Button title="Crear un grupo" secondary onPress={() => router.push("/(app)/grupos/crear")} />
+            <Button title="Dividir una cuenta de hoy" secondary onPress={() => router.push("/(app)/cuentas/rapida")} />
             <Pressable accessibilityRole="button" onPress={() => router.push("/(app)/ejemplo")} style={{ minHeight: 44, justifyContent: "center", alignItems: "center" }}>
               <Label size={13} weight="bold" color={palette.purple}>Ver un ejemplo explicado</Label>
             </Pressable>
@@ -207,11 +218,7 @@ export default function Home() {
                 <Button title="Reintentar" onPress={() => refetch()} />
               </>
             ) : groups.length === 0 ? (
-              <Card style={{ padding: 14 }}>
-                <Label weight="bold">Aún no tienes grupos</Label>
-                <Label size={13} color={palette.muted}>Para el depa, la pareja o un viaje: guarda quién pagó y quién debe a quién.</Label>
-                <Button title="Crear un grupo" secondary compact onPress={() => router.push("/(app)/grupos/crear")} />
-              </Card>
+              <Label size={13} color={palette.muted}>Aún no tienes grupos. Crea uno arriba.</Label>
             ) : (
               <>
                 {groups.length > 5 && (
@@ -235,7 +242,7 @@ export default function Home() {
                     <Pressable
                       key={g.id}
                       accessibilityRole="button"
-                      accessibilityLabel={`${g.nombre}. ${g.miembros.length} personas. ${status}${waiting ? `. ${waiting} pago por confirmar` : ""}`}
+                      accessibilityLabel={`${g.nombre}. ${g.miembros.length} personas. ${status}${waiting ? `. ${waiting} pago por confirmar` : ""}${g.noLeidos ? `. ${g.noLeidos} sin leer` : ""}`}
                       onPress={() => router.push(`/(app)/grupos/${g.id}`)}
                     >
                       <Card style={{ padding: 12, borderRadius: 22, flexDirection: "row", gap: 12, alignItems: "center" }}>
@@ -246,6 +253,7 @@ export default function Home() {
                         />
                         <View style={{ flex: 1, gap: 4 }}>
                           <Label size={16} weight="extra" numberOfLines={2}>{g.nombre}</Label>
+                          {!!g.modo && <Label size={11} weight="bold" color={g.modo === "division" ? palette.purple : "#007B60"}>{modeWords(g.modo).name.toUpperCase()}</Label>}
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                             <View style={{ flexDirection: "row" }}>
                               {g.miembros.slice(0, 4).map((m, i) => (
@@ -266,7 +274,13 @@ export default function Home() {
                             {waiting ? `${status} · ${waiting} por confirmar` : status}
                           </Label>
                         </View>
-                        <Ionicons name="chevron-forward" size={18} color={palette.muted} />
+                        {g.noLeidos ? (
+                          <View accessibilityLabel={`${g.noLeidos} ${g.noLeidos === 1 ? "novedad" : "novedades"} sin leer`} style={{ minWidth: 26, height: 26, borderRadius: 13, paddingHorizontal: 7, alignItems: "center", justifyContent: "center", backgroundColor: "#25D366" }}>
+                            <Label size={13} weight="extra" color="white">{g.noLeidos > 99 ? "99+" : g.noLeidos}</Label>
+                          </View>
+                        ) : (
+                          <Ionicons name="chevron-forward" size={18} color={palette.muted} />
+                        )}
                       </Card>
                     </Pressable>
                   );

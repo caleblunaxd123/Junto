@@ -8,6 +8,7 @@ import {
   allocateExact,
   allocatePercentages,
 } from "../domain/money";
+import { allocateParts } from "../domain/billParts";
 
 export async function crearGasto(
   grupoId: string,
@@ -42,6 +43,7 @@ export async function crearGasto(
       montoTotal: input.montoTotal,
       pagadoPor: input.pagadoPor,
       categoria: input.categoria,
+      partes: input.partes,
       creadoPor,
       notas: input.notas,
       fecha: input.fecha ? new Date(input.fecha) : new Date(),
@@ -90,7 +92,7 @@ async function gastoPorSolicitud(grupoId: string, input: CrearGastoInput, creado
     previo.participantes.some((saved) => saved.usuarioId === part.usuarioId && saved.montoAsignado === part.montoAsignado),
   );
   if (!previo.activo || previo.grupoId !== grupoId || previo.montoTotal !== input.montoTotal || previo.descripcion !== input.descripcion || previo.pagadoPor !== input.pagadoPor ||
-    previo.categoria !== input.categoria || (previo.notas ?? "") !== (input.notas ?? "") ||
+    previo.categoria !== input.categoria || previo.partes !== (input.partes ?? null) || (previo.notas ?? "") !== (input.notas ?? "") ||
     (input.fecha !== undefined && previo.fecha.getTime() !== new Date(input.fecha).getTime()) || !sameParts)
     throw new Error("Este envío ya guardó un gasto distinto. Revisa los gastos del grupo antes de volver a guardar.", 409);
   return previo;
@@ -98,6 +100,11 @@ async function gastoPorSolicitud(grupoId: string, input: CrearGastoInput, creado
 
 function calcularParticipantes(input: CrearGastoInput) {
   const { tipoDivision, montoTotal, participantes } = input;
+
+  if (input.partes !== undefined) {
+    if (tipoDivision !== "igual") throw new Error("Una cuenta por partes se reparte en partes iguales.");
+    return allocateParts(montoTotal, input.partes, input.pagadoPor, participantes.map((p) => p.usuarioId));
+  }
 
   if (tipoDivision === "igual") {
     return allocateEqual(
@@ -285,7 +292,8 @@ export async function editarGasto(
   const cambiaDivision =
     input.montoTotal !== undefined ||
     input.participantes !== undefined ||
-    input.tipoDivision !== undefined;
+    input.tipoDivision !== undefined ||
+    input.partes !== undefined;
   if (
     cambiaDivision &&
     (!input.montoTotal || !input.participantes || !input.tipoDivision)
@@ -307,7 +315,7 @@ export async function editarGasto(
   }
 
   const participanteData = cambiaDivision
-    ? calcularParticipantes(input as CrearGastoInput)
+    ? calcularParticipantes({ ...input, pagadoPor: input.pagadoPor ?? gasto.pagadoPor } as CrearGastoInput)
     : null;
   await prisma.$transaction(async (tx) => {
     await tx.gasto.update({
@@ -317,6 +325,8 @@ export async function editarGasto(
         montoTotal: input.montoTotal,
         pagadoPor: input.pagadoPor,
         categoria: input.categoria,
+        // A split changed without parts is fixed by hand: newcomers no longer take parts automatically.
+        partes: cambiaDivision ? (input.partes ?? null) : undefined,
         notas: input.notas,
         fecha: input.fecha ? new Date(input.fecha) : undefined,
       },

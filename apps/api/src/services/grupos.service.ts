@@ -4,35 +4,75 @@ import { prisma } from '../lib/prisma';
 import { calcularSaldosGrupo, resumenCuentasGrupo } from './balance.service';
 import type { CrearGrupoInput, EditarGrupoInput } from '../schemas/grupos.schema';
 import { saveJoinNotices, pushJoinNotice } from './groupNotices.service';
+import { takeFreeParts } from './billParts.service';
+import { allocateParts, partsSummary } from '../domain/billParts';
+import { unreadInGroup } from './groupChat.service';
 
 function generateLinkInvitacion(): string {
   return randomBytes(12).toString('base64url');
 }
 
 export async function crearGrupo(input: CrearGrupoInput, creadoPor: string) {
-  const grupo = await prisma.grupo.create({
-    data: {
-      nombre: input.nombre,
-      descripcion: input.descripcion,
-      tipo: input.tipo,
-      aprobacionPagos: input.aprobacionPagos,
-      creadoPor,
-      linkInvitacion: generateLinkInvitacion(),
-      miembros: {
-        create: {
-          usuarioId: creadoPor,
-          rol: 'admin',
+  const { cuenta, ...datos } = input;
+  // Group and bill together: never a group with half a bill.
+  return prisma.$transaction(async (tx) => {
+    const grupo = await tx.grupo.create({
+      data: {
+        nombre: datos.nombre,
+        descripcion: datos.descripcion,
+        tipo: datos.tipo,
+        aprobacionPagos: datos.aprobacionPagos,
+        modo: datos.modo,
+        fechaLimite: datos.fechaLimite ? new Date(datos.fechaLimite) : undefined,
+        creadoPor,
+        linkInvitacion: generateLinkInvitacion(),
+        miembros: {
+          create: {
+            usuarioId: creadoPor,
+            rol: 'admin',
+          },
         },
       },
-    },
-    include: {
-      miembros: {
-        include: { usuario: { select: { id: true, nombre: true, email: true, fotoUrl: true } } },
+      include: {
+        miembros: {
+          include: { usuario: { select: { id: true, nombre: true, email: true, fotoUrl: true } } },
+        },
       },
-    },
+    });
+    if (cuenta) {
+      await tx.gasto.create({
+        data: {
+          grupoId: grupo.id,
+          descripcion: cuenta.descripcion || datos.nombre,
+          montoTotal: cuenta.montoTotal,
+          pagadoPor: creadoPor,
+          creadoPor,
+          partes: cuenta.partes,
+          participantes: { create: allocateParts(cuenta.montoTotal, cuenta.partes, creadoPor, [creadoPor]) },
+        },
+      });
+    }
+    return grupo;
   });
+}
 
-  return grupo;
+/** The group's bill in parts (the oldest one), with how many parts are still free. */
+export async function cuentaPorPartes(grupoId: string) {
+  const bill = await prisma.gasto.findFirst({
+    where: { grupoId, activo: true, partes: { not: null } },
+    orderBy: { fecha: 'asc' },
+    include: { participantes: { select: { usuarioId: true, montoAsignado: true } }, pagador: { select: { nombre: true } } },
+  });
+  if (!bill) return null;
+  return {
+    id: bill.id,
+    descripcion: bill.descripcion,
+    montoTotal: bill.montoTotal,
+    pagadoPor: bill.pagadoPor,
+    pagadorNombre: bill.pagador.nombre,
+    participantes: bill.participantes,
+    ...partsSummary(bill.montoTotal, bill.partes!, bill.pagadoPor, bill.participantes),
+  };
 }
 
 export async function getGruposUsuario(usuarioId: string) {
@@ -72,6 +112,8 @@ export async function getGruposUsuario(usuarioId: string) {
           balanceUsuario: { teDeben, debes, neto: teDeben - debes },
           resumen,
           rolUsuario: m.rol,
+          // Unread chat items since the last visit (or since joining).
+          noLeidos: await unreadInGroup(m.grupo.id, usuarioId, m.ultimaLectura ?? m.fechaUnion),
         };
       })
   );
@@ -86,7 +128,7 @@ export async function editarGrupo(grupoId: string, input: EditarGrupoInput, usua
       activo: true,
       miembros: { some: { usuarioId, activo: true, rol: 'admin' } },
     },
-    data: input,
+    data: { ...input, fechaLimite: input.fechaLimite === undefined ? undefined : input.fechaLimite && new Date(input.fechaLimite) },
   });
   if (!updated.count) throw new Error('Solo un administrador activo puede editar este grupo.', 403);
   return getGrupoDetalle(grupoId, usuarioId);
@@ -116,15 +158,15 @@ export async function getGrupoDetalle(grupoId: string, usuarioId: string) {
   const resumen = await resumenCuentasGrupo(grupoId);
   const neto = resumen.cuentas.find((account) => account.usuarioId === usuarioId)?.neto || 0;
   // Every payment waiting for confirmation in the group, not only the viewer's: shared summaries cite it.
-  const pagosPorConfirmar = await prisma.pago.count({ where: { grupoId, estado: 'reportado' } });
-  return { ...grupo, resumen, saldos: resumen.saldos, pagosPorConfirmar, balanceUsuario: { neto, teDeben: Math.max(neto, 0), debes: Math.max(-neto, 0) }, rolUsuario: miembro.rol };
+  const [pagosPorConfirmar, cuenta] = await Promise.all([prisma.pago.count({ where: { grupoId, estado: 'reportado' } }), cuentaPorPartes(grupoId)]);
+  return { ...grupo, resumen, saldos: resumen.saldos, pagosPorConfirmar, cuenta, balanceUsuario: { neto, teDeben: Math.max(neto, 0), debes: Math.max(-neto, 0) }, rolUsuario: miembro.rol };
 }
 
 export async function unirseConLink(linkInvitacion: string, usuarioId: string) {
   const grupo = await prisma.grupo.findFirst({ where: { linkInvitacion, activo: true } });
   if (!grupo) throw new Error('Link de invitación inválido');
 
-  const recipients = await prisma.$transaction(async (tx) => {
+  const joined = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${grupo.id}::uuid FOR UPDATE`;
     const current = await tx.grupo.findFirst({ where: { id: grupo.id, linkInvitacion, activo: true } });
     if (!current) throw new Error('Link de invitación inválido');
@@ -135,11 +177,13 @@ export async function unirseConLink(linkInvitacion: string, usuarioId: string) {
     else if (!member.activo) await tx.grupoMiembro.update({ where: { id: member.id }, data: { activo: true, rol: 'miembro', fechaUnion: new Date() } });
     // A pending invitation to this group is answered by joining.
     await tx.invitacion.updateMany({ where: { grupoId: grupo.id, invitadoId: usuarioId, estado: 'pendiente' }, data: { estado: 'aceptada', fechaRespuesta: new Date() } });
-    return !member?.activo ? saveJoinNotices(tx, grupo.id, usuarioId, invitation?.invitadoPor) : [];
+    if (member?.activo) return { recipients: [] as string[], parte: 0 };
+    const parte = await takeFreeParts(tx, grupo.id, usuarioId);
+    return { recipients: await saveJoinNotices(tx, grupo.id, usuarioId, invitation?.invitadoPor, parte), parte };
   });
-  void pushJoinNotice(grupo.id, usuarioId, recipients);
+  void pushJoinNotice(grupo.id, usuarioId, joined.recipients, joined.parte);
 
-  return { grupoId: grupo.id, nombre: grupo.nombre };
+  return { grupoId: grupo.id, nombre: grupo.nombre, parte: joined.parte };
 }
 
 export async function salirDeGrupo(grupoId: string, usuarioId: string) {

@@ -26,6 +26,7 @@ jobs:
       - run: node --test ops/test-push-transport.cjs
       - run: node --test ops/test-home-ux.cjs
       - run: node --test ops/test-notification-ux.cjs
+      - run: node --test ops/test-group-contribution.cjs
       - run: npm run build:api
       - run: npm run typecheck --workspace=apps/mobile
       - run: npm run lint --workspace=apps/mobile
@@ -79,3 +80,5 @@ jobs:
           node ops/test-redesign.cjs || (cat api.log && exit 1)
           node ops/test-push.cjs || (cat api.log && exit 1)
           node ops/test-groups-ledger.cjs || (cat api.log && exit 1)
+          node ops/test-group-join-notices.cjs || (cat api.log && exit 1)
+          node ops/test-bill-parts.cjs || (cat api.log && exit 1)

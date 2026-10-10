@@ -3,6 +3,8 @@ import { UserError } from "../domain/errors";
 import { sendPushNotification } from "../lib/firebase";
 import { transactionLock } from "../lib/transactionLock";
 import { saveJoinNotices, pushJoinNotice } from "./groupNotices.service";
+import { takeFreeParts } from "./billParts.service";
+import { cuentaPorPartes } from "./grupos.service";
 
 export const INVITE_LIMITS = { perDay: 40, quietDaysAfterRejection: 7 };
 // Same answer whether or not the e-mail/phone has an account: inviting must not reveal who uses JUNTO.
@@ -63,17 +65,22 @@ export async function myInvitations(userId: string) {
   const rows = await prisma.invitacion.findMany({
     where: { invitadoId: userId, estado: "pendiente", grupo: { activo: true } },
     include: {
-      grupo: { select: { id: true, nombre: true, tipo: true, _count: { select: { miembros: { where: { activo: true } } } } } },
+      grupo: { select: { id: true, nombre: true, tipo: true, modo: true, _count: { select: { miembros: { where: { activo: true } } } } } },
       anfitrion: { select: { nombre: true } },
     },
     orderBy: { fechaCreacion: "desc" },
     take: 20,
   });
-  return rows.map((row) => ({
-    id: row.id,
-    fechaCreacion: row.fechaCreacion,
-    invitadoPor: first(row.anfitrion.nombre),
-    grupo: { id: row.grupo.id, nombre: row.grupo.nombre, tipo: row.grupo.tipo, miembros: row.grupo._count.miembros },
+  return Promise.all(rows.map(async (row) => {
+    // What accepting means in money: the part this person would take, if one is free.
+    const cuenta = await cuentaPorPartes(row.grupo.id);
+    return {
+      id: row.id,
+      fechaCreacion: row.fechaCreacion,
+      invitadoPor: first(row.anfitrion.nombre),
+      grupo: { id: row.grupo.id, nombre: row.grupo.nombre, tipo: row.grupo.tipo, modo: row.grupo.modo, miembros: row.grupo._count.miembros },
+      cuenta: cuenta && { montoTotal: cuenta.montoTotal, partes: cuenta.partes, parte: cuenta.parte, libres: cuenta.libres },
+    };
   }));
 }
 
@@ -88,16 +95,20 @@ export async function answerInvitation(userId: string, id: string, accept: boole
     const changed = await tx.invitacion.updateMany({ where: { id, estado: "pendiente" }, data: { estado: accept ? "aceptada" : "rechazada", fechaRespuesta: new Date() } });
     if (changed.count !== 1) throw new UserError("Ya respondiste esta invitación.", 409);
     let recipients: string[] = [];
+    let parte = 0;
     if (accept) {
       const member = await tx.grupoMiembro.findUnique({ where: { grupoId_usuarioId: { grupoId: invitation.grupoId, usuarioId: userId } } });
       // Rejoining never restores an old admin role; someone already in the group keeps theirs.
       if (!member) await tx.grupoMiembro.create({ data: { grupoId: invitation.grupoId, usuarioId: userId, rol: "miembro" } });
       else if (!member.activo) await tx.grupoMiembro.update({ where: { id: member.id }, data: { activo: true, rol: "miembro", fechaUnion: new Date() } });
-      if (!member?.activo) recipients = await saveJoinNotices(tx, invitation.grupoId, userId, invitation.invitadoPor);
+      if (!member?.activo) {
+        parte = await takeFreeParts(tx, invitation.grupoId, userId);
+        recipients = await saveJoinNotices(tx, invitation.grupoId, userId, invitation.invitadoPor, parte);
+      }
     }
-    return { grupoId: invitation.grupo.id, nombre: invitation.grupo.nombre, aceptada: accept, recipients };
+    return { grupoId: invitation.grupo.id, nombre: invitation.grupo.nombre, aceptada: accept, recipients, parte };
   });
-  void pushJoinNotice(result.grupoId, userId, result.recipients);
+  void pushJoinNotice(result.grupoId, userId, result.recipients, result.parte);
   const { recipients: _recipients, ...response } = result;
   return response;
 }

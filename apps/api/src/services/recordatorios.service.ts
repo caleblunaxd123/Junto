@@ -3,6 +3,9 @@ import { sendPushNotification } from '../lib/firebase';
 import { calcularSaldosGrupo } from './balance.service';
 import { UserError as Error } from '../domain/errors';
 import { transactionLock } from '../lib/transactionLock';
+import { deadlineMessage, deadlineStage, isQuietHour, OVERDUE_REMINDER_DAYS } from '../domain/deadline';
+import { renderDeadlineEmail } from '../domain/reminderEmail';
+import { deliver, emailProvider } from '../lib/email';
 
 // One manual reminder per creditor and debtor in this window; reminders are a nudge, not spam.
 export const REMINDER_COOLDOWN_HOURS = 12;
@@ -229,4 +232,58 @@ export async function ejecutarRecordatoriosAutomaticos() {
   }
 
   console.info('[Cron] Automatic reminders done');
+}
+
+
+/**
+ * Hourly: as a group's deadline approaches and after it passes, everyone who still owes gets one
+ * reminder per stage (see deadlineStage). Never at night, never to someone whose reported payment
+ * already covers it. Each reminder is recorded, so the group chat shows it.
+ */
+export async function ejecutarRecordatoriosPorFecha(now = new Date()) {
+  if (isQuietHour(now)) return 0;
+  const grupos = await prisma.grupo.findMany({
+    where: { activo: true, fechaLimite: { gte: new Date(now.getTime() - (OVERDUE_REMINDER_DAYS + 1) * 86_400_000), lte: new Date(now.getTime() + 3 * 86_400_000) } },
+    select: { id: true, nombre: true, modo: true, fechaLimite: true, miembros: { where: { activo: true }, select: { usuarioId: true } } },
+  });
+  let sent = 0;
+  for (const grupo of grupos) {
+    const stage = deadlineStage(now, grupo.fechaLimite!);
+    if (!stage) continue;
+    const activos = new Set(grupo.miembros.map((m) => m.usuarioId));
+    for (const saldo of await calcularSaldosGrupo(grupo.id)) {
+      if (saldo.monto <= 0 || !activos.has(saldo.deudorId) || !activos.has(saldo.acreedorId)) continue;
+      const pendiente = await unpaidAfterReported(grupo.id, saldo.deudorId, saldo.acreedorId, saldo.monto);
+      if (pendiente <= 0) continue;
+      const mensaje = deadlineMessage(stage, pendiente, grupo.nombre, grupo.fechaLimite!, grupo.modo === 'division');
+      // Several API instances run this job: the lock and re-check let only one of them send.
+      // Reminders from an earlier deadline (the date was moved) do not count.
+      const created = await prisma.$transaction(async (tx) => {
+        await transactionLock(tx, `deadline-reminder:${grupo.id}:${saldo.deudorId}:${saldo.acreedorId}`);
+        const already = await tx.recordatorio.findFirst({
+          where: { grupoId: grupo.id, enviadoA: saldo.deudorId, enviadoPor: saldo.acreedorId, tipo: stage, fechaEnvio: { gte: new Date(grupo.fechaLimite!.getTime() - 4 * 86_400_000) } },
+          select: { id: true },
+        });
+        if (already) return false;
+        await tx.recordatorio.create({
+          data: { enviadoPor: saldo.acreedorId, enviadoA: saldo.deudorId, grupoId: grupo.id, monto: pendiente, tipo: stage, fechaEnvio: now, tono: stage.startsWith('limite-v') ? 'directo' : 'suave', mensaje },
+        });
+        return true;
+      });
+      if (!created) continue;
+      sent += 1;
+      const late = stage.startsWith('limite-v') || stage === 'limite-d0';
+      const deudor = await prisma.usuario.findUnique({ where: { id: saldo.deudorId }, select: { expoPushToken: true, email: true, nombre: true, activo: true } });
+      if (deudor?.expoPushToken) {
+        void sendPushNotification(deudor.expoPushToken, late ? 'Tu pago está vencido' : 'Se acerca la fecha límite', mensaje, { grupoId: grupo.id, type: 'recordatorio_fecha' })
+          .catch(() => console.error('[Notification] Deadline reminder saved; push delivery failed'));
+      }
+      // E-mail too: web users get no push. Once per stage, like the push, and never blocking the job.
+      if (deudor?.activo && deudor.email && emailProvider()) {
+        void deliver({ to: deudor.email, ...renderDeadlineEmail({ nombre: deudor.nombre, grupo: grupo.nombre, mensaje, late, grupoId: grupo.id, publicUrl: process.env.PUBLIC_WEB_URL }) })
+          .catch(() => console.error('[Notification] Deadline reminder saved; e-mail delivery failed'));
+      }
+    }
+  }
+  return sent;
 }

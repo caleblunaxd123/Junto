@@ -140,7 +140,9 @@ async function run() {
     `/grupos/invitacion/${group.linkInvitacion}`,
     outside.accessToken,
   );
-  assert.deepEqual(Object.keys(preview).sort(), ["miembros", "nombre", "tipo"]);
+  // What joining means (mode and, if a bill in parts exists, the part) is shown; nothing about members.
+  assert.deepEqual(Object.keys(preview).sort(), ["cuenta", "miembros", "modo", "nombre", "tipo"]);
+  if (preview.cuenta) assert.deepEqual(Object.keys(preview.cuenta).sort(), ["descripcion", "libres", "montoTotal", "pagadorNombre", "parte", "partes"]);
   assert.equal(preview.nombre, group.nombre);
   assert.equal(preview.miembros, 3);
   const expense = await request(

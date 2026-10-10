@@ -21,6 +21,8 @@ export const crearGastoSchema = z.object({
     ])
     .default("otro"),
   tipoDivision: z.enum(["igual", "exacto", "porcentaje"]).default("igual"),
+  // Equal parts, counting people who have not joined yet: the payer holds the free ones.
+  partes: z.number().int().min(2, "Divide la cuenta entre al menos 2 personas.").max(100, "Divide la cuenta entre máximo 100 personas.").optional(),
   participantes: z.array(participanteSchema).min(1),
   notas: z.string().max(500).optional(),
   fecha: z.string().datetime().optional(),

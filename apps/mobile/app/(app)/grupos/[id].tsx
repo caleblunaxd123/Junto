@@ -1,80 +1,90 @@
 import { errorMessage } from "../../../src/lib/errorMessage";
-import React, { useState, useCallback } from "react";
-import {
-  View,
-  Pressable,
-  ActivityIndicator,
-  Image,
-  ScrollView,
-  RefreshControl,
-  Modal,
-} from "react-native";
+import React, { useState, useCallback, useRef } from "react";
+import { View, Pressable, ActivityIndicator, Image, ScrollView, Modal, TextInput, KeyboardAvoidingView, Platform } from "react-native";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
-import { useGrupo, useGastosGrupo, usePagos } from "../../../src/hooks/useGrupos";
+import { useGrupo, usePagos, useResolverPago } from "../../../src/hooks/useGrupos";
 import { api } from "../../../src/lib/api";
 import { useAuthStore } from "../../../src/store/auth.store";
-import {
-  Label,
-  Card,
-  Button,
-  ErrorBox,
-  Avatar,
-  palette,
-  design,
-} from "../../../src/components/ui/Design";
-import { SectionTitle } from "../../../src/components/ui/Reference";
-import { groupArt, ExpenseArtwork } from "../../../src/components/ui/Artwork";
+import { Label, Button, ErrorBox, palette, design } from "../../../src/components/ui/Design";
+import { groupArt } from "../../../src/components/ui/Artwork";
 import { PendingActions } from "../../../src/components/PendingActions";
 import { pendingActions } from "../../../src/lib/pending";
-import { memberLabels, meFirst } from "../../../src/lib/people";
-import { centavosASoles, type ActividadEvento } from "../../../src/types";
+import { centavosASoles, type ChatItem } from "../../../src/types";
 import { ShareMessageSheet } from "../../../src/components/ui/ShareMessage";
 import { groupShareMessage, type ShareMessage } from "../../../src/lib/shareMessage";
 import { useResponsiveLayout } from "../../../src/components/ui/responsive";
-import { GroupContributions } from "../../../src/components/GroupContributions";
+import { ChatBubble, DaySeparator, chatColors } from "../../../src/components/chat/ChatBubble";
+import { WhoPaid } from "../../../src/components/chat/WhoPaid";
+import { modeWords } from "../../../src/lib/groupMode";
+import { deadlineText } from "../../../src/lib/billForm";
 
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
-type Tab = "Reparto" | "Gastos" | "Actividad";
+const systemTypes = new Set(["creado", "union", "recordatorio"]);
+
+/** A quick action above the message box, like WhatsApp's attachments but for money. */
+function Chip({ icon, title, onPress, primary, highlight }: { icon: keyof typeof Ionicons.glyphMap; title: string; onPress: () => void; primary?: boolean; highlight?: boolean }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      onPress={onPress}
+      style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 40, paddingHorizontal: 14, borderRadius: 20,
+        backgroundColor: primary ? "#00856A" : highlight ? palette.lilac : "white", borderWidth: 1, borderColor: primary ? "#00856A" : highlight ? "#C9B8FF" : palette.line }}
+    >
+      <Ionicons name={icon} size={17} color={primary ? "white" : highlight ? palette.purple : palette.ink} />
+      <Label size={13} weight="bold" color={primary ? "white" : highlight ? palette.purple : palette.ink}>{title}</Label>
+    </Pressable>
+  );
+}
 
 export default function Group() {
-  const { desktop, tablet, web } = useResponsiveLayout();
+  const { tablet, web } = useResponsiveLayout();
   const { id } = useLocalSearchParams<{ id: string }>();
   const user = useAuthStore((s) => s.usuario);
   const qc = useQueryClient();
-  const { data: group, isLoading, isRefetchError, isRefetching, refetch } = useGrupo(id);
-  const [page, setPage] = useState(1);
-  const expenses = useGastosGrupo(id, page);
+  const focused = useIsFocused();
+  const insets = useSafeAreaInsets();
+  const { data: group, isLoading, isRefetchError, refetch } = useGrupo(id);
   const { data: payments = [], isError: paymentsError, isFetching: paymentsFetching, isLoading: paymentsLoading, refetch: refetchPayments } = usePagos();
-  const refetchExpenses = expenses.refetch;
+  const chat = useQuery<ChatItem[]>({
+    queryKey: ["chat", id],
+    queryFn: () => api.get(`/grupos/${id}/chat`).then((r) => r.data),
+    enabled: !!id,
+    // Close to live while the conversation is open; push notifications cover the rest.
+    refetchInterval: focused ? 4_000 : false,
+  });
+  const refetchChat = chat.refetch;
   const refreshAll = useCallback(() => {
     refetch();
-    refetchExpenses();
     refetchPayments();
-  }, [refetch, refetchExpenses, refetchPayments]);
+    refetchChat();
+  }, [refetch, refetchPayments, refetchChat]);
   useFocusEffect(refreshAll);
-  const [tab, setTab] = useState<Tab>("Reparto");
+  const resolve = useResolverPago();
   const [menu, setMenu] = useState(false);
+  const [whoPaid, setWhoPaid] = useState(false);
+  const [reminders, setReminders] = useState(false);
   const [error, setError] = useState("");
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
   const [shareMessage, setShareMessage] = useState<ShareMessage | null>(null);
-  const activity = useQuery<ActividadEvento[]>({
-    queryKey: ["actividad", id],
-    queryFn: () => api.get(`/actividad?grupoId=${id}`).then((r) => r.data),
-    enabled: tab === "Actividad",
-  });
-  const people = group?.miembros.map((m) => ({ ...m.usuario, id: m.usuarioId })) ?? [];
-  const labels = memberLabels(people, user?.id);
-  const label = (personId: string, fallback: string) => labels.get(personId) ?? fallback.split(" ")[0];
-  const me = group?.resumen.cuentas.find((a) => a.usuarioId === user?.id);
+  const feed = useRef<ScrollView>(null);
+  const seen = useRef(0);
+
+  const words = modeWords(group?.modo);
   const groupPayments = payments.filter((p) => p.grupoId === id && p.estado === "reportado");
-  const actions = group ? pendingActions([group], groupPayments, user?.id) : [];
-  // Payments between others that the viewer cannot approve (approvable ones are cards above).
-  const othersWaiting = groupPayments.filter((p) => p.pagadorId !== user?.id && p.receptorId !== user?.id && !p.permisos?.aprobar);
+  const collect = group ? pendingActions([group], groupPayments, user?.id).filter((a) => a.kind === "cobrar") : [];
+  const shareUnavailable = !group || isRefetchError || paymentsError || paymentsFetching || paymentsLoading;
   const goInvite = () => router.push(`/(app)/grupos/agregar-personas?grupoId=${id}`);
-  const shareUnavailable = !group || isRefetchError || paymentsError || isRefetching || paymentsFetching || paymentsLoading;
+  const goPay = () => router.push(`/(app)/pagos/pagar?grupoId=${id}`);
+  const goBill = () => router.push(`/(app)/grupos/cuenta?grupoId=${id}${group?.cuenta ? `&gastoId=${group.cuenta.id}` : ""}`);
+  const goExpense = () => router.push(`/(app)/gastos/agregar?grupoId=${id}`);
+  const refreshMoney = () => Promise.all(["chat", "grupos", "pagos", "actividad"].map((key) => qc.invalidateQueries({ queryKey: [key] })));
 
   function leave() {
     setMenu(false);
@@ -96,328 +106,280 @@ export default function Group() {
     ]);
   }
 
-  function debtLine(deudorId: string, deudorNombre: string, acreedorId: string, acreedorNombre: string) {
-    if (deudorId === user?.id) return `Le pagas a ${label(acreedorId, acreedorNombre)}`;
-    if (acreedorId === user?.id) return `${label(deudorId, deudorNombre)} te paga`;
-    return `${label(deudorId, deudorNombre)} le paga a ${label(acreedorId, acreedorNombre)}`;
+  function answer(pagoId: string, persona: string, monto: number, received: boolean) {
+    Alert.alert(
+      received ? "¿Ya tienes el dinero?" : `¿No te llegó este ${words.payment}?`,
+      received
+        ? `Confirma solo si ya ves ${money(monto)} en tu cuenta o lo recibiste en efectivo. Lo que debe ${persona} bajará por ese monto.`
+        : `${persona} verá que no lo confirmaste y su saldo seguirá igual.`,
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: received ? "Sí, lo recibí" : "No lo recibí",
+          onPress: async () => {
+            try {
+              setError("");
+              await resolve.mutateAsync({ pagoId, confirmar: received });
+              await refreshMoney();
+            } catch (err) {
+              setError(errorMessage(err, "No pudimos guardar tu respuesta. Revisa tu conexión y reintenta."));
+            }
+          },
+        },
+      ],
+    );
   }
 
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}>
-      <ScrollView
-        contentContainerStyle={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", padding: desktop ? 24 : 0, paddingBottom: 20 }}
-        refreshControl={<RefreshControl refreshing={isRefetching} tintColor={palette.primary} onRefresh={refreshAll} />}
-      >
-        {isLoading ? (
-          <ActivityIndicator style={{ margin: 40 }} color={palette.primary} />
-        ) : !group ? (
+  function remove(comentarioId: string) {
+    Alert.alert("¿Eliminar mensaje?", "Se borrará para todo el grupo.", [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Eliminar",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await api.delete(`/comentarios/${comentarioId}`);
+            await refetchChat();
+          } catch (err) {
+            setError(errorMessage(err, "No pudimos eliminar el mensaje. Reintenta."));
+          }
+        },
+      },
+    ]);
+  }
+
+  async function send() {
+    const value = text.trim();
+    if (!value || sending) return;
+    try {
+      setSending(true);
+      setError("");
+      await api.post(`/grupos/${id}/mensajes`, { texto: value });
+      setText("");
+      await refetchChat();
+    } catch (err) {
+      // The text stays in the box so nothing written is lost.
+      setError(errorMessage(err, "No pudimos enviar tu mensaje. Revisa tu conexión y reintenta."));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (isLoading || !group) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}>
+        {isLoading ? <ActivityIndicator style={{ margin: 40 }} color={palette.primary} /> : (
           <View style={{ padding: 16, gap: 16 }}>
             <Button title="Volver" secondary onPress={() => router.back()} />
             <ErrorBox message="No pudimos abrir el grupo. Revisa tu conexión." />
             <Button title="Reintentar" onPress={() => refetch()} />
           </View>
-        ) : (
-          <>
-            <View style={{ minHeight: desktop ? 250 : 190, borderRadius: desktop ? 28 : 0, paddingBottom: 16, backgroundColor: palette.mint, overflow: "hidden" }}>
-              <Image
-                source={groupArt(group.tipo)}
-                accessibilityIgnoresInvertColors
-                style={{ position: "absolute", width: "100%", height: "100%", opacity: 0.9 }}
-                resizeMode={group.tipo === "viaje" ? "cover" : "contain"}
-              />
-              <View style={[design.row, { justifyContent: "space-between", padding: 16 }]}>
-                <Pressable
-                  accessibilityLabel="Volver"
-                  accessibilityRole="button"
-                  onPress={() => (router.canGoBack() ? router.back() : router.replace("/(app)/(tabs)"))}
-                  style={[design.back, { backgroundColor: "white" }]}
-                >
-                  <Ionicons name="arrow-back" size={24} color={palette.ink} />
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Opciones del grupo"
-                  onPress={() => setMenu(true)}
-                  style={[design.back, { backgroundColor: "white" }]}
-                >
-                  <Ionicons name="ellipsis-vertical" size={22} color={palette.ink} />
-                </Pressable>
-              </View>
-              <View style={{ marginLeft: 16, marginRight: 16, alignSelf: "flex-start", maxWidth: "70%", padding: 10, borderRadius: 16, backgroundColor: "#FFFCF7EE", gap: 2 }}>
-                <Label accessibilityRole="header" size={24} weight="extra" style={{ lineHeight: 29 }} numberOfLines={2}>
-                  {group.nombre}
-                </Label>
-                <Label size={12} color={palette.muted}>
-                  {group.miembros.length} {group.miembros.length === 1 ? "integrante" : "integrantes"} · Total {money(group.resumen.totalGastado)}
-                </Label>
-              </View>
-            </View>
-
-            <View style={{ padding: 16, gap: 16 }}>
-              <Card style={{ padding: 20, gap: 8, backgroundColor: palette.mint, borderColor: "#A4EDD7" }}>
-                <Label size={13} weight="bold" color="#007B60">TOTAL DE LA CUENTA DEL GRUPO</Label>
-                <Label size={32} weight="extra">{money(group.resumen.totalGastado)}</Label>
-                <Label size={13} color={palette.muted}>{group.resumen.cantidadGastos
-                  ? `De ${group.resumen.cantidadGastos} ${group.resumen.cantidadGastos === 1 ? "gasto registrado" : "gastos registrados"}. Las devoluciones no aumentan este total.`
-                  : "Define cuánto se pagó y cómo se reparte. Después cada integrante registra lo que te devuelve."}</Label>
-                {!group.resumen.cantidadGastos && <Button compact title="Definir total y reparto" onPress={() => router.push(`/(app)/gastos/agregar?grupoId=${id}&cuenta=1`)} />}
-              </Card>
-              {isRefetchError && (
-                <>
-                  <ErrorBox message="No pudimos actualizar el grupo. Ves los montos de la última consulta." />
-                  <Button title="Actualizar" secondary compact onPress={() => refetch()} />
-                </>
-              )}
-              {paymentsError && (
-                <>
-                  <ErrorBox message="No pudimos revisar los pagos pendientes. Puede haber pagos por confirmar." />
-                  <Button title="Reintentar" secondary compact onPress={() => refetchPayments()} />
-                </>
-              )}
-              {!!error && <ErrorBox message={error} />}
-
-              {/* One sentence that says where you stand, with the action next to it. */}
-              {actions.length ? (
-                <PendingActions actions={actions} showGroup={false} />
-              ) : (
-                <Card style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, backgroundColor: group.resumen.cantidadGastos ? palette.mint : "white" }}>
-                  <Ionicons
-                    name={group.resumen.cantidadGastos ? "checkmark-circle" : "receipt-outline"}
-                    size={28}
-                    color={group.resumen.cantidadGastos ? "#007B60" : palette.purple}
-                  />
-                  <View style={{ flex: 1 }}>
-                    <Label weight="bold">{group.resumen.cantidadGastos ? "Estás al día en este grupo" : "Aún no hay gastos"}</Label>
-                    <Label size={12} color={palette.muted}>
-                      {group.resumen.cantidadGastos
-                        ? "No debes ni te deben nada aquí."
-                        : group.miembros.length < 2
-                          ? "Invita a los integrantes. Cuando se unan, define el total y sus partes."
-                          : "Define el total una sola vez, elige quién lo adelantó y cuánto corresponde a cada persona."}
-                    </Label>
-                    {group.miembros.length < 2 && (
-                      <View style={{ marginTop: 8 }}>
-                        <Button compact title="Invitar a mi grupo" onPress={goInvite} />
-                      </View>
-                    )}
-                  </View>
-                </Card>
-              )}
-              {othersWaiting.map((p) => (
-                <Pressable key={p.id} accessibilityRole="button" onPress={() => router.push(`/(app)/pagos/${p.id}`)} style={{ minHeight: 44, justifyContent: "center" }}>
-                  <Label size={12} color={palette.muted}>
-                    {label(p.pagadorId, p.pagador.nombre)} registró un pago de {money(p.monto)} a {label(p.receptorId, p.receptor.nombre)}; falta que lo aprueben. <Label size={12} weight="bold" color={palette.purple}>Ver ›</Label>
-                  </Label>
-                </Pressable>
-              ))}
-              {me && group.resumen.totalGastado > 0 && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Tu parte ${money(me.tuParte)}, pagaste ${money(me.pagaste)}. Ver cómo se calcula`}
-                  onPress={() => router.push(`/(app)/cuentas/${id}`)}
-                  style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 12, rowGap: 2, minHeight: 44 }}
-                >
-                  <Label size={13} color={palette.muted}>Tu parte <Label size={13} weight="bold">{money(me.tuParte)}</Label></Label>
-                  <Label size={13} color={palette.muted}>Pagaste <Label size={13} weight="bold">{money(me.pagaste)}</Label></Label>
-                  <Label size={13} weight="bold" color={palette.primary}>¿Cómo se calcula? ›</Label>
-                </Pressable>
-              )}
-
-              <SectionTitle title="Integrantes" action="Invitar" onPress={goInvite} />
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
-                {meFirst(group.miembros, (m) => m.usuarioId, user?.id).map((m) => {
-                  const account = group.resumen.cuentas.find((a) => a.usuarioId === m.usuarioId);
-                  const net = account?.neto || 0;
-                  const isMe = m.usuarioId === user?.id;
-                  const state = net < 0 ? (isMe ? "Debes" : "Debe") : net > 0 ? (isMe ? "Te deben" : "Le deben") : account?.tuParte ? "Al día" : "Sin parte asignada";
-                  const color = net < 0 ? palette.coral : net > 0 ? "#007B60" : palette.muted;
-                  return (
-                    <View
-                      key={m.usuarioId}
-                      accessible
-                      accessibilityLabel={`${isMe ? "Tú" : m.usuario.nombre}. ${state}${net ? ` ${money(Math.abs(net))}` : ""}`}
-                      style={[design.card, { width: 116, alignItems: "center", gap: 4, padding: 10, backgroundColor: isMe ? palette.mint : "white", borderColor: isMe ? "#A4EDD7" : "#EDF0F2" }]}
-                    >
-                      <Avatar name={m.usuario.nombre} photo={m.usuario.fotoUrl} seed={m.usuarioId} size={48} />
-                      <Label size={13} weight="bold" numberOfLines={1}>{labels.get(m.usuarioId)}</Label>
-                      <Label size={11} color={color}>{state}</Label>
-                      {!!net && (
-                        <Label size={14} weight="extra" numberOfLines={1} adjustsFontSizeToFit color={color}>
-                          {money(Math.abs(net))}
-                        </Label>
-                      )}
-                    </View>
-                  );
-                })}
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Invitar personas"
-                  onPress={goInvite}
-                  style={[design.card, { width: 116, alignItems: "center", justifyContent: "center", gap: 4, padding: 10, borderStyle: "dashed" }]}
-                >
-                  <Ionicons name="person-add-outline" size={26} color={palette.purple} />
-                  <Label size={13} weight="bold" color={palette.purple}>Invitar</Label>
-                </Pressable>
-              </ScrollView>
-              {!!group.descripcion && (
-                <Label size={13} color={palette.muted}>{group.descripcion}</Label>
-              )}
-
-              <View accessibilityRole="tablist" style={{ flexDirection: "row", padding: 5, backgroundColor: "white", borderRadius: 20 }}>
-                {(["Reparto", "Gastos", "Actividad"] as const).map((t, i) => (
-                  <Pressable
-                    accessibilityRole="tab"
-                    accessibilityLabel={t}
-                    aria-selected={t === tab}
-                    accessibilityState={{ selected: t === tab }}
-                    key={t}
-                    onPress={() => setTab(t)}
-                    style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", minHeight: 48, gap: 5, backgroundColor: t === tab ? palette.mint : "white", borderRadius: 16 }}
-                  >
-                    <Ionicons
-                      name={(["people-outline", "list", "time-outline"] as const)[i]}
-                      color={t === tab ? "#078B70" : palette.muted}
-                      size={18}
-                    />
-                    <Label weight="bold" size={13} color={t === tab ? "#078B70" : palette.muted}>{t}</Label>
-                  </Pressable>
-                ))}
-              </View>
-
-              {tab === "Gastos" ? (
-                expenses.isLoading ? (
-                  <ActivityIndicator color={palette.primary} />
-                ) : expenses.isError ? (
-                  <>
-                    <ErrorBox message="No pudimos cargar los gastos." />
-                    <Button title="Reintentar" onPress={() => expenses.refetch()} />
-                  </>
-                ) : (
-                  <>
-                    {expenses.data?.gastos.map((e) => {
-                      const mine = e.participantes.find((p) => p.usuarioId === user?.id)?.montoAsignado;
-                      const payer = e.pagadoPor === user?.id ? "Pagaste tú" : `Pagó ${label(e.pagadoPor, e.pagador.nombre)}`;
-                      const comments = e._count?.comentarios ?? 0;
-                      const commentsText = comments ? ` · ${comments} ${comments === 1 ? "comentario" : "comentarios"}` : "";
-                      return (
-                        <Pressable
-                          key={e.id}
-                          accessibilityRole="button"
-                          accessibilityLabel={`${e.descripcion}, ${money(e.montoTotal)}. ${payer}. ${mine ? `Tu parte ${money(mine)}` : "No participas"}${commentsText ? `.${commentsText.slice(2)}` : ""}`}
-                          onPress={() => router.push(`/(app)/gastos/${e.id}`)}
-                        >
-                          <Card style={{ flexDirection: "row", padding: 12, gap: 12, alignItems: "center" }}>
-                            <ExpenseArtwork category={e.categoria} />
-                            <View style={{ flex: 1, gap: 2 }}>
-                              <Label weight="extra" size={15} numberOfLines={2}>{e.descripcion}</Label>
-                              <Label size={12} color={palette.muted}>
-                                {payer} · {new Date(e.fecha).toLocaleDateString("es-PE", { day: "numeric", month: "short" })}
-                              </Label>
-                              {!!comments && (
-                                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                                  <Ionicons name="chatbubble-outline" size={13} color={palette.purple} />
-                                  <Label size={12} weight="bold" color={palette.purple}>{commentsText.slice(3)}</Label>
-                                </View>
-                              )}
-                            </View>
-                            <View style={{ alignItems: "flex-end", gap: 2 }}>
-                              <Label weight="extra" size={16}>{money(e.montoTotal)}</Label>
-                              <Label size={11} weight="bold" color={mine ? "#078B70" : palette.muted}>
-                                {mine ? `Tu parte ${money(mine)}` : "No participas"}
-                              </Label>
-                            </View>
-                          </Card>
-                        </Pressable>
-                      );
-                    })}
-                    {!expenses.data?.gastos.length && (
-                      <Label color={palette.muted}>Los gastos que registren aparecerán aquí.</Label>
-                    )}
-                    {(expenses.data?.totalPages || 0) > 1 && (
-                      <View style={design.row}>
-                        <View style={{ flex: 1 }}>
-                          <Button title="Anterior" secondary compact disabled={page === 1} onPress={() => setPage((p) => p - 1)} />
-                        </View>
-                        <Label>{page} / {expenses.data?.totalPages}</Label>
-                        <View style={{ flex: 1 }}>
-                          <Button title="Siguiente" secondary compact disabled={page >= (expenses.data?.totalPages || 1)} onPress={() => setPage((p) => p + 1)} />
-                        </View>
-                      </View>
-                    )}
-                  </>
-                )
-              ) : tab === "Reparto" ? (
-                <>
-                  {!!group.resumen.cantidadGastos && <GroupContributions group={group} userId={user?.id} />}
-                  {!!group.saldos.length && <Label accessibilityRole="header" weight="extra" size={19}>¿A quién se le devuelve?</Label>}
-                  {!group.saldos.length ? (
-                    <Label color={palette.muted}>
-                      {group.resumen.cantidadGastos ? "Nadie le debe nada a nadie." : "Todavía no se registraron gastos."}
-                    </Label>
-                  ) : (
-                    group.saldos.map((s) => (
-                      <Card key={`${s.deudorId}-${s.acreedorId}`} style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14 }}>
-                        <Avatar name={s.deudorNombre} seed={s.deudorId} />
-                        <View style={{ flex: 1 }}>
-                          <Label size={14} weight="bold">{debtLine(s.deudorId, s.deudorNombre, s.acreedorId, s.acreedorNombre)}</Label>
-                          <Label size={20} weight="extra" color={s.deudorId === user?.id ? palette.coral : s.acreedorId === user?.id ? "#078B70" : palette.ink}>
-                            {money(s.monto)}
-                          </Label>
-                        </View>
-                      </Card>
-                    ))
-                  )}
-                  <Label size={12} color={palette.muted}>
-                    Un pago baja la deuda cuando lo aprueba quien recibe el dinero{group.aprobacionPagos === "administrador" ? " o la administración del grupo" : ""}.
-                  </Label>
-                  <Button title="Ver cómo se calcula" secondary onPress={() => router.push(`/(app)/cuentas/${id}`)} />
-                  <Button title="Compartir cuentas por WhatsApp o correo" secondary disabled={shareUnavailable} onPress={() => setShareMessage(groupShareMessage(group, group.pagosPorConfirmar ?? groupPayments.length))} />
-                </>
-              ) : activity.isLoading ? (
-                <ActivityIndicator color={palette.primary} />
-              ) : activity.isError ? (
-                <>
-                  <ErrorBox message="No pudimos cargar la actividad." />
-                  <Button title="Reintentar" onPress={() => activity.refetch()} />
-                </>
-              ) : activity.data?.length ? (
-                activity.data.map((event) => (
-                  <Card key={event.id} style={{ padding: 14, gap: 2 }}>
-                    <Label weight="bold">{event.titulo}</Label>
-                    <Label size={13} color={palette.muted}>
-                      {money(event.monto)} · {new Date(event.fecha).toLocaleString("es-PE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                    </Label>
-                  </Card>
-                ))
-              ) : (
-                <Label color={palette.muted}>Todavía no hay actividad en este grupo.</Label>
-              )}
-            </View>
-          </>
         )}
-      </ScrollView>
-      {group && (
-        <View style={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", flexDirection: "row", gap: 8, padding: 12, borderTopWidth: 1, borderColor: palette.line, backgroundColor: palette.background }}>
-          {group.balanceUsuario.debes > 0 && (
-            <View style={{ flex: 3 }}>
-              <Button title="Registrar mi pago" accessibilityHint="Registra una devolución por Yape, Plin, transferencia o efectivo. No agrega un gasto." onPress={() => router.push(`/(app)/pagos/pagar?grupoId=${id}`)} />
+      </SafeAreaView>
+    );
+  }
+
+  // The pinned summary: how far the money has come back (cobranza) or come in (división).
+  const cuenta = group.cuenta;
+  const total = cuenta?.montoTotal ?? group.resumen.totalGastado;
+  const pending = group.resumen.cuentas.reduce((sum, a) => sum + Math.max(0, -a.neto), 0);
+  const freeValue = cuenta ? cuenta.libres * cuenta.parte : 0;
+  // División: what is already in (the organizer's own part counts). Cobranza: confirmed payments back.
+  const returned = group.resumen.cuentas.reduce((sum, a) => sum + a.pagosEnviados, 0);
+  const goal = words.division ? total : returned + pending + freeValue;
+  const done = words.division ? Math.max(0, total - pending - freeValue) : returned;
+  const progress = goal > 0 ? Math.min(1, done / goal) : 0;
+  const me = group.resumen.cuentas.find((a) => a.usuarioId === user?.id);
+  // "Te devolvieron" when the money comes back to you: you paid the bill, or (older groups) you are owed.
+  const holder = cuenta ? cuenta.pagadoPor === user?.id : group.balanceUsuario.teDeben > 0;
+  const canDefine = group.rolUsuario === "admin";
+  const status = group.balanceUsuario.debes > 0
+    ? { text: `Te falta ${words.division ? "aportar" : "pagar"} ${money(group.balanceUsuario.debes)}`, color: palette.coral }
+    : group.balanceUsuario.teDeben > 0
+      ? { text: `Te ${words.division ? "faltan" : "deben"} ${money(group.balanceUsuario.teDeben)}${words.division ? " por recibir" : ""}`, color: "#007B60" }
+      : me?.tuParte
+        ? { text: "Estás al día ✓", color: "#007B60" }
+        : null;
+
+  const items = chat.data ?? [];
+  const lastIndex = items.length - 1;
+
+  return (
+    <View style={{ flex: 1, backgroundColor: chatColors.feed, paddingLeft: insets.left, paddingRight: insets.right }}>
+      {/* Green behind the status bar too, like WhatsApp. */}
+      <View style={{ height: insets.top, backgroundColor: chatColors.header }} />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        {/* Header, like a chat: who this conversation is with. */}
+        <View style={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 8, paddingVertical: 8, backgroundColor: chatColors.header }}>
+          <Pressable accessibilityLabel="Volver" accessibilityRole="button" hitSlop={8} onPress={() => (router.canGoBack() ? router.back() : router.replace("/(app)/(tabs)"))} style={{ width: 40, height: 44, alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name="arrow-back" size={24} color="white" />
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${group.nombre}. Ver quién ya pagó`} onPress={() => setWhoPaid(true)} style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10, minHeight: 44 }}>
+            <View style={{ width: 42, height: 42, borderRadius: 21, overflow: "hidden", backgroundColor: "white" }}>
+              <Image source={groupArt(group.tipo)} accessibilityIgnoresInvertColors style={{ width: 42, height: 42 }} resizeMode="cover" />
+            </View>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Label accessibilityRole="header" size={17} weight="extra" color="white" numberOfLines={1}>{group.nombre}</Label>
+              <Label size={12} color="#D8F3EC" numberOfLines={1}>{words.name} · {group.miembros.length} {group.miembros.length === 1 ? "integrante" : "integrantes"}</Label>
+            </View>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Invitar personas" hitSlop={8} onPress={goInvite} style={{ width: 40, height: 44, alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name="person-add-outline" size={22} color="white" />
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Opciones del grupo" hitSlop={8} onPress={() => setMenu(true)} style={{ width: 36, height: 44, alignItems: "center", justifyContent: "center" }}>
+            <Ionicons name="ellipsis-vertical" size={22} color="white" />
+          </Pressable>
+        </View>
+
+        {/* Pinned message: the bill and how much of it is settled. */}
+        <View style={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "white", borderBottomWidth: 1, borderColor: palette.line }}>
+          {cuenta || group.resumen.cantidadGastos ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={`${words.bill} ${money(total)}. ${words.division ? "Juntado" : "Devuelto"} ${money(done)} de ${money(goal)}. ${status?.text ?? ""}. Ver quién ya pagó`} onPress={() => setWhoPaid(true)} style={{ gap: 6 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Ionicons name="pin" size={14} color="#007B60" />
+                <Label size={14} weight="extra" style={{ flex: 1 }}>
+                  {cuenta ? `${words.bill}: ${money(total)}` : `Total del grupo: ${money(total)}`}
+                  {cuenta && <Label size={12} color={palette.muted}>{`  ${cuenta.partes} ${words.parts} de ${money(cuenta.parte)}`}</Label>}
+                </Label>
+                <Label size={12} weight="bold" color={palette.purple}>¿Quién pagó? ›</Label>
+              </View>
+              <View style={{ height: 6, backgroundColor: palette.line, borderRadius: 6, overflow: "hidden" }}>
+                <View style={{ height: "100%", width: `${progress * 100}%`, backgroundColor: palette.primary }} />
+              </View>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", columnGap: 10 }}>
+                <Label size={12} color={palette.muted}>{words.division ? "Juntado" : holder ? "Te devolvieron" : "Devuelto"} {money(done)} de {money(goal)}{cuenta?.libres ? ` · ${cuenta.libres} ${cuenta.libres === 1 ? (words.division ? "aporte libre" : "parte libre") : (words.division ? "aportes libres" : "partes libres")}` : ""}</Label>
+                {status && <Label size={12} weight="bold" color={status.color}>{status.text}</Label>}
+              </View>
+              {!!group.fechaLimite && (() => {
+                const due = deadlineText(group.fechaLimite);
+                return (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                    <Ionicons name="alarm-outline" size={14} color={due.late ? palette.coral : "#8A5A00"} />
+                    <Label size={12} weight="bold" color={due.late ? palette.coral : "#8A5A00"}>{due.text}</Label>
+                    <Label size={12} color={palette.muted}>· {due.when}</Label>
+                  </View>
+                );
+              })()}
+            </Pressable>
+          ) : (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Ionicons name="pin" size={14} color={palette.purple} />
+              <Label size={13} style={{ flex: 1 }}>{canDefine ? `Define la ${words.bill.toLowerCase()}: el total y entre cuántas personas.` : `Aún no hay ${words.bill.toLowerCase()} definida.`}</Label>
+              {canDefine && <Button compact title={`Definir ${words.bill.toLowerCase()}`} onPress={goBill} />}
             </View>
           )}
-          <View style={{ flex: 2 }}>
-            <Button secondary={group.balanceUsuario.debes > 0} title={group.resumen.cantidadGastos ? "＋ Otro gasto" : "Definir total"} accessibilityHint="Solo añade un monto nuevo pagado a la cuenta, no una devolución" onPress={() => router.push(`/(app)/gastos/agregar?grupoId=${id}${group.resumen.cantidadGastos ? "" : "&cuenta=1"}`)} />
+        </View>
+
+        {/* The conversation. */}
+        <ScrollView
+          ref={feed}
+          style={{ flex: 1, backgroundColor: chatColors.feed }}
+          contentContainerStyle={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", padding: 12, gap: 8, flexGrow: 1, justifyContent: "flex-end" }}
+          keyboardShouldPersistTaps="handled"
+          onContentSizeChange={() => {
+            // Jump to the newest message when the chat opens or something new arrives.
+            if (items.length !== seen.current) {
+              feed.current?.scrollToEnd({ animated: seen.current > 0 });
+              seen.current = items.length;
+            }
+          }}
+        >
+          {(isRefetchError || chat.isError || paymentsError) && <ErrorBox message="No pudimos actualizar el chat. Ves lo último que cargó; desliza o vuelve a entrar para reintentar." />}
+          {chat.isLoading && <ActivityIndicator color={palette.primary} />}
+          {items.map((item, index) => {
+            const previous = items[index - 1];
+            const day = new Date(item.fecha);
+            const newDay = !previous || new Date(previous.fecha).toDateString() !== day.toDateString();
+            const showAuthor = newDay || !previous || systemTypes.has(previous.tipo) || previous.autor.id !== item.autor.id;
+            return (
+              <View key={item.id} style={{ gap: 8, marginTop: showAuthor && index ? 4 : 0 }}>
+                {newDay && <DaySeparator date={day} />}
+                <ChatBubble item={item} meId={user?.id} modo={group.modo} showAuthor={showAuthor} busy={resolve.isPending} onAnswer={answer} onDelete={remove} />
+              </View>
+            );
+          })}
+          {/* What to do next, said by JUNTO at the end of the conversation. */}
+          {!chat.isLoading && !cuenta && !group.resumen.cantidadGastos && canDefine && (
+            <View style={{ alignSelf: "center", maxWidth: 360, padding: 14, gap: 8, borderRadius: 16, backgroundColor: "white", borderWidth: 1, borderColor: palette.line }}>
+              <Label weight="bold">{words.division ? "¿Cuál es la meta?" : "¿Cuánto pagaste?"}</Label>
+              <Label size={13} color={palette.muted}>{words.division
+                ? "Escribe el monto meta y entre cuántos lo juntan. Cada persona que se una tendrá su aporte."
+                : "Escribe el total y entre cuántos se divide. Cada persona que se una ocupa una parte y te la devuelve."}</Label>
+              <Button compact title={`Definir ${words.bill.toLowerCase()}`} onPress={goBill} />
+            </View>
+          )}
+          {!chat.isLoading && !!cuenta?.libres && holder && (
+            <View style={{ alignSelf: "center", maxWidth: 360, padding: 14, gap: 8, borderRadius: 16, backgroundColor: palette.lilac, borderWidth: 1, borderColor: "#C9B8FF" }}>
+              <Label weight="bold">{cuenta.libres === 1 ? "Falta 1 persona" : `Faltan ${cuenta.libres} personas`}</Label>
+              <Label size={13} color={palette.muted}>Comparte el enlace. Quien se una tendrá {words.division ? "un aporte" : "una parte"} de {money(cuenta.parte)} y te avisaremos aquí.</Label>
+              <Button compact title="Invitar por WhatsApp" onPress={goInvite} />
+            </View>
+          )}
+          {lastIndex < 0 && !chat.isLoading && !chat.isError && <Label size={13} color={palette.muted} style={{ textAlign: "center" }}>Aún no hay mensajes.</Label>}
+        </ScrollView>
+
+        {/* Quick actions and the message box. */}
+        <View style={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", gap: 8, paddingTop: 8, paddingBottom: 8 + insets.bottom, backgroundColor: chatColors.feed }}>
+          {!!error && <View style={{ paddingHorizontal: 12 }}><ErrorBox message={error} /></View>}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 8, paddingHorizontal: 12 }}>
+            {group.balanceUsuario.debes > 0 && <Chip primary icon="cash-outline" title={`${words.pay} ${money(group.balanceUsuario.debes)}`} onPress={goPay} />}
+            {!cuenta && !group.resumen.cantidadGastos && canDefine && <Chip primary icon="receipt-outline" title={`Definir ${words.bill.toLowerCase()}`} onPress={goBill} />}
+            <Chip icon="people-outline" title="¿Quién pagó?" onPress={() => setWhoPaid(true)} />
+            {collect.length > 0 && <Chip highlight icon="notifications-outline" title="Recordar" onPress={() => setReminders(true)} />}
+            <Chip highlight={!!cuenta?.libres} icon="person-add-outline" title="Invitar" onPress={goInvite} />
+            <Chip icon="add" title="Otro gasto" onPress={goExpense} />
+          </ScrollView>
+          <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 12 }}>
+            <TextInput
+              accessibilityLabel="Escribe un mensaje al grupo"
+              value={text}
+              onChangeText={setText}
+              placeholder="Escribe un mensaje"
+              placeholderTextColor="#8B98AE"
+              multiline
+              maxLength={500}
+              style={[design.input, { flex: 1, minHeight: 48, maxHeight: 120, borderRadius: 24, borderWidth: 0, paddingTop: 12, paddingBottom: 12, backgroundColor: "white" }]}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Enviar mensaje"
+              accessibilityState={{ disabled: !text.trim() || sending }}
+              disabled={!text.trim() || sending}
+              onPress={send}
+              style={{ width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: text.trim() ? chatColors.send : "#9FB8AE" }}
+            >
+              {sending ? <ActivityIndicator color="white" /> : <Ionicons name="send" size={20} color="white" />}
+            </Pressable>
           </View>
         </View>
-      )}
-      <Modal transparent visible={menu} animationType="slide" onRequestClose={() => setMenu(false)}>
+      </KeyboardAvoidingView>
+
+      <WhoPaid group={group} userId={user?.id} visible={whoPaid} onClose={() => setWhoPaid(false)} onInvite={goInvite} onPay={goPay} />
+
+      <Modal transparent statusBarTranslucent navigationBarTranslucent visible={reminders} animationType="slide" onRequestClose={() => setReminders(false)}>
+        <View style={{ flex: 1, justifyContent: tablet ? "center" : "flex-end", alignItems: tablet ? "center" : "stretch", padding: tablet ? 24 : 0, backgroundColor: "#08264466" }}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Cerrar" onPress={() => setReminders(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
+          <SafeAreaView edges={["bottom"]} style={{ width: "100%", maxWidth: tablet ? 560 : undefined, maxHeight: "85%", borderRadius: tablet ? 28 : undefined, backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 12 }}>
+            <Label accessibilityRole="header" size={22} weight="extra">Recordar {words.division ? "aportes" : "pagos"}</Label>
+            <Label size={13} color={palette.muted}>Enviamos un aviso amable y queda anotado en el chat.</Label>
+            <ScrollView contentContainerStyle={{ gap: 8 }}>
+              <PendingActions actions={collect} showGroup={false} />
+            </ScrollView>
+            <Button title="Listo" secondary onPress={() => { setReminders(false); void refetchChat(); }} />
+          </SafeAreaView>
+        </View>
+      </Modal>
+
+      <Modal transparent statusBarTranslucent navigationBarTranslucent visible={menu} animationType="slide" onRequestClose={() => setMenu(false)}>
         <View style={{ flex: 1, justifyContent: tablet ? "center" : "flex-end", alignItems: tablet ? "center" : "stretch", padding: tablet ? 24 : 0, backgroundColor: "#08264466" }}>
           <Pressable accessibilityRole="button" accessibilityLabel="Cerrar opciones" onPress={() => setMenu(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
           <SafeAreaView edges={["bottom"]} style={{ width: "100%", maxWidth: tablet ? 560 : undefined, borderRadius: tablet ? 28 : undefined, backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 12 }}>
-            <Label accessibilityRole="header" size={22} weight="extra">{group?.nombre || "Tu grupo"}</Label>
+            <Label accessibilityRole="header" size={22} weight="extra">{group.nombre}</Label>
             <Button title="Invitar personas" onPress={() => { setMenu(false); goInvite(); }} />
-            <Button title="Compartir cuentas por WhatsApp o correo" secondary disabled={shareUnavailable} onPress={() => { if (group) { setMenu(false); setShareMessage(groupShareMessage(group, group.pagosPorConfirmar ?? groupPayments.length)); } }} />
-            {group?.rolUsuario === "admin" && (
-              <Button title="Editar grupo y quién aprueba los pagos" secondary onPress={() => { setMenu(false); router.push(`/(app)/grupos/editar?grupoId=${id}`); }} />
-            )}
+            {canDefine && <Button title={cuenta ? `Corregir la ${words.bill.toLowerCase()}` : `Definir la ${words.bill.toLowerCase()}`} secondary onPress={() => { setMenu(false); goBill(); }} />}
+            <Button title="Añadir otro gasto" secondary onPress={() => { setMenu(false); goExpense(); }} />
+            <Button title="Compartir estado por WhatsApp o correo" secondary disabled={shareUnavailable} onPress={() => { setMenu(false); setShareMessage(groupShareMessage(group, group.pagosPorConfirmar ?? groupPayments.length)); }} />
+            {canDefine && <Button title="Editar grupo y quién aprueba los pagos" secondary onPress={() => { setMenu(false); router.push(`/(app)/grupos/editar?grupoId=${id}`); }} />}
             <Button title="Cómo se calculan las cuentas" secondary onPress={() => { setMenu(false); router.push(`/(app)/cuentas/${id}`); }} />
             <Pressable accessibilityRole="button" onPress={leave} style={{ minHeight: 48, alignItems: "center", justifyContent: "center" }}>
               <Label weight="bold" color={palette.coral}>Salir del grupo</Label>
@@ -429,6 +391,6 @@ export default function Group() {
         </View>
       </Modal>
       <ShareMessageSheet message={shareMessage} onClose={() => setShareMessage(null)} disabled={shareUnavailable} />
-    </SafeAreaView>
+    </View>
   );
 }

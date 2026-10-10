@@ -50,6 +50,10 @@ export interface Grupo {
   descripcion?: string | null;
   tipo: GrupoTipo;
   aprobacionPagos?: AprobacionPagos;
+  /** "cobranza": someone paid and the rest pay back. "division": everyone puts in toward a goal. */
+  modo?: "cobranza" | "division" | null;
+  /** Until when people can pay; reminders go out automatically as it approaches. */
+  fechaLimite?: string | null;
   creadoPor: string;
   linkInvitacion?: string | null;
   fechaCreacion: string;
@@ -79,7 +83,36 @@ export interface GrupoConBalance extends Grupo {
     neto: number; // en centavos, positivo = te deben
   };
   rolUsuario: MiembroRol;
+  /** The group's bill in equal parts: free parts stay with whoever paid until someone joins. */
+  cuenta?: CuentaPorPartes | null;
+  /** Chat items from others since the viewer last opened the group (Home badge). */
+  noLeidos?: number;
 }
+
+export interface CuentaPorPartes {
+  id: string;
+  descripcion: string;
+  montoTotal: number;
+  pagadoPor: string;
+  pagadorNombre: string;
+  participantes: { usuarioId: string; montoAsignado: number }[];
+  partes: number;
+  parte: number;
+  libres: number;
+}
+
+// ─── Group chat ───────────────────────────────────────────────────────────────
+
+export type ChatPersona = { id: string; nombre: string; fotoUrl?: string | null };
+type ChatBase = { id: string; fecha: string; autor: ChatPersona; mio: boolean };
+export type ChatItem = ChatBase & (
+  | { tipo: "creado" }
+  | { tipo: "union"; parte: number | null; activo: boolean }
+  | { tipo: "cuenta" | "gasto"; gastoId: string; descripcion: string; monto: number; pagador: ChatPersona; comentarios: number; tuParte: number | null; partes?: number; parte?: number; libres?: number }
+  | { tipo: "pago"; pagoId: string; monto: number; metodo: string | null; estado: string; receptor: ChatPersona; resolutor: ChatPersona | null; fechaResolucion: string | null; comentarios: number; apruebaComo: "receptor" | "administrador" | null }
+  | { tipo: "recordatorio"; para: ChatPersona; monto: number | null; aviso: string | null }
+  | { tipo: "mensaje"; comentarioId: string; texto: string; eliminado: boolean; puedeEliminar: boolean }
+);
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────
 

@@ -1,6 +1,6 @@
 import { describeError } from "../lib/logSafe";
 import cron from 'node-cron';
-import { ejecutarRecordatoriosAutomaticos } from '../services/recordatorios.service';
+import { ejecutarRecordatoriosAutomaticos, ejecutarRecordatoriosPorFecha } from '../services/recordatorios.service';
 import { purgeVouchers } from '../services/vouchers.service';
 
 /**
@@ -21,5 +21,14 @@ export function initRemindersJob(): void {
     }
   });
 
-  console.info('[Cron] Reminders job scheduled for 9 AM Peru time (14:00 UTC)');
+  // Deadlines move by the hour: check every hour (quiet hours are skipped inside).
+  cron.schedule('7 * * * *', async () => {
+    try {
+      await ejecutarRecordatoriosPorFecha();
+    } catch (err) {
+      console.error('[Cron] Error in deadline reminders:', describeError(err));
+    }
+  });
+
+  console.info('[Cron] Reminders job scheduled for 9 AM Peru time (14:00 UTC); deadline reminders hourly');
 }
