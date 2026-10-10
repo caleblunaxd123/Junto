@@ -91,7 +91,8 @@ export default function Join() {
             <>
               <Label>
                 Crea tu cuenta o inicia sesión. Guardamos esta invitación y te
-                unirás al terminar, sin abrir el enlace otra vez.
+                mostraremos el grupo al terminar para que confirmes si quieres unirte,
+                sin abrir el enlace otra vez.
               </Label>
               <Button
                 title="Crear cuenta"

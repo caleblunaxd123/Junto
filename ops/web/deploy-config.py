@@ -2,11 +2,14 @@
 import hashlib
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
 
-STAMP = '20261010-beta'
+STAMP = os.environ.get('JUNTO_RELEASE', '20261010-beta')
+if not re.fullmatch(r'\d{8}-beta\d*', STAMP):
+    raise RuntimeError('Invalid reviewed release tag')
 HOST = pathlib.Path('/opt/junto')
 
 def backup(path):

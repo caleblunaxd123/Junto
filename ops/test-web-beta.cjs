@@ -6,7 +6,7 @@ const helpers=require('./test-share-email-api.cjs');const db=new PrismaClient();
 const WEB='http://127.0.0.1:8090';const API='http://127.0.0.1:3029/api';const suffix=Date.now();
 async function run(){
  const smtp=await helpers.startSmtp();const server=helpers.startApi(3029,{PUBLIC_WEB_URL:'https://junto.lunalav.pe',FRONTEND_URL:WEB,SMTP_HOST:'127.0.0.1',SMTP_PORT:String(smtp.port),SMTP_USER:'qa@example.invalid',SMTP_PASS:'fictional-only',SMTP_ALLOW_INSECURE_LOCAL:'true',EMAIL_FROM:'JUNTO <no-reply@example.invalid>'});
- let browser;
+ let browser, closing=false;
  try{
   await server.ready;
   const engine=process.env.JUNTO_QA_WEBKIT==='true'?webkit:chromium;
@@ -18,6 +18,9 @@ async function run(){
    if(u.origin===WEB)return route.continue();
    if(u.origin==='https://junto.lunalav.pe'&&u.pathname.startsWith('/api/')){
     if(request.method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':WEB,'Access-Control-Allow-Methods':'GET,POST,PUT,PATCH,DELETE','Access-Control-Allow-Headers':'authorization,content-type'}});
+    // Regression: sharing immediately must not depend on the slow group-detail query.
+    if(request.method()==='GET' && /^\/api\/grupos\/[0-9a-f-]{36}$/.test(u.pathname))await new Promise(r=>setTimeout(r,5000));
+    if(closing)return route.abort().catch(()=>undefined);
     const response=await fetch(API+u.pathname.slice('/api'.length)+u.search,{method:request.method(),headers:{...request.headers(),host:'127.0.0.1:3029',origin:WEB},body:request.postData()||undefined});
     return route.fulfill({status:response.status,body:Buffer.from(await response.arrayBuffer()),headers:{'Content-Type':response.headers.get('content-type')||'application/json','Access-Control-Allow-Origin':WEB}});
    }
@@ -68,6 +71,6 @@ async function run(){
   assert.deepEqual(errors,[]);
   fs.mkdirSync(path.join(__dirname,'artifacts'),{recursive:true});await page.screenshot({path:path.join(__dirname,'artifacts',engine===webkit?'beta-webkit-invite.png':'beta-chrome-invite.png')});
   console.log(JSON.stringify({result:'PASS',engine:engine===webkit?'WebKit mobile viewport':'Chromium mobile viewport',scope:'fictional registration, email verification, browser-session credential storage, group creation, bad invitation validation, invitation SMTP, logout, login and reload'}));
- }finally{if(browser)await browser.close();server.child.kill();smtp.close();await db.$disconnect();await helpers.disconnect();}
+ }finally{closing=true;if(browser)await browser.close();server.child.kill();smtp.close();await db.$disconnect();await helpers.disconnect();}
 }
 run().catch(error=>{console.error(error.message);process.exitCode=1;});

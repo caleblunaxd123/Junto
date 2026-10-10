@@ -103,6 +103,7 @@ export async function invitar(req: Request, res: Response, next: NextFunction) {
     res.json({
       link: `${process.env.FRONTEND_URL}/unirse/${group.linkInvitacion}`,
       linkCode: group.linkInvitacion,
+      nombre: group.nombre,
     });
   } catch (err) {
     next(err);

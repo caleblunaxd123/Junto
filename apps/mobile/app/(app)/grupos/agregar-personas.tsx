@@ -72,7 +72,9 @@ export default function Invite() {
       setError("");
       const { data } = await api.post(`/grupos/${grupoId}/invitar`, {});
       setInitialChannel(channel);
-      setShareMessage({ ...invitationShareMessage(group?.nombre || "mi grupo", invitationUrl(data.linkCode)), resource: { tipo: "invitacion", id: grupoId } });
+      // Use the name returned with this link, not a possibly still-loading/stale query.
+      if (typeof data.nombre !== "string" || !data.nombre.trim()) throw new Error("Grupo sin nombre");
+      setShareMessage({ ...invitationShareMessage(data.nombre, invitationUrl(data.linkCode)), resource: { tipo: "invitacion", id: grupoId } });
     } catch {
       setError("No pudimos preparar el enlace. Reintenta.");
     } finally { shareGate.current = false; }
