@@ -68,6 +68,21 @@ test("WhatsApp pre-fills encoded text without guessing a recipient", () => {
     assert.equal(url.searchParams.has("phone"), false);
   }
 });
+
+test("WhatsApp uses only the Peruvian phone explicitly entered, never auto-sends", () => {
+  const message = {subject: "JUNTO", body: "Únete a mi grupo · no es un cobro"};
+  for (const value of ["999888777", "+51 999888777", "51999888777"]) {
+    const web = new URL(whatsappDraftUrl(message, true, value));
+    assert.equal(web.origin, "https://wa.me");
+    assert.equal(web.pathname, "/51999888777");
+    assert.equal(web.searchParams.get("text"), message.body);
+    const native = new URL(whatsappDraftUrl(message, false, value));
+    assert.equal(native.searchParams.get("phone"), "51999888777");
+    assert.deepEqual([...native.searchParams.keys()], ["phone", "text"]);
+  }
+  for (const value of ["123", "899888777", "+1 999888777", "999888777&text=evil", "999888777?send=true"])
+    assert.throws(() => whatsappDraftUrl(message, true, value));
+});
 test("birthday report explains invitees, exactly five shares and total", () => {
   const input = { nombre: "Cumpleaños QA", cobrarA: "Davetsy", instrucciones: "", division: "igual", totalCuenta: 18000, participantes: ["Jaime", "Davetsy", "Gerson", "Caleb", "Sandra", "Lili"].map((nombre, i) => ({ id: String(i), nombre, invitado: i === 0, consumo: 0 })) };
   const result = calculateQuickBill(input);

@@ -12,10 +12,11 @@ async function run(){
   const engine=process.env.JUNTO_QA_WEBKIT==='true'?webkit:chromium;
   browser=await engine.launch(engine===chromium?{executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true}:{headless:true});
   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
-  const errors=[];
+  const errors=[];let whatsappDraft='';
   await context.route('**/*',async route=>{
    const request=route.request();const u=new URL(request.url());
    if(u.origin===WEB)return route.continue();
+   if(u.origin==='https://wa.me'){whatsappDraft=request.url();return route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>QA draft capture only</title>No WhatsApp request sent.'});}
    if(u.origin==='https://junto.lunalav.pe'&&u.pathname.startsWith('/api/')){
     if(request.method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':WEB,'Access-Control-Allow-Methods':'GET,POST,PUT,PATCH,DELETE','Access-Control-Allow-Headers':'authorization,content-type'}});
     // Regression: sharing immediately must not depend on the slow group-detail query.
@@ -49,14 +50,21 @@ async function run(){
   await page.getByRole('button',{name:'Crear grupo',exact:true}).click();
   await page.getByText('¡Grupo creado!',{exact:true}).waitFor();
   await page.getByLabel('Correo o celular para invitar').fill('incorrecto');
-  await page.getByRole('button',{name:'Invitar',exact:true}).click();
+  await page.getByRole('button',{name:'Preparar',exact:true}).click();
   await page.getByText(/Escribe un correo válido/).waitFor();
-  await page.getByRole('button',{name:'Enviar invitación por correo',exact:true}).click();
-  await page.getByPlaceholder('nombre@correo.com').fill('amigo-ios@example.invalid');
+  await page.getByLabel('Correo o celular para invitar').fill('amigo-ios@example.invalid');
+  await page.getByRole('button',{name:'Preparar',exact:true}).click();
+  assert.equal(await page.getByPlaceholder('nombre@correo.com').inputValue(),'amigo-ios@example.invalid');
   await page.getByRole('button',{name:'Enviar desde JUNTO',exact:true}).click();
   await page.getByRole('button',{name:'Enviar',exact:true}).click();
   await page.getByText('Enviado al proveedor de correo',{exact:true}).waitFor();
   assert.ok(helpers.inbox.some(raw=>helpers.decode(raw).includes('amigo-ios@example.invalid')&&helpers.decode(raw).includes('Ver invitación')));
+  await page.getByRole('button',{name:'Volver a las opciones para compartir',exact:true}).click();
+  await page.getByRole('button',{name:'Cerrar vista para compartir',exact:true}).click();
+  await page.getByLabel('Correo o celular para invitar').fill('999888777');
+  await page.getByRole('button',{name:'Preparar',exact:true}).click();
+  await page.waitForURL(url=>url.origin==='https://wa.me');
+  const draft=new URL(whatsappDraft);assert.equal(draft.pathname,'/51999888777');assert.match(draft.searchParams.get('text'),/Cartagena Beta QA/);
   await page.goto(WEB+'/app/perfil');
   await page.getByRole('button',{name:/Cerrar sesión/}).click();
   await page.getByRole('button',{name:'Cerrar sesión',exact:true}).click();

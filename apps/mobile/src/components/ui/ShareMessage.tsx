@@ -151,8 +151,8 @@ export function ShareSummary({ message, reportRef }: { message: ShareMessage; re
 }
 
 /** User-reviewed handoff. Opening another app is not evidence that a message was sent. */
-export function ShareChannels({ message, disabled = false, reportRef, initialChannel }: { message: ShareMessage; disabled?: boolean; reportRef?: React.RefObject<View | null>; initialChannel?: "mail" }) {
-  const [recipient, setRecipient] = React.useState("");
+export function ShareChannels({ message, disabled = false, reportRef, initialChannel, initialRecipient = "" }: { message: ShareMessage; disabled?: boolean; reportRef?: React.RefObject<View | null>; initialChannel?: "mail"; initialRecipient?: string }) {
+  const [recipient, setRecipient] = React.useState(initialRecipient);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [notice, setNotice] = React.useState("");
@@ -303,7 +303,7 @@ export function ShareChannels({ message, disabled = false, reportRef, initialCha
   </View>;
 }
 
-export function ShareMessageSheet({ message, onClose, disabled = false, initialChannel }: { message: ShareMessage | null; onClose: () => void; disabled?: boolean; initialChannel?: "mail" }) {
+export function ShareMessageSheet({ message, onClose, disabled = false, initialChannel, initialRecipient }: { message: ShareMessage | null; onClose: () => void; disabled?: boolean; initialChannel?: "mail"; initialRecipient?: string }) {
   const report = React.useRef<View>(null);
   return <Modal visible={!!message} animationType="slide" onRequestClose={onClose}>
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}>
@@ -316,7 +316,7 @@ export function ShareMessageSheet({ message, onClose, disabled = false, initialC
         {!!message && <ShareSummary message={message} reportRef={report} />}
       </ScrollView>
       {!!message && <ScrollView style={{ flexGrow: 0, maxHeight: "75%", borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: "white" }} keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 }}><ShareChannels key={`${message.body}:${initialChannel || ""}`} message={message} reportRef={report} disabled={disabled} initialChannel={initialChannel} /></ScrollView>}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 }}><ShareChannels key={`${message.body}:${initialChannel || ""}:${initialRecipient || ""}`} message={message} reportRef={report} disabled={disabled} initialChannel={initialChannel} initialRecipient={initialRecipient} /></ScrollView>}
       </KeyboardAvoidingView>
     </SafeAreaView>
   </Modal>;
