@@ -11,4 +11,7 @@ test("logged errors never carry provider keys, e-mail bodies or addresses", () =
   assert.match(line, /AxiosError code=ERR_BAD_REQUEST status=422/);
   for (const secret of ["re_secret_key", "482913", "ana@correo.pe"]) assert.ok(!line.includes(secret), secret);
   assert.equal(describeError(undefined), "undefined");
+  assert.equal(describeError("Bearer private-token 482913"), "NonError");
+  assert.equal(describeError({ name: "secret", code: "https://private-key", message: "password=private-key 482913" }), "Error");
+  assert.equal(describeError(new Error("password=private-key 482913")), "Error");
 });

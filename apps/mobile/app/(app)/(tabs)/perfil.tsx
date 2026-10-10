@@ -5,9 +5,9 @@ import {
   Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { AppDialog as Alert } from "../../src/components/ui/AppDialog";
+import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
 import { router } from "expo-router";
-import { useAuthStore } from "../../src/store/auth.store";
+import { useAuthStore } from "../../../src/store/auth.store";
 import {
   Screen,
   Card,
@@ -15,8 +15,8 @@ import {
   Avatar,
   palette,
   design,
-} from "../../src/components/ui/Design";
-import { IconBubble } from "../../src/components/ui/Reference";
+} from "../../../src/components/ui/Design";
+import { IconBubble } from "../../../src/components/ui/Reference";
 import Constants from "expo-constants";
 function Row({
   icon,

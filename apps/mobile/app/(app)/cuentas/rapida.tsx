@@ -1,3 +1,4 @@
+import { errorMessage } from "../../../src/lib/errorMessage";
 import React from "react";
 import { ActivityIndicator, BackHandler, Keyboard, Pressable, Switch, TextInput, View } from "react-native";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
@@ -76,7 +77,7 @@ function BillWizard({ id, original, version }: { id?: string; original?: QuickBi
       setTypedBefore(d.billTotal.trim() && d.scanApproved && parseMoney(d.billTotal) !== proposal.totalPropuesto ? d.billTotal.trim() : "");
       setReceipt(proposal); update({ billTotal: proposed, scanApproved: false });
     } catch (err) {
-      if (!controller.signal.aborted && request.current === controller) setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "No pudimos leer la foto. Escribe el total para continuar.");
+      if (!controller.signal.aborted && request.current === controller) setError(errorMessage(err, "No pudimos leer la foto. Escribe el total para continuar."));
     } finally { if (request.current === controller) { request.current = null; setReading(false); } }
   }
   function count(value: number) {
@@ -109,7 +110,7 @@ function BillWizard({ id, original, version }: { id?: string; original?: QuickBi
     } catch (err) {
       const status = (err as { response?: { status?: number } }).response?.status;
       if (status && status >= 400 && status < 500 && status !== 401 && status !== 409) update({ pending: undefined, step: 0 });
-      setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "Guardado sin confirmar. Tu borrador sigue en este dispositivo. Reintenta con conexión: se enviará la misma solicitud, sin duplicarla.");
+      setError(errorMessage(err, "Guardado sin confirmar. Tu borrador sigue en este dispositivo. Reintenta con conexión: se enviará la misma solicitud, sin duplicarla."));
     } finally { submitting.current = false; }
   }
   function next() {
@@ -128,7 +129,7 @@ function BillWizard({ id, original, version }: { id?: string; original?: QuickBi
       <Label weight="extra" size={23}>{titles[d.step]}</Label>
       {!!check.stepErrors[d.step] && !(d.step === 1 && check.stepErrors[d.step] === fields.reconciliation) && (d.step > 0 || !!d.billTotal.trim() || !d.scanApproved) && <ErrorBox message={check.stepErrors[d.step]} />}
       {draft.storageError ? <ErrorBox message="No pudimos proteger el borrador. No cierres la app hasta guardar." /> : (d.pending || draft.restored) ? <Label size={12} color={palette.muted}>{d.pending ? "Pendiente de confirmar en el servidor" : "Seguimos donde lo dejaste"}</Label> : null}
-      {d.pending && <Card style={{ backgroundColor: palette.yellow }}><Label size={13}>No sabemos todavía si el servidor guardó esta cuenta. Reintenta antes de cambiar montos; así evitamos duplicados.</Label></Card>}
+      {d.pending && <Card style={{ backgroundColor: save.isPending ? palette.mint : palette.yellow }}><Label size={13}>{save.isPending ? "Guardando tu reparto. Espera un momento; no necesitas volver a pulsar." : "No sabemos todavía si el servidor guardó esta cuenta. Reintenta antes de cambiar montos; así evitamos duplicados."}</Label></Card>}
       {recovered.data && <Button title="Abrir cuenta que ya se guardó" secondary onPress={async () => { try { await draft.clear(); router.replace({ pathname: "/(app)/cuentas/rapida-detalle", params: { id: recovered.data!.id } }); } catch { setError("No pudimos retirar el borrador. Reintenta."); } }} />}
       {id && d.pending && <Button title="Abrir cuenta guardada y revisar conflicto" secondary disabled={save.isPending} onPress={() => Alert.alert("¿Revisar la versión guardada?", "Se descartará este borrador local de corrección. El reparto del servidor no se modifica.", [{ text: "Cancelar", style: "cancel" }, { text: "Revisar cuenta", onPress: async () => { try { await draft.clear(); router.replace({ pathname: "/(app)/cuentas/rapida-detalle", params: { id } }); } catch { setError("No pudimos retirar el borrador. Reintenta."); } } }])} />}
       {draft.restored && !d.pending && <Button compact secondary title="Empezar de nuevo" accessibilityHint="Descarta este borrador del dispositivo" disabled={locked} onPress={() => Alert.alert("¿Descartar borrador local?", "Se quitará solo este borrador del dispositivo. No se borra ninguna cuenta guardada.", [{ text: "Cancelar", style: "cancel" }, { text: "Descartar", style: "destructive", onPress: async () => { try { await draft.clear(); router.replace("/(app)/cuentas/rapidas"); } catch { setError("No pudimos retirar el borrador."); } } }])} />}

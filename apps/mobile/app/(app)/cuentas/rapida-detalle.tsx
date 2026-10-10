@@ -1,7 +1,9 @@
+import { errorMessage } from "../../../src/lib/errorMessage";
 import React from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ModalSurface } from "../../../src/components/ui/ModalSurface";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { captureRef, releaseCapture } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
@@ -24,6 +26,7 @@ export default function QuickBillDetail() {
   const [amount, setAmount] = React.useState("");
   const [mode, setMode] = React.useState<ContributionMode>("ahora");
   const [preview, setPreview] = React.useState(false);
+  const [exportPreview, setExportPreview] = React.useState(false);
   const [history, setHistory] = React.useState(false);
   const [page, setPage] = React.useState(0);
   const [exporting, setExporting] = React.useState(false);
@@ -45,7 +48,7 @@ export default function QuickBillDetail() {
   async function record(participanteId: string, monto: number) {
     if (!bill || disabled) return;
     try { setError(""); await mutation.mutateAsync({ participanteId, monto, version: bill.version }); setSelected(undefined); }
-    catch (err) { setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "No se confirmó el cambio. Actualiza antes de reintentar."); setSelected(undefined); await refetch(); }
+    catch (err) { setError(errorMessage(err, "No se confirmó el cambio. Actualiza antes de reintentar.")); setSelected(undefined); await refetch(); }
   }
   function confirmAmount() {
     if (!part || next.total === null) return;
@@ -72,7 +75,7 @@ export default function QuickBillDetail() {
     if (!bill || mutation.isPending || query.isError) return;
     Alert.alert(bill.archivada ? "¿Reactivar esta cuenta?" : "¿Archivar cuenta completada?", "El reparto y el historial se conservan. Archivar no borra registros ni mueve dinero.", [{ text: "Cancelar", style: "cancel" }, { text: bill.archivada ? "Reactivar" : "Archivar", onPress: async () => {
       try { await mutation.mutateAsync({ archivada: !bill.archivada, version: bill.version }); }
-      catch (err) { setError((err as { response?: { data?: { error?: string } } }).response?.data?.error || "No se confirmó el cambio. Actualiza la cuenta."); await refetch(); }
+      catch (err) { setError(errorMessage(err, "No se confirmó el cambio. Actualiza la cuenta.")); await refetch(); }
     } }]);
   }
   return <Screen compact title="Tu reparto" subtitle="Partes claras, aportes bajo tu control." back refreshing={query.isRefetching} onRefresh={() => refetch()}>
@@ -97,7 +100,7 @@ export default function QuickBillDetail() {
       {!bill.cobrado && !bill.archivada && <Button title="Corregir personas o montos" secondary disabled={query.isError} onPress={() => router.push({ pathname: "/(app)/cuentas/rapida", params: { id } })} />}
       {(bill.archivada || !bill.pendiente) && <Button title={bill.archivada ? "Reactivar cuenta" : "Archivar cuenta completada"} secondary disabled={mutation.isPending || query.isError} onPress={archive} />}
       <Button title="Ver mis cuentas" secondary onPress={() => router.replace("/(app)/cuentas/rapidas")} />
-      <Modal visible={!!part} animationType="slide" onRequestClose={() => !mutation.isPending && setSelected(undefined)}><SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 16 }}>
+      <Modal transparent visible={!!part} animationType="slide" onRequestClose={() => !mutation.isPending && setSelected(undefined)}><ModalSurface><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 16 }}>
         <Label accessibilityRole="header" size={25} weight="extra">Aporte de {part?.nombre}</Label>
         <View style={design.row}>
           <Card style={{ flex: 1, padding: 12, gap: 2 }}><Label size={11} color={palette.muted}>Su parte</Label><Label weight="extra" size={17}>{money(part?.total || 0)}</Label></Card>
@@ -126,12 +129,18 @@ export default function QuickBillDetail() {
           note: "La organización confirma los aportes después de comprobar que recibió el dinero.",
         }, body: `${bill.datos.nombre} · JUNTO\n${part.nombre}, tu parte es ${money(part.total)}; falta confirmar ${money(part.total - paid)}.${bill.datos.cobrarA ? ` Aportar a ${bill.datos.cobrarA}.` : ""}\n${bill.datos.instrucciones || ""}\nConfirmaciones manuales de la organización. JUNTO no cobra ni transfiere dinero.` }); setSelected(undefined); }} />}
         <Button title="Cerrar sin cambios" secondary disabled={mutation.isPending} onPress={() => setSelected(undefined)} />
-      </ScrollView></SafeAreaView></Modal>
-      <Modal visible={preview} animationType="slide" onRequestClose={() => !exporting && setPreview(false)}><SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}><ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
-        <Label size={24} weight="extra">Antes de compartir</Label><Label size={12}>Revisa los nombres, montos e instrucciones. Tú eliges la app y los destinatarios; no se envía automáticamente.</Label>
+      </ScrollView></ModalSurface></Modal>
+      <Modal transparent visible={preview} animationType="slide" onRequestClose={() => !exporting && setPreview(false)}><ModalSurface>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <View style={{ padding: 16, flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Volver al reparto" disabled={exporting} onPress={() => setPreview(false)} style={design.back}><Ionicons name="arrow-back" size={22} color={palette.ink} /></Pressable>
+          <View style={{ flex: 1 }}><Label size={22} weight="extra">Listo para compartir</Label><Label size={11} color={palette.muted}>Revisa el reparto. Tú decides cómo enviarlo.</Label></View>
+        </View>
+        <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 16 }}>
         {!!error && <ErrorBox message={error} />}
         {shareMessage && <ShareSummary reportRef={emailReport} message={shareMessage} />}
-        {shareMessage && <ShareChannels reportRef={emailReport} message={shareMessage} disabled={query.isError || exporting} />}
+        <Button compact title={exportPreview ? "Ocultar imagen por páginas" : "Crear imagen por páginas (opcional)"} secondary onPress={() => setExportPreview(!exportPreview)} />
+        {exportPreview && <>
         <View ref={image} collapsable={false} key={`${bill.version}-${page}`} onLayout={() => setImageReady(true)} style={{ padding: 20, gap: 12, backgroundColor: "#FFFCF7", borderRadius: 16 }}>
           <Brand compact /><Label weight="extra" size={23}>{bill.datos.nombre}</Label><Label size={13}>Total {money(bill.resultado.montoTotal)} · {bill.resultado.cantidadPagadores} aportan</Label>
           <View style={[design.row, { borderBottomWidth: 1, borderBottomColor: palette.line, paddingBottom: 8 }]}><Label size={12} weight="bold" style={{ flex: 1 }}>Persona</Label><Label size={12} weight="bold">Su parte / pendiente</Label></View>
@@ -141,8 +150,13 @@ export default function QuickBillDetail() {
         </View>
         {pages > 1 && <View style={design.row}>{Array.from({ length: pages }, (_, index) => <Pressable key={index} accessibilityRole="button" accessibilityLabel={`Ver página ${index + 1}`} style={{ padding: 12, minHeight: 44, backgroundColor: index === page ? palette.mint : "white", borderRadius: 12 }} onPress={() => { setImageReady(false); setPage(index); }}><Label>{index + 1}</Label></Pressable>)}</View>}
         <Button title={`Compartir imagen${pages > 1 ? ` ${page + 1}/${pages}` : ""}`} loading={exporting} disabled={!imageReady || query.isError} onPress={shareImage} />
-        <Button title="Volver al reparto" secondary disabled={exporting} onPress={() => setPreview(false)} />
-      </ScrollView></SafeAreaView></Modal>
+        </>}
+        </ScrollView>
+        <ScrollView style={{ flexGrow: 0, maxHeight: "50%", borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: "white" }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16 }}>
+          {shareMessage && <ShareChannels reportRef={emailReport} message={shareMessage} disabled={query.isError || exporting} />}
+        </ScrollView>
+        </KeyboardAvoidingView>
+      </ModalSurface></Modal>
       <ShareMessageSheet message={reminder} onClose={() => setReminder(null)} disabled={query.isError} />
     </>}
   </Screen>;

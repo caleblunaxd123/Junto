@@ -7,6 +7,7 @@ import {
   forgotPasswordSchema,
   resetPasswordSchema,
   refreshTokenSchema,
+  logoutSchema,
   updatePushTokenSchema,
   verifyEmailSchema,
   resendVerificationSchema,
@@ -48,8 +49,8 @@ export async function refresh(req: Request, res: Response, next: NextFunction) {
 
 export async function logout(req: Request, res: Response, next: NextFunction) {
   try {
-    const { refreshToken } = refreshTokenSchema.parse(req.body);
-    await authService.logout(refreshToken);
+    const { refreshToken, expoPushToken } = logoutSchema.parse(req.body);
+    await authService.logout(refreshToken, expoPushToken);
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -129,9 +130,18 @@ export async function updatePushToken(
   next: NextFunction,
 ) {
   try {
-    const { expoPushToken } = updatePushTokenSchema.parse(req.body);
-    await authService.updatePushToken(req.user!.userId, expoPushToken);
+    const { expoPushToken, refreshToken } = updatePushTokenSchema.parse(req.body);
+    await authService.updatePushToken(req.user!.userId, expoPushToken, refreshToken);
     res.json({ message: "Token actualizado" });
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function clearPushToken(req: Request, res: Response, next: NextFunction) {
+  try {
+    await authService.updatePushToken(req.user!.userId, null);
+    res.status(204).end();
   } catch (err) {
     next(err);
   }
@@ -162,30 +172,6 @@ export async function resendVerification(
     res.json({
       message: "Si la cuenta está pendiente, enviaremos un nuevo código",
     });
-  } catch (err) {
-    next(err);
-  }
-}
-
-export async function verificarCelulares(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-) {
-  try {
-    const { z } = await import("zod");
-    const { celulares } = z
-      .object({ celulares: z.array(z.string()).max(200) })
-      .parse(req.body);
-    const { prisma } = await import("../lib/prisma");
-    const usuarios = await prisma.usuario.findMany({
-      where: { celular: { in: celulares }, activo: true },
-      select: { celular: true },
-    });
-    const registrados = usuarios
-      .map((u) => u.celular)
-      .filter(Boolean) as string[];
-    res.json({ celulares_registrados: registrados });
   } catch (err) {
     next(err);
   }

@@ -1,10 +1,11 @@
+import { errorMessage } from "../../../src/lib/errorMessage";
 import React from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { api } from "../../src/lib/api";
-import { AppDialog as Alert } from "../../src/components/ui/AppDialog";
+import { api } from "../../../src/lib/api";
+import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
 import {
   Card,
   Label,
@@ -12,9 +13,9 @@ import {
   Button,
   ErrorBox,
   palette,
-} from "../../src/components/ui/Design";
-import { useResolverPago } from "../../src/hooks/useGrupos";
-import { centavosASoles, type ActividadEvento } from "../../src/types";
+} from "../../../src/components/ui/Design";
+import { useResolverPago } from "../../../src/hooks/useGrupos";
+import { centavosASoles, type ActividadEvento } from "../../../src/types";
 
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
 const when = (date: string) =>
@@ -73,8 +74,8 @@ export default function Activity() {
               setError("");
               await resolve.mutateAsync({ pagoId: event.pagoId!, confirmar: received });
               refetch();
-            } catch {
-              setError("No pudimos guardar tu respuesta. Revisa tu conexión y reintenta.");
+            } catch (err) {
+              setError(errorMessage(err, "No pudimos guardar tu respuesta. Revisa tu conexión y reintenta."));
             }
           },
         },
@@ -102,7 +103,7 @@ export default function Activity() {
           <Label color={palette.muted}>
             Cuando alguien registre un gasto o un pago en tus grupos, aparecerá aquí.
           </Label>
-          <Button title="Ir a Inicio" onPress={() => router.push("/(app)")} />
+          <Button title="Ir a Inicio" onPress={() => router.push("/(app)/(tabs)")} />
         </Card>
       ) : (
         <>
@@ -119,8 +120,8 @@ export default function Activity() {
                 {e.titulo} {money(e.monto)}. ¿Lo recibiste?
               </Label>
               <Label size={12} color={palette.muted}>{e.detalle.split(" · ")[0]} · {when(e.fecha)}</Label>
-              <Pressable accessibilityRole="button" onPress={() => open(e)} style={{ minHeight: 40, justifyContent: "center" }}>
-                <Label size={13} weight="bold" color={palette.purple}>Ver el pago y su comprobante ›</Label>
+              <Pressable accessibilityRole="button" onPress={() => open(e)} style={{ minHeight: 44, justifyContent: "center" }}>
+                <Label size={13} weight="bold" color={palette.purple}>Ver el pago ›</Label>
               </Pressable>
               <View style={{ flexDirection: "row", gap: 8 }}>
                 <View style={{ flex: 1 }}><Button compact title="Sí, lo recibí" disabled={resolve.isPending} onPress={() => answer(e, true)} /></View>

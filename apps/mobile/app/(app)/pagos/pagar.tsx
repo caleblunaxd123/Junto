@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, router } from "expo-router";
 import { api } from "../../../src/lib/api";
+import { errorMessage as errorText } from "../../../src/lib/errorMessage";
 import { queryClient } from "../../../src/lib/queryClient";
 import { useGrupo } from "../../../src/hooks/useGrupos";
 import { useAuthStore } from "../../../src/store/auth.store";
@@ -14,6 +15,7 @@ import { centavosASoles, type LecturaComprobante, type MetodoPago, type Pago } f
 import { parseMoney } from "../../../src/lib/expensePreview";
 import { memberLabels } from "../../../src/lib/people";
 import { approvalSentence, blocksSending, voucherChecks } from "../../../src/lib/payment";
+import { payableLimit } from "@junto/shared/payable";
 import { pickVoucherImage } from "../../../src/lib/voucherPicker";
 import { peekSharedVoucher, readSharedVoucher, takeSharedVoucher } from "../../../src/lib/sharedVoucher";
 
@@ -25,7 +27,6 @@ const methods: { id: MetodoPago; name: string; icon: keyof typeof Ionicons.glyph
   { id: "efectivo", name: "Efectivo", icon: "cash", color: "#23BC8D" },
 ];
 const checkColors = { danger: { bg: palette.blush, fg: palette.coral }, warning: { bg: palette.yellow, fg: "#8A5B05" }, info: { bg: palette.lilac, fg: "#6942CA" } };
-const errorText = (err: unknown, fallback: string) => (err as { response?: { data?: { error?: string } } }).response?.data?.error || fallback;
 
 export default function Payment() {
   const params = useLocalSearchParams<{ grupoId: string; acreedorId?: string; subir?: string; compartido?: string }>();
@@ -57,10 +58,31 @@ export default function Payment() {
   const people = group?.miembros.map((m) => ({ ...m.usuario, id: m.usuarioId })) ?? [];
   const labels = memberLabels(people, user?.id);
   const nombre = (id: string) => labels.get(id) ?? group?.saldos.find((s) => s.acreedorId === id)?.acreedorNombre.split(" ")[0] ?? "esta persona";
-  const creditors = (group?.saldos ?? []).filter((s) => s.deudorId === user?.id);
+  // Is there already a payment to this person waiting for approval? Then show it instead of the form.
+  const history = useQuery<Pago[]>({
+    queryKey: ["pagos"],
+    queryFn: () => api.get("/pagos/historial").then((r) => r.data),
+    enabled: focused && !!grupoId,
+  });
+  const myWaiting = (history.data ?? []).filter((p) => p.grupoId === grupoId && p.pagadorId === user?.id && p.estado === "reportado");
+  const accounts = group?.resumen.cuentas ?? [];
+  // The app suggests who to pay; but if you already paid someone else who is owed money (the
+  // suggestion changed afterwards) and your voucher says so, that person is a valid choice too.
+  const suggestedCreditors = (group?.saldos ?? []).filter((s) => s.deudorId === user?.id);
+  const voucherFor = lectura?.sugerenciaReceptorId;
+  const extra = voucherFor && user && !suggestedCreditors.some((c) => c.acreedorId === voucherFor)
+    ? payableLimit(accounts, myWaiting, user.id, voucherFor).limit
+    : 0;
+  const creditors = extra && voucherFor
+    ? [...suggestedCreditors, { deudorId: user!.id, deudorNombre: user!.nombre, acreedorId: voucherFor, acreedorNombre: group?.miembros.find((m) => m.usuarioId === voucherFor)?.usuario.nombre ?? "", monto: extra }]
+    : suggestedCreditors;
   const selected = creditorId ?? (creditors.length === 1 ? creditors[0].acreedorId : null);
-  const limit = creditors.find((c) => c.acreedorId === selected)?.monto || 0;
-  const suggested = lectura?.monto && lectura.monto <= limit ? lectura.monto : limit;
+  // Same rule as the server: what you still owe and what that person is still owed, after payments
+  // waiting for approval — not only the suggested transfer, which can change after you paid.
+  const limit = selected && user ? payableLimit(accounts, myWaiting, user.id, selected).limit : 0;
+  // Without a voucher, propose the suggested transfer (what the row says you owe this person).
+  const edge = creditors.find((c) => c.acreedorId === selected)?.monto ?? 0;
+  const suggested = lectura?.monto && lectura.monto <= limit ? lectura.monto : Math.min(limit, edge || limit);
   const amountText = typed ?? (suggested ? centavosASoles(suggested) : "");
   const value = parseMoney(amountText) || 0;
   const effectiveMethod: MetodoPago = method ?? lectura?.app ?? "yape";
@@ -70,12 +92,6 @@ export default function Payment() {
     ? (group.miembros ?? []).filter((m) => m.rol === "admin" && m.usuarioId !== user?.id && m.usuarioId !== selected).map((m) => nombre(m.usuarioId))
     : [];
 
-  // Is there already a payment to this person waiting for approval? Then show it instead of the form.
-  const history = useQuery<Pago[]>({
-    queryKey: ["pagos"],
-    queryFn: () => api.get("/pagos/historial").then((r) => r.data),
-    enabled: focused && !!grupoId,
-  });
   const waiting = history.data?.find((p) => p.grupoId === grupoId && p.pagadorId === user?.id && p.receptorId === selected && p.estado === "reportado");
   const done = reported ?? waiting ?? null;
 
@@ -152,6 +168,8 @@ export default function Payment() {
       await Promise.all(["pagos", "actividad", "grupos"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
     } catch (err) {
       setError(errorText(err, "No pudimos registrar el pago. Reintenta."));
+      // It may have been saved before the answer was lost: refresh so an existing report shows up.
+      void queryClient.invalidateQueries({ queryKey: ["pagos"] });
       // The voucher draft may have expired or been used: read it again on the next try.
       if ((err as { response?: { status?: number } }).response?.status === 409 && lectura) setLectura({ ...lectura, duplicado: errorText(err, "Este comprobante ya no se puede usar.") });
     } finally {
@@ -185,7 +203,7 @@ export default function Payment() {
           {!confirmed && <Label size={13}>{approvalSentence(receiver, admins)}</Label>}
         </Card>
         <Button title="Ver el pago y comentarios" onPress={() => router.replace(`/(app)/pagos/${done.id}`)} />
-        <Button title="Volver al grupo" secondary onPress={() => router.replace(`/(app)/grupos/${grupoId}`)} />
+        <Button title="Volver al grupo" secondary onPress={() => router.dismissTo(`/(app)/grupos/${grupoId}`)} />
       </Screen>
     );
   }
@@ -200,7 +218,7 @@ export default function Payment() {
         {params.compartido === "1" && !!peekSharedVoucher() && (
           <Button title="Elegir otro grupo para la imagen" onPress={() => router.replace("/(app)/pagos/compartido")} />
         )}
-        <Button title="Volver al grupo" secondary={params.compartido === "1"} onPress={() => router.replace(`/(app)/grupos/${grupoId}`)} />
+        <Button title="Volver al grupo" secondary={params.compartido === "1"} onPress={() => router.dismissTo(`/(app)/grupos/${grupoId}`)} />
       </Screen>
     );
 
@@ -293,7 +311,7 @@ export default function Payment() {
                 {lectura.monto == null && lectura.candidatos.length > 1 && (
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
                     {lectura.candidatos.map((c) => (
-                      <Pressable key={c} accessibilityRole="button" accessibilityLabel={`Usar ${money(c)}`} onPress={() => setTyped(centavosASoles(c))} style={{ paddingHorizontal: 10, minHeight: 36, justifyContent: "center", borderRadius: 12, backgroundColor: palette.lilac }}>
+                      <Pressable key={c} accessibilityRole="button" accessibilityLabel={`Usar ${money(c)}`} onPress={() => setTyped(centavosASoles(c))} style={{ paddingHorizontal: 12, minHeight: 44, justifyContent: "center", borderRadius: 12, backgroundColor: palette.lilac }}>
                         <Label size={12} weight="bold" color={palette.purple}>{money(c)}</Label>
                       </Pressable>
                     ))}
@@ -308,9 +326,9 @@ export default function Payment() {
               <Label size={13} color={palette.muted}>No se pudo leer todavía.</Label>
             )}
             <View style={{ flexDirection: "row", gap: 14, marginTop: "auto" }}>
-              {!reading && !lectura && <Pressable accessibilityRole="button" onPress={() => read(image.base64)} style={{ minHeight: 40, justifyContent: "center" }}><Label size={13} weight="bold" color={palette.purple}>Reintentar</Label></Pressable>}
-              {!reading && <Pressable accessibilityRole="button" onPress={() => pick(false)} style={{ minHeight: 40, justifyContent: "center" }}><Label size={13} weight="bold" color={palette.purple}>Cambiar</Label></Pressable>}
-              {!reading && <Pressable accessibilityRole="button" onPress={removeVoucher} style={{ minHeight: 40, justifyContent: "center" }}><Label size={13} weight="bold" color={palette.muted}>Quitar</Label></Pressable>}
+              {!reading && !lectura && <Pressable accessibilityRole="button" accessibilityLabel="Reintentar la lectura del comprobante" onPress={() => read(image.base64)} style={{ minHeight: 44, justifyContent: "center" }}><Label size={13} weight="bold" color={palette.purple}>Reintentar</Label></Pressable>}
+              {!reading && <Pressable accessibilityRole="button" accessibilityLabel="Cambiar el comprobante" onPress={() => pick(false)} style={{ minHeight: 44, justifyContent: "center" }}><Label size={13} weight="bold" color={palette.purple}>Cambiar</Label></Pressable>}
+              {!reading && <Pressable accessibilityRole="button" accessibilityLabel="Quitar el comprobante" onPress={removeVoucher} style={{ minHeight: 44, justifyContent: "center" }}><Label size={13} weight="bold" color={palette.muted}>Quitar</Label></Pressable>}
             </View>
           </View>
         </Card>

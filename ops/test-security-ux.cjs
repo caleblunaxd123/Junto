@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const { PrismaClient } = require("@prisma/client");
 const bcrypt = require("bcryptjs");
 const origin = require("./local-qa.cjs").localQa();
+const { acceptInvite } = require("./accept-invite.cjs");
 const db = new PrismaClient();
 const suffix = Date.now();
 const password = `JuntoQA${suffix}!`;
@@ -121,10 +122,12 @@ async function run() {
     { nombre: `QA seguridad y corrección ${suffix}`, tipo: "amigos" },
     201,
   );
-  for (const person of [a, l])
+  for (const person of [a, l]) {
     await request(`/grupos/${group.id}/invitar`, c.accessToken, "POST", {
       identificador: person.usuario.email,
     });
+    await acceptInvite(origin, person.accessToken, group.id);
+  }
   const participantes = [c, a, l].map((s) => ({ usuarioId: s.usuario.id }));
   await request(
     `/grupos/invitacion/${group.linkInvitacion}`,
@@ -137,7 +140,9 @@ async function run() {
     `/grupos/invitacion/${group.linkInvitacion}`,
     outside.accessToken,
   );
-  assert.deepEqual(Object.keys(preview).sort(), ["miembros", "nombre", "tipo"]);
+  // What joining means (mode and, if a bill in parts exists, the part) is shown; nothing about members.
+  assert.deepEqual(Object.keys(preview).sort(), ["cuenta", "miembros", "modo", "nombre", "tipo"]);
+  if (preview.cuenta) assert.deepEqual(Object.keys(preview.cuenta).sort(), ["descripcion", "libres", "montoTotal", "pagadorNombre", "parte", "partes"]);
   assert.equal(preview.nombre, group.nombre);
   assert.equal(preview.miembros, 3);
   const expense = await request(

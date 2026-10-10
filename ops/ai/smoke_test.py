@@ -27,7 +27,8 @@ unauthorized = request("/v1/extract-expense", {"text": "S/ 10"})
 started = time.perf_counter()
 authorized = request(
     "/v1/extract-expense",
-    {"text": "Caleb pagó S/ 100.01 por el almuerzo de Ana, Luis y Caleb, en partes iguales."},
+    {"text": "Caleb se encargó de pagar S/100.01 por el almuerzo para Caleb, Ana y Luis.",
+     "members": ["Caleb", "Ana", "Luis"], "amount_cents": 10001, "current_user_index": 0},
     authenticated=True,
 )
 

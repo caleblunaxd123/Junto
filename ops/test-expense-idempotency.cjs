@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const { PrismaClient } = require("@prisma/client");
 const origin = require("./local-qa.cjs").localQa();
+const { acceptInvite } = require("./accept-invite.cjs");
 const db = new PrismaClient();
 const suffix = Date.now();
 async function call(path, token, method = "GET", body) {
@@ -20,6 +21,7 @@ async function run() {
   const luis = await account("luis");
   const group = (await call("/grupos", ana.accessToken, "POST", { nombre: `QA idempotencia ${suffix}`, tipo: "amigos" })).data;
   await call(`/grupos/${group.id}/invitar`, ana.accessToken, "POST", { identificador: luis.usuario.email });
+  await acceptInvite(origin, luis.accessToken, group.id);
   const body = { descripcion: "Pizza", montoTotal: 6000, pagadoPor: ana.usuario.id, participantes: [{ usuarioId: ana.usuario.id }, { usuarioId: luis.usuario.id }], solicitudId: `gasto_qa_${suffix}` };
   // Double tap: two identical requests at once.
   const [first, second] = await Promise.all([call(`/grupos/${group.id}/gastos`, ana.accessToken, "POST", body), call(`/grupos/${group.id}/gastos`, ana.accessToken, "POST", body)]);

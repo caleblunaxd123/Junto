@@ -10,9 +10,11 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateTimePicker from "../../../src/components/ui/ExpenseDatePicker";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../src/lib/api";
+import { errorMessage } from "../../../src/lib/errorMessage";
+import { useResponsiveLayout } from "../../../src/components/ui/responsive";
 import { router, useLocalSearchParams } from "expo-router";
 import {
   useGrupos,
@@ -55,10 +57,12 @@ function Field({
   );
 }
 export default function Expense({ editing = false }: { editing?: boolean }) {
+  const { tablet } = useResponsiveLayout();
   const rawParams = useLocalSearchParams<{
     grupoId?: string;
     texto?: string;
     gastoId?: string;
+    cuenta?: string;
   }>();
   const params = {
     ...rawParams,
@@ -233,10 +237,10 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       setProposal(
         `${p.explicacion}${p.nombresSinCoincidencia.length ? ` Revisa: ${p.nombresSinCoincidencia.join(", ")}.` : ""}`,
       );
-    } catch {
+    } catch (err) {
       if (request.signal.aborted) return;
       setError(
-        "No pudimos preparar la propuesta. Puedes completar el formulario manualmente.",
+        errorMessage(err, "No pudimos preparar la propuesta. Puedes completar el formulario manualmente."),
       );
     } finally {
       if (proposalRequest.current === request) {
@@ -283,7 +287,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       setIds(group?.miembros.map((member) => member.usuarioId) || []);
       setPayer(user?.id || "");
       requestId.current = newRequestId();
-      router.replace(
+      // Back to the screen this came from (the group or the expense), never a second copy of it.
+      router.dismissTo(
         params.gastoId
           ? `/(app)/gastos/${params.gastoId}`
           : `/(app)/grupos/${groupId}`,
@@ -295,10 +300,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       // so): the next attempt is a new request. With no answer (timeout, no signal) we keep the key,
       // so retrying cannot create a second copy.
       if (status && status >= 400 && status < 500) requestId.current = newRequestId();
-      setError(
-        e.response?.data?.error ||
-          (status ? "No se pudo guardar. Tus datos siguen aquí." : "No sabemos si se guardó: revisa tu conexión y vuelve a tocar Guardar. No se creará un gasto repetido."),
-      );
+      setError(errorMessage(err, "No sabemos si se guardó: revisa tu conexión y vuelve a tocar Guardar. Se comprobará la misma solicitud para evitar un gasto repetido."));
     } finally {
       saving.current = false;
     }
@@ -307,7 +309,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   return (
     <Screen
       resetOnFocus
-      title={params.gastoId ? "Corregir gasto" : "Agregar gasto"}
+      title={params.gastoId ? "Corregir gasto" : params.cuenta === "1" ? "Total y reparto" : "Agregar gasto"}
       subtitle={
         params.gastoId
           ? "Se actualizará el gasto existente, no se creará otro."
@@ -317,6 +319,11 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       }
       back
     >
+      {params.cuenta === "1" && !params.gastoId && <Card style={{ backgroundColor: palette.mint, gap: 8 }}>
+        <Label weight="bold">Registra la cuenta una sola vez</Label>
+        <Label size={13}>Escribe el total ya pagado, elige quién lo adelantó y reparte entre quienes participaron. Ejemplo: S/ 500 entre 5 son S/ 100 por persona.</Label>
+        <Label size={12} color={palette.muted}>Después, los integrantes usan «Registrar mi pago» para indicar cuánto devolvieron. No vuelvan a añadir esos pagos como gastos. Si falta alguien, invítalo antes de guardar el reparto.</Label>
+      </Card>}
       {params.gastoId && original.isLoading ? (
         <ActivityIndicator color={palette.primary} />
       ) : params.gastoId && original.isError ? (
@@ -529,7 +536,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
               </Pressable>
             </Field>
             )}
-            <Field label="Pagó">
+            <Field label={params.cuenta === "1" ? "¿Quién adelantó el total?" : "Pagó"}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Pagó: ${selectedPayer ? nameOf(selectedPayer.usuarioId) : "elige"}. Cambiar`}
@@ -771,7 +778,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
           )}
           {!!error && <ErrorBox message={error} />}
           <Button
-            title={params.gastoId ? "Guardar corrección" : "Guardar gasto"}
+            title={params.gastoId ? "Guardar corrección" : params.cuenta === "1" ? "Guardar total y reparto" : "Guardar gasto"}
             onPress={save}
             loading={create.isPending}
             disabled={!valid || !description.trim() || !payer}
@@ -786,12 +793,17 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
               style={{
                 flex: 1,
                 backgroundColor: "#08264455",
-                justifyContent: "flex-end",
+                justifyContent: tablet ? "center" : "flex-end",
+                alignItems: tablet ? "center" : "stretch",
+                padding: tablet ? 24 : 0,
               }}
             >
               <View
                 style={{
                   backgroundColor: "white",
+                  width: "100%",
+                  maxWidth: tablet ? 560 : undefined,
+                  borderRadius: tablet ? 28 : undefined,
                   padding: 24,
                   borderTopLeftRadius: 28,
                   borderTopRightRadius: 28,

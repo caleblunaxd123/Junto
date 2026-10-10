@@ -62,7 +62,7 @@ junto/
 ## Features MVP
 
 1. **Auth** — Registro, login, OTP para recuperar contraseña
-2. **Grupos** — Crear grupos, invitar miembros, calcular saldos
+2. **Grupos** — Crear grupos, invitar por enlace o por correo/celular, calcular saldos. Invitar por correo o celular no agrega a nadie: la persona ve la invitación en su Inicio y decide; la respuesta al invitar es la misma tenga o no cuenta, y nunca revela su nombre.
 3. **Gastos** — Registrar gastos, dividir en partes iguales/exactas/porcentajes
 4. **Cuentas puntuales** — Total manual o foto revisada, nombres sin registro, invitados, reparto exacto en céntimos, aportes parciales, historial, archivo y exportación de texto/imagen.
 5. **Pagos con comprobante** — Cada integrante sube la captura de su Yape, Plin o transferencia; JUNTO la lee (monto, app, operación, destinatario, fecha) y la registra como su pago. Lo aprueba quien recibe o, si el grupo lo permite, la administración. No hay cobro automático ni conexión bancaria.
@@ -124,9 +124,17 @@ Los datos de idioma del OCR vienen en `@tesseract.js-data/spa` (dependencia de l
 
 Pruebas: `node --test -r ts-node/register apps/api/src/domain/voucher.test.ts` (lector con textos ficticios de Yape, Plin y bancos), `node --test ops/test-payment-ux.cjs` (avisos y tarjetas de la app) y, con la API local, `node ops/test-vouchers-comments.cjs` (OCR real sobre `ops/qa-voucher.png`, duplicados, permisos, aprobación concurrente, «No me llegó», comentarios, purga y eliminación de cuenta). `python3 ops/create-voucher-fixture.py` regenera el comprobante ficticio.
 
+## Navegación de la app
+
+`app/(app)` es un Stack: las tres pestañas (Inicio, Actividad, Perfil) viven en `app/(app)/(tabs)` y cada pantalla de detalle se apila encima. Así cada pantalla empieza limpia al abrirse, se desmonta al salir y «Volver» regresa a donde estabas. Antes eran pestañas ocultas que nunca se desmontaban: el formulario de grupo conservaba el anterior, pagar mostraba el pago viejo y «Volver» iba a Inicio. Para regresar a una pantalla que ya está en la pila (por ejemplo, al grupo después de guardar un gasto) se usa `router.dismissTo`, no `replace`, para no apilar copias. `ops/test-ui-patterns.cjs` impide volver a montar detalles como pestañas.
+
+## Dependencias y avisos de seguridad
+
+`npm audit` se revisó por dónde corre cada paquete. Lo que corre en la API en producción quedó sin avisos: express 4.22.3 (qs, path-to-regexp, body-parser), @fastify/busboy 3.2.2, `uuid` 11 dentro de gaxios (override en `package.json`) y Sentry 10. En la app, nanoid 3.3.20; `decode-uri-component`/`query-string` siguen marcados, pero expo-router no usa la función afectada y su arreglo exige otra versión mayor de Expo. Los avisos restantes son de herramientas de compilación (Expo CLI, metro, tailwind, babel) que no se distribuyen. No uses `npm audit fix --force`: degrada nativewind y salta a Expo 57.
+
 ## Pruebas de interfaz en web
 
-`ops/e2e-web.cjs` recorre en un navegador del tamaño de un teléfono: invitación pendiente tras iniciar sesión, sesión expirada, corte de red al guardar un gasto (debe quedar uno solo), volver atrás y reabrir un borrador. Necesita la API en `:3005` con una base de pruebas, Expo web en `:8081` y Chromium con `playwright-core`; esas dependencias web no forman parte del proyecto:
+`ops/e2e-web.cjs` recorre en un navegador del tamaño de un teléfono: invitación pendiente tras iniciar sesión, sesión expirada, corte de red al guardar un gasto (debe quedar uno solo), volver atrás y reabrir un borrador, «Volver» dentro de un grupo, crear un segundo grupo con el formulario vacío y aceptar una invitación por correo desde Inicio. Necesita la API en `:3005` con una base de pruebas, Expo web en `:8081` y Chromium con `playwright-core`; esas dependencias web no forman parte del proyecto:
 
 ```bash
 npm install --no-save react-native-web@~0.21.0 react-dom@19.1.0 @expo/metro-runtime@~6.1.2 playwright-core --workspace=apps/mobile
@@ -136,7 +144,7 @@ DATABASE_URL=postgresql://…localhost…/<base de pruebas> node ops/e2e-web.cjs
 
 `ops/e2e-vouchers.cjs` recorre comprobantes: Luis sube la captura, Ana (administradora) la revisa y aprueba, Marta ve quién aprobó y todos comentan. Genera un comprobante ficticio único con `python3` + Pillow; `QA_SCREENSHOTS=<carpeta>` guarda capturas (las de `ops/screenshots/comprobantes/` salieron de ahí).
 
-En web `expo-secure-store` no existe y zustand usa `import.meta`; para correrlo localmente se usó un reemplazo temporal en `node_modules` y `unstable_transformImportMeta` en babel, **sin** subir esos cambios. La web no sustituye pruebas nativas de teclado, Google, adjuntos o navegación de Android/iOS.
+La beta web usa `tokenStorage.web.ts`: la sesión se conserva solo en `sessionStorage` de la pestaña, no en `localStorage`; Android/iOS siguen usando SecureStore nativo. Babel transforma `import.meta` para zustand. No modificar `node_modules` para habilitar web. La web no sustituye pruebas nativas de teclado, Google, adjuntos o navegación de Android/iOS. Véase `ops/web/README.md`.
 
 ## Google y Android local
 

@@ -41,12 +41,31 @@ model Usuario {
   refreshTokens       RefreshToken[]
   cuentasRapidas      CuentaRapida[]
   correosCompartidos  CorreoCompartido[]
+  invitacionesRecibidas Invitacion[]    @relation("InvitacionInvitado")
+  invitacionesEnviadas  Invitacion[]    @relation("InvitacionAnfitrion")
   pagosResueltos      Pago[]            @relation("PagoResolutor")
   comprobantes        Comprobante[]
   comentarios         Comentario[]
   reportesComentarios ReporteComentario[]
+  recibosPush         ReciboPush[]
+  avisosRecibidos     AvisoGrupo[] @relation("AvisoDestinatario")
+  avisosOriginados    AvisoGrupo[] @relation("AvisoIntegrante")
 
   @@map("usuarios")
+}
+
+// Short-lived delivery metadata only: never notification bodies, amounts or group data.
+// "aceptado" means Expo queued it, not that the person saw it. Purged after 24 h.
+model ReciboPush {
+  ticketId        String    @id @map("ticket_id") @db.VarChar(200)
+  usuarioId       String    @map("usuario_id") @db.Uuid
+  token           String    @db.VarChar(200)
+  fechaCreacion   DateTime  @default(now()) @map("fecha_creacion")
+  ultimaConsulta  DateTime? @map("ultima_consulta")
+  usuario         Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([fechaCreacion, ultimaConsulta])
+  @@map("recibos_push")
 }
 
 // Organizer-managed bills: named guests are NOT fabricated registered users.
@@ -82,6 +101,11 @@ model Grupo {
   // Who may approve a reported payment: "receptor" (only who receives it) or "administrador"
   // (who receives it or a group admin). The payer never approves their own payment.
   aprobacionPagos String    @default("receptor") @map("aprobacion_pagos") @db.VarChar(20)
+  // "cobranza": someone paid everything and the rest pay them back. "division": everyone puts in
+  // toward a goal amount. NULL: groups made before, free expenses.
+  modo            String?   @db.VarChar(12)
+  // Deadline to pay: people who still owe get automatic reminders as it approaches and after.
+  fechaLimite     DateTime? @map("fecha_limite")
 
   // Relations
   creador         Usuario           @relation("GrupoCreador", fields: [creadoPor], references: [id])
@@ -92,7 +116,10 @@ model Grupo {
   configRecordatorio ConfigRecordatorio[]
   comprobantes    Comprobante[]
   comentarios     Comentario[]
+  invitaciones    Invitacion[]
+  avisos          AvisoGrupo[]
 
+  @@index([fechaLimite])
   @@map("grupos")
 }
 
@@ -102,6 +129,8 @@ model GrupoMiembro {
   usuarioId   String    @map("usuario_id") @db.Uuid
   rol         String    @default("miembro") @db.VarChar(10)
   fechaUnion  DateTime  @default(now()) @map("fecha_union")
+  // Last time this member opened the group chat: what came after is "unread".
+  ultimaLectura DateTime? @map("ultima_lectura")
   activo      Boolean   @default(true)
 
   // Relations
@@ -111,6 +140,23 @@ model GrupoMiembro {
   @@unique([grupoId, usuarioId])
   @@index([usuarioId])
   @@map("grupo_miembros")
+}
+
+// Saved in the same transaction as joining. Push is optional, the in-app notice is durable.
+model AvisoGrupo {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  grupoId      String   @map("grupo_id") @db.Uuid
+  usuarioId    String   @map("usuario_id") @db.Uuid
+  integranteId String   @map("integrante_id") @db.Uuid
+  fecha        DateTime @default(now())
+  leido        Boolean  @default(false)
+  parte        Int? // cents of the free part the newcomer took, if any
+  grupo        Grupo    @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  usuario      Usuario  @relation("AvisoDestinatario", fields: [usuarioId], references: [id], onDelete: Cascade)
+  integrante   Usuario  @relation("AvisoIntegrante", fields: [integranteId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, leido, fecha])
+  @@map("avisos_grupo")
 }
 
 model Gasto {
@@ -127,6 +173,8 @@ model Gasto {
   activo       Boolean   @default(true)
   // Client-generated key: a double tap or a retry after a timeout returns the same expense.
   solicitudId  String?   @map("solicitud_id") @db.VarChar(80)
+  // Equal split in N parts: parts nobody holds yet stay with whoever paid; each person who joins takes one.
+  partes       Int?
 
   // Relations
   grupo        Grupo               @relation(fields: [grupoId], references: [id])
@@ -183,6 +231,9 @@ model Pago {
   comentarios     Comentario[]
 
   @@index([pagadorId])
+  // The ledger reads every payment of a group; approvers look up payments addressed to them.
+  @@index([grupoId])
+  @@index([receptorId])
   @@map("pagos")
 }
 
@@ -321,6 +372,7 @@ model Comentario {
   @@index([gastoId, fechaCreacion])
   @@index([pagoId, fechaCreacion])
   @@index([autorId, fechaCreacion])
+  @@index([grupoId, fechaCreacion])
   @@map("comentarios")
 }
 
@@ -335,4 +387,26 @@ model ReporteComentario {
 
   @@unique([comentarioId, usuarioId])
   @@map("reportes_comentarios")
+}
+
+// Someone added by e-mail or phone is only invited: nothing of the group is shared with them, and
+// they are not shared with the group, until they accept.
+model Invitacion {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  grupoId        String    @map("grupo_id") @db.Uuid
+  invitadoId     String    @map("invitado_id") @db.Uuid
+  invitadoPor    String    @map("invitado_por") @db.Uuid
+  // pendiente | aceptada | rechazada
+  estado         String    @default("pendiente") @db.VarChar(12)
+  fechaCreacion  DateTime  @default(now()) @map("fecha_creacion")
+  fechaRespuesta DateTime? @map("fecha_respuesta")
+
+  grupo          Grupo     @relation(fields: [grupoId], references: [id])
+  invitado       Usuario   @relation("InvitacionInvitado", fields: [invitadoId], references: [id])
+  anfitrion      Usuario   @relation("InvitacionAnfitrion", fields: [invitadoPor], references: [id])
+
+  @@unique([grupoId, invitadoId])
+  @@index([invitadoId, estado])
+  @@index([invitadoPor, fechaCreacion])
+  @@map("invitaciones")
 }

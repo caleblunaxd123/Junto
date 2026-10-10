@@ -4,7 +4,7 @@ import { authMiddleware } from '../middleware/auth';
 import { authRateLimit } from '../middleware/authRateLimit';
 
 const router = Router();
-router.use((req, res, next) => req.method === 'POST' && !['/refresh', '/logout', '/verificar-celulares'].includes(req.path) ? authRateLimit(req, res, next) : next());
+router.use((req, res, next) => req.method === 'POST' && !['/refresh', '/logout'].includes(req.path) ? authRateLimit(req, res, next) : next());
 
 router.post('/register', authController.register);
 router.post('/login', authController.login);
@@ -20,7 +20,9 @@ router.patch('/me', authMiddleware, authController.updateProfile);
 router.get('/me/eliminacion', authMiddleware, authController.deletionSummary);
 router.delete('/me', authMiddleware, authRateLimit, authController.deleteAccount);
 router.put('/push-token', authMiddleware, authController.updatePushToken);
+// Signing out of a phone: it must stop receiving this person's payment and comment notices.
+router.delete('/push-token', authMiddleware, authController.clearPushToken);
 
-router.post('/verificar-celulares', authMiddleware, authController.verificarCelulares);
+// /verificar-celulares was removed: it told anyone which phone numbers have a JUNTO account.
 
 export default router;

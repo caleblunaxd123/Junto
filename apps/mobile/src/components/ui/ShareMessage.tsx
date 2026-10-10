@@ -1,19 +1,21 @@
 import React from "react";
 import { ActivityIndicator, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, Share, useWindowDimensions, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ModalSurface } from "./ModalSurface";
 import { Ionicons } from "@expo/vector-icons";
 import * as MailComposer from "expo-mail-composer";
 import * as Clipboard from "expo-clipboard";
 import { captureRef, releaseCapture } from "react-native-view-shot";
-import { Avatar, Card, Label, Button, ErrorBox, palette } from "./Design";
+import { Avatar, Card, Label, Button, ErrorBox, FeedbackBox, palette } from "./Design";
+import { errorMessage } from "../../lib/errorMessage";
 import { FormField } from "./Reference";
 import { useQuery } from "@tanstack/react-query";
 import { shareFingerprint } from "@junto/shared/share";
-import { emailDraftUrl, validShareEmail, whatsappDraftUrl, type ShareMessage } from "../../lib/shareMessage";
+import { emailDraftUrl, validShareEmail, type ShareMessage } from "../../lib/shareMessage";
 import { shareEmailHtml } from "../../lib/shareEmail";
 import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth.store";
 import { AppDialog as Alert } from "./AppDialog";
+import { openWhatsAppDraft, ShareChannelError, shareChannelError } from "../../lib/shareChannel";
 
 type ServerMailResult = { estado: "aceptado" | "fallido" | "incierto" | "enviando"; mensaje: string; destinatario?: string };
 const newMailRequestId = () => `correo_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -31,11 +33,10 @@ function MailOutcome({ result }: { result: ServerMailResult }) {
 
 const money = (cents: number) => `S/ ${(cents / 100).toFixed(2)}`;
 
-function ReportImagePreview({ uri, onClose }: { uri: string; onClose: () => void }) {
+function ReportImageContent({ uri, onClose }: { uri: string; onClose: () => void }) {
   const { width } = useWindowDimensions();
   const [ratio, setRatio] = React.useState(0.6);
-  return <Modal visible animationType="slide" onRequestClose={onClose}>
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}>
+  return <View style={{ flex: 1, backgroundColor: palette.background }}>
       <View style={{ padding: 16, flexDirection: "row", alignItems: "center", gap: 12 }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Cerrar imagen adjunta" onPress={onClose} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: palette.mint, justifyContent: "center", alignItems: "center" }}><Ionicons name="close" size={22} color={palette.ink} /></Pressable>
         <View style={{ flex: 1 }}><Label weight="extra" size={22}>Tu resumen visual</Label><Label size={11} color={palette.muted}>Así se verá la imagen adjunta al correo.</Label></View>
@@ -43,11 +44,10 @@ function ReportImagePreview({ uri, onClose }: { uri: string; onClose: () => void
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         <Image source={{ uri }} accessibilityLabel="Resumen de JUNTO con el total y los aportes por persona" resizeMode="contain"
           onLoad={event => { const { width: w, height: h } = event.nativeEvent.source; if (w > 0 && h > 0) setRatio(w / h); }}
-          style={{ width: Math.max(1, width - 32), aspectRatio: ratio }} />
+          style={{ width: Math.max(1, Math.min(width >= 768 ? 680 : width, width) - 32), aspectRatio: ratio }} />
       </ScrollView>
       <View style={{ padding: 16 }}><Button title="Volver al correo" secondary onPress={onClose} /></View>
-    </SafeAreaView>
-  </Modal>;
+  </View>;
 }
 
 function ChannelButton({ title, icon, onPress, disabled, primary = false, subtle = false }: {
@@ -72,6 +72,21 @@ export function ShareSummary({ message, reportRef }: { message: ShareMessage; re
   const [expanded, setExpanded] = React.useState(false);
   React.useEffect(() => setExpanded(false), [message.body]);
   const preview = message.preview;
+  if (message.invitation) return <View style={{ gap: 14 }}>
+    <Card style={{ backgroundColor: palette.mint, borderColor: "#BDEBD9", padding: 22 }}>
+      <Ionicons name="people-outline" size={36} color="#007E65" />
+      <Label size={12} weight="bold" color="#007E65">UNA INVITACIÓN, NO UN COBRO</Label>
+      <Label size={25} weight="extra">{message.invitation.groupName}</Label>
+      <Label size={14} color={palette.muted}>Anoten quién pagó y vean quién le debe a quién. Cada persona decide si quiere unirse.</Label>
+    </Card>
+    <Card><Label size={15} weight="bold">Así se unirá tu gente</Label>
+      <Label size={13}>1. Abren el enlace de invitación.</Label>
+      <Label size={13}>2. Crean su cuenta o inician sesión.</Label>
+      <Label size={13}>3. Revisan el grupo y confirman que quieren unirse.</Label>
+      <Label size={12} color={palette.muted} selectable>{message.invitation.url}</Label>
+    </Card>
+    <FeedbackBox tone="info" title="Comparte solo con tu grupo" message="Cualquiera con este enlace puede unirse. Abrir WhatsApp o tu correo no envía el mensaje: tú eliges a quién y pulsas enviar." />
+  </View>;
   return <View style={{ gap: 14 }}>
     <View ref={reportRef} collapsable={false} style={{ gap: 14, backgroundColor: palette.background, padding: 2 }}>
     {preview ? <>
@@ -135,12 +150,13 @@ export function ShareSummary({ message, reportRef }: { message: ShareMessage; re
 }
 
 /** User-reviewed handoff. Opening another app is not evidence that a message was sent. */
-export function ShareChannels({ message, disabled = false, reportRef }: { message: ShareMessage; disabled?: boolean; reportRef?: React.RefObject<View | null> }) {
-  const [recipient, setRecipient] = React.useState("");
+type ShareContent = { channels: React.ReactNode; overlay: React.ReactNode | null };
+export function ShareChannels({ message, disabled = false, reportRef, initialChannel, initialRecipient = "", initialNotice = "", renderContent }: { message: ShareMessage; disabled?: boolean; reportRef?: React.RefObject<View | null>; initialChannel?: "mail"; initialRecipient?: string; initialNotice?: string; renderContent?: (content: ShareContent) => React.ReactNode }) {
+  const [recipient, setRecipient] = React.useState(initialRecipient);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
-  const [notice, setNotice] = React.useState("");
-  const [showMail, setShowMail] = React.useState(false);
+  const [notice, setNotice] = React.useState(initialNotice);
+  const [showMail, setShowMail] = React.useState(initialChannel === "mail");
   const [imagePreview, setImagePreview] = React.useState<string | null>(null);
   React.useEffect(() => () => { if (imagePreview) releaseCapture(imagePreview); }, [imagePreview]);
   const gate = React.useRef(false);
@@ -166,25 +182,25 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
     gate.current = true;
     setBusy(true); setError(""); setNotice("");
     try { await action(); setNotice(success); }
-    catch (err) { setError((err as Error).message || "No pudimos abrir la app. Puedes copiar el mensaje."); }
+    catch (err) { setError(shareChannelError(err, errorMessage(err, "No pudimos completar esta acción. Puedes copiar el mensaje o usar otro medio."))); }
     finally { gate.current = false; setBusy(false); }
   }
   async function whatsapp() {
-    const url = whatsappDraftUrl(message, Platform.OS === "web");
-    if (Platform.OS !== "web" && !await Linking.canOpenURL(url))
-      throw new Error("WhatsApp no está disponible en este teléfono. Instálalo o usa «Más opciones» o «Copiar mensaje».");
-    await Linking.openURL(url);
+    await openWhatsAppDraft(message, {
+      web: Platform.OS === "web",
+      openURL: Platform.OS === "web" ? async url => window.location.assign(url) : url => Linking.openURL(url),
+    });
   }
   async function captureReport() {
-    if (!reportRef?.current) throw new Error("Espera a que termine de cargar el resumen antes de preparar el correo.");
+    if (!reportRef?.current) throw new ShareChannelError("Espera a que termine de cargar el resumen antes de preparar el correo.");
     try { return await captureRef(reportRef, { format: "png", quality: 1, result: "tmpfile", fileName: "JUNTO-resumen", width: 1080 }); }
-    catch { throw new Error("No pudimos preparar la imagen del reparto. Reintenta o copia el mensaje."); }
+    catch { throw new ShareChannelError("No pudimos preparar la imagen del reparto. Reintenta o copia el mensaje."); }
   }
   async function mail() {
-    if (invalidEmail) throw new Error("Revisa el correo del destinatario.");
+    if (invalidEmail) throw new ShareChannelError("Revisa el correo del destinatario.");
     if (Platform.OS === "web") { await Linking.openURL(emailDraftUrl(message, email)); return; }
     if (!await MailComposer.isAvailableAsync())
-      throw new Error("Configura una cuenta en Gmail, Outlook o tu app de correo. También puedes copiar el mensaje.");
+      throw new ShareChannelError("Configura una cuenta en Gmail, Outlook o tu app de correo. También puedes copiar el mensaje.");
     let attachment: string | undefined;
     let handedOff = false;
     try {
@@ -202,13 +218,13 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
     } finally { if (attachment && !handedOff) releaseCapture(attachment); }
   }
   async function sendFromJunto() {
-    if (!resource || !validShareEmail(email)) throw new Error("Escribe el correo de la persona que lo recibirá.");
+    if (!resource || !validShareEmail(email)) throw new ShareChannelError("Escribe el correo de la persona que lo recibirá.");
     try {
       const { data } = await api.post<ServerMailResult>("/compartir/correo", {
         recurso: resource, destinatario: email, solicitudId: mailRequest.current, huella: shareFingerprint(message),
       }, { timeout: 30_000 });
       setServerResult(data);
-      mailRequest.current = newMailRequestId();
+      if (data.estado === "aceptado" || data.estado === "fallido") mailRequest.current = newMailRequestId();
     } catch (err) {
       const e = err as { response?: { status?: number; data?: ServerMailResult & { error?: string; code?: string } } };
       const data = e.response?.data;
@@ -219,13 +235,13 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
         return;
       }
       if (data?.code === "EMAIL_NO_CONFIGURADO") availability.refetch();
-      if (!e.response) throw new Error("No sabemos si se envió: revisa tu conexión y vuelve a tocar «Enviar desde JUNTO». Si ya había salido, no se enviará otra vez.");
-      throw new Error(data?.error || "No pudimos enviar el correo. Puedes abrirlo en tu app de correo.");
+      if (!e.response) throw new ShareChannelError("No sabemos si se envió: revisa tu conexión y vuelve a tocar «Enviar desde JUNTO». Si ya había salido, no se enviará otra vez.");
+      throw new ShareChannelError(errorMessage(err, "No pudimos enviar el correo. Puedes abrirlo en tu app de correo."));
     }
   }
   function confirmSend() {
     if (!validShareEmail(email)) { setError("Escribe el correo de la persona que lo recibirá."); return; }
-    Alert.alert("¿Enviar este resumen?", `JUNTO lo enviará a ${email} con tu nombre. Si te responden, la respuesta llegará a tu correo.`, [
+    Alert.alert(message.invitation ? "¿Enviar esta invitación?" : "¿Enviar este resumen?", `JUNTO lo enviará a ${email} con tu nombre. Si te responden, la respuesta llegará a tu correo.`, [
       { text: "Cancelar", style: "cancel" },
       { text: "Enviar", onPress: () => run(sendFromJunto, "") },
     ], {
@@ -234,8 +250,8 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
       footnote: "Se envía una sola vez. JUNTO no guarda esta dirección para escribirle después.",
     });
   }
-  return <View style={{ gap: 10 }}>
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><Label size={15} weight="extra" style={{ flex: 1 }}>Comparte las cuentas claras</Label>{busy && <ActivityIndicator size="small" color={palette.primary} />}</View>
+  const channels = <View style={{ gap: 10 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><Label size={15} weight="extra" style={{ flex: 1 }}>{message.invitation ? "¿Cómo enviamos la invitación?" : "Comparte las cuentas claras"}</Label>{busy && <ActivityIndicator size="small" color={palette.primary} />}</View>
     {!!error && <View accessibilityLiveRegion="assertive"><ErrorBox message={error} /></View>}
     <View style={{ flexDirection: "row", gap: 10 }}>
       <ChannelButton title="WhatsApp" icon="logo-whatsapp" primary disabled={disabled || busy} onPress={() => run(whatsapp, "Elige el chat y pulsa enviar en WhatsApp. JUNTO no puede confirmar el envío.")} />
@@ -247,8 +263,8 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
     </View>
     {!!notice && <Card style={{ backgroundColor: palette.mint, padding: 12 }}><Label accessibilityLiveRegion="polite" size={13}>{notice}</Label></Card>}
     <Label size={11} color={palette.muted} style={{ textAlign: "center" }}>Tú eliges a quién enviarlo. JUNTO no mueve dinero.</Label>
-    <Modal visible={showMail} animationType="slide" onRequestClose={() => !busy && setShowMail(false)}>
-      <SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}>
+  </View>;
+  const mailContent =
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={{ padding: 16, flexDirection: "row", alignItems: "center", gap: 12 }}>
             <Pressable accessibilityRole="button" accessibilityLabel="Volver a las opciones para compartir" accessibilityState={{ disabled: busy }} disabled={busy} onPress={() => setShowMail(false)} style={{ width: 44, height: 44, backgroundColor: "#F0F5FC", borderRadius: 22, justifyContent: "center", alignItems: "center" }}><Ionicons name="arrow-back" size={22} color={palette.ink} /></Pressable>
@@ -261,11 +277,13 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
             </Card>
             <FormField label={serverMail ? "Para" : "Destinatario (opcional)"} value={recipient} onChangeText={setRecipient} editable={!busy && !disabled} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} autoComplete="email" maxLength={254} placeholder="nombre@correo.com" error={invalidEmail ? "Escribe un solo correo válido." : undefined} />
             {!!error && <ErrorBox message={error} />}
+            {!!resource && availability.isFetching && <Label accessibilityLiveRegion="polite" size={12} color={palette.muted}>Comprobando si puedes enviar desde JUNTO…</Label>}
+            {!!resource && availability.isError && <><FeedbackBox title="No pudimos comprobar el envío directo" tone="warning" message="Puedes reintentar o preparar el mensaje en tu app de correo. Aún no se ha enviado nada desde esta pantalla." /><Button compact secondary title="Comprobar envío desde JUNTO" disabled={busy} onPress={() => {void availability.refetch();}} /></>}
             {!!serverResult && <MailOutcome result={serverResult} />}
             {serverMail ? <>
               <Button title={serverResult?.estado === "aceptado" ? "Enviado ✓" : "Enviar desde JUNTO"} loading={busy} disabled={disabled || !email || invalidEmail || serverResult?.estado === "aceptado"} onPress={confirmSend} />
               <Label size={11} color={palette.muted}>{serverResult?.estado === "aceptado" ? "Para enviarlo a otra persona, cambia el correo de arriba." : "Llega con el diseño del resumen, desde JUNTO y con tu nombre. Las respuestas van a tu correo."}</Label>
-              {serverResult?.estado === "incierto" && <Button title="Enviar de nuevo de todos modos" secondary disabled={busy} onPress={() => Alert.alert("¿Enviar otra vez?", "Si el primero sí llegó, la persona recibirá dos correos iguales.", [{ text: "Cancelar", style: "cancel" }, { text: "Enviar otra vez", onPress: () => { mailRequest.current = newMailRequestId(); run(sendFromJunto, ""); } }])} />}
+              {(serverResult?.estado === "incierto" || serverResult?.estado === "enviando") && <Button title="Comprobar sin enviar otra vez" secondary disabled={busy} onPress={() => run(sendFromJunto, "")} />}
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><View style={{ flex: 1, height: 1, backgroundColor: palette.line }} /><Label size={11} color={palette.muted}>o</Label><View style={{ flex: 1, height: 1, backgroundColor: palette.line }} /></View>
             </> : !!resource && availability.data?.disponible === false && <Label size={11} color={palette.muted}>El envío directo desde JUNTO no está activo en esta versión. Usa tu app de correo.</Label>}
             <Button title="Abrir en mi app de correo" secondary={serverMail} loading={busy && !serverMail} disabled={disabled || invalidEmail} onPress={() => run(mail, "Volviste de tu app de correo. Si no pulsaste enviar, el mensaje sigue sin compartir. JUNTO no puede comprobar la entrega.")} />
@@ -276,30 +294,40 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
               <Label size={11} color="#6543C4">El correo incluye el resumen visual como imagen adjunta para conservar el diseño.</Label>
             </>}
             {!!notice && <Card style={{ backgroundColor: palette.mint, padding: 12 }}><Label size={12} accessibilityLiveRegion="polite">{notice}</Label></Card>}
-            <Label size={11} color={palette.muted}>Solo preparas el mensaje: revisa el destinatario y pulsa enviar en tu app de correo. No necesitamos acceder a tu buzón ni a tus contactos.</Label>
+            <Label size={11} color={palette.muted}>{serverMail ? "«Enviar desde JUNTO» entrega el resumen al proveedor, pero no confirma su recepción o lectura. «Abrir en mi app» solo prepara el mensaje: tú pulsas enviar." : "Solo preparas el mensaje: revisa el destinatario y pulsa enviar en tu app de correo."} No necesitamos acceder a tu buzón ni a tus contactos.</Label>
           </ScrollView>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
-    </Modal>
-    {!!imagePreview && <ReportImagePreview uri={imagePreview} onClose={() => { setImagePreview(null); setShowMail(true); }} />}
-  </View>;
+        </KeyboardAvoidingView>;
+  const imageContent = imagePreview ? <ReportImageContent uri={imagePreview} onClose={() => { setImagePreview(null); setShowMail(true); }} /> : null;
+  // A sheet already owns a native window. Switch its content instead of stacking native Modals.
+  if (renderContent) return renderContent({ channels, overlay: imageContent || (showMail ? mailContent : null) });
+  return <>{channels}
+    {showMail && <Modal transparent visible animationType="slide" onRequestClose={() => !busy && setShowMail(false)}><ModalSurface>{mailContent}</ModalSurface></Modal>}
+    {!!imageContent && <Modal transparent visible animationType="slide" onRequestClose={() => { setImagePreview(null); setShowMail(true); }}><ModalSurface>{imageContent}</ModalSurface></Modal>}
+  </>;
 }
 
-export function ShareMessageSheet({ message, onClose, disabled = false }: { message: ShareMessage | null; onClose: () => void; disabled?: boolean }) {
+export function ShareMessageSheet({ message, onClose, disabled = false, initialChannel, initialRecipient, initialNotice }: { message: ShareMessage | null; onClose: () => void; disabled?: boolean; initialChannel?: "mail"; initialRecipient?: string; initialNotice?: string }) {
   const report = React.useRef<View>(null);
-  return <Modal visible={!!message} animationType="slide" onRequestClose={onClose}>
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}>
+  if (!message) return null;
+  return <Modal transparent visible animationType="slide" onRequestClose={onClose}>
+    <ModalSurface>
+      <ShareChannels key={`${message.body}:${initialChannel || ""}:${initialRecipient || ""}`} message={message} reportRef={report} disabled={disabled} initialChannel={initialChannel} initialRecipient={initialRecipient} initialNotice={initialNotice}
+        renderContent={({ channels, overlay }) => <View style={{ flex: 1 }}>
+        <View style={{ flex: 1 }} pointerEvents={overlay ? "none" : "auto"} accessibilityElementsHidden={!!overlay} importantForAccessibility={overlay ? "no-hide-descendants" : "auto"}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={{ flexDirection: "row", alignItems: "center", padding: 16, gap: 12 }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Cerrar vista para compartir" onPress={onClose} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 22, backgroundColor: "#F0F5FC" }}><Ionicons name="close" size={22} color={palette.ink} /></Pressable>
-        <View style={{ flex: 1, gap: 2 }}><Label accessibilityRole="header" weight="extra" size={22}>Listo para compartir</Label><Label size={11} color={palette.muted}>Revisa el reparto. Tú decides cómo enviarlo.</Label></View>
+        <View style={{ flex: 1, gap: 2 }}><Label accessibilityRole="header" weight="extra" size={22}>{message?.invitation ? "Invita a tu gente" : "Listo para compartir"}</Label><Label size={11} color={palette.muted}>{message?.invitation ? "Revisa el grupo. Tú decides a quién enviarlo." : "Revisa el reparto. Tú decides cómo enviarlo."}</Label></View>
       </View>
       <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 12 }}>
         {!!message && <ShareSummary message={message} reportRef={report} />}
       </ScrollView>
-      {!!message && <ScrollView style={{ flexGrow: 0, maxHeight: "75%", borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: "white" }} keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 }}><ShareChannels message={message} reportRef={report} disabled={disabled} /></ScrollView>}
+      <ScrollView style={{ flexGrow: 0, maxHeight: "75%", borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: "white" }} keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 }}>{channels}</ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+        </View>
+        {!!overlay && <View style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, backgroundColor: palette.background }} accessibilityViewIsModal>{overlay}</View>}
+        </View>} />
+    </ModalSurface>
   </Modal>;
 }

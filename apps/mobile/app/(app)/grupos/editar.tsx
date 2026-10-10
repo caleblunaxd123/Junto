@@ -8,6 +8,7 @@ import { Screen, Card, Label, Button, ErrorBox, design, palette } from "../../..
 import { FormField, ReferenceHero } from "../../../src/components/ui/Reference";
 import { art } from "../../../src/components/ui/Artwork";
 import type { AprobacionPagos, GrupoTipo } from "../../../src/types";
+import { errorMessage } from "../../../src/lib/errorMessage";
 
 const types: { id: GrupoTipo; label: string; image: typeof art.travel }[] = [
   { id: "viaje", label: "Viaje", image: art.travel },
@@ -40,7 +41,7 @@ export default function EditGroup() {
     function goBack() {
       setDraft(undefined);
       if (router.canGoBack()) router.back();
-      else router.replace(`/(app)/grupos/${grupoId}`);
+      else router.dismissTo(`/(app)/grupos/${grupoId}`);
     }
     if (!dirty) { goBack(); return; }
     Alert.alert("¿Salir sin guardar?", "El grupo conservará sus datos anteriores. Tus gastos y pagos no cambiarán.", [
@@ -57,10 +58,9 @@ export default function EditGroup() {
     setError("");
     try {
       await update.mutateAsync({ nombre: draft.nombre.trim(), tipo: draft.tipo, descripcion: draft.descripcion.trim(), aprobacionPagos: draft.aprobacionPagos });
-      router.replace(`/(app)/grupos/${grupoId}`);
+      router.dismissTo(`/(app)/grupos/${grupoId}`);
     } catch (err) {
-      const response = (err as { response?: { data?: { error?: string } } }).response;
-      setError(response?.data?.error || "No pudimos guardar los cambios. Tus datos siguen aquí; revisa tu conexión y reintenta.");
+      setError(errorMessage(err, "No pudimos confirmar los cambios. Tus datos siguen aquí; actualiza el grupo antes de volver a guardar."));
     }
   }
   return (
@@ -71,7 +71,7 @@ export default function EditGroup() {
       </> : group.rolUsuario !== "admin" ? <Card>
         <Label weight="bold">Solo los administradores pueden editar el grupo</Label>
         <Label>Puedes seguir revisando sus gastos y tus cuentas.</Label>
-        <Button title="Volver al grupo" secondary onPress={() => router.replace(`/(app)/grupos/${grupoId}`)} />
+        <Button title="Volver al grupo" secondary onPress={() => router.dismissTo(`/(app)/grupos/${grupoId}`)} />
       </Card> : draft?.id === grupoId && <>
         <ReferenceHero title="El mismo plan, más claro" subtitle="Un nombre fácil de reconocer ayuda a todo el grupo." image={art.group} height={150} />
         <FormField label="Nombre del grupo" icon="people-outline" accessibilityLabel="Nombre del grupo" value={draft.nombre} maxLength={100} editable={!update.isPending} onChangeText={(nombre) => setDraft({ ...draft, nombre })} placeholder="Ej. Gastos de nuestro depa" />

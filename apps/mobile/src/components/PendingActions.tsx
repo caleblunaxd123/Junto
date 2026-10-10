@@ -7,8 +7,11 @@ import { Button, Card, Label, ErrorBox, palette } from "./ui/Design";
 import { useEnviarRecordatorio, useResolverPago } from "../hooks/useGrupos";
 import { centavosASoles } from "../types";
 import type { PendingAction } from "../lib/pending";
+import { errorMessage as serverMessage } from "../lib/errorMessage";
 
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
+// The server explains what happened ("ya fue resuelto", "ya le recordaste hace poco"); a generic
+// connection message only when there is no answer at all.
 const methods: Record<string, string> = { yape: "Yape", plin: "Plin", transferencia: "transferencia", efectivo: "efectivo" };
 
 /** One card per thing the viewer has to do, with the action right there. */
@@ -32,8 +35,8 @@ export function PendingActions({ actions, showGroup = true }: { actions: Pending
             try {
               setError("");
               await resolve.mutateAsync({ pagoId: action.pagoId, confirmar: received });
-            } catch {
-              setError("No pudimos guardar tu respuesta. Revisa tu conexión y reintenta.");
+            } catch (err) {
+              setError(serverMessage(err, "No pudimos guardar tu respuesta. Revisa tu conexión y reintenta."));
             }
           },
         },
@@ -51,8 +54,8 @@ export function PendingActions({ actions, showGroup = true }: { actions: Pending
             setError("");
             await remind.mutateAsync({ grupoId: action.grupoId, deudorId: action.personaId, tono: "suave" });
             setSent((current) => [...current, action.key]);
-          } catch {
-            setError("No pudimos enviar el recordatorio. Reintenta en un momento.");
+          } catch (err) {
+            setError(serverMessage(err, "No pudimos enviar el recordatorio. Reintenta en un momento."));
           }
         },
       },
@@ -73,7 +76,7 @@ export function PendingActions({ actions, showGroup = true }: { actions: Pending
               </Label>
               {where}
               {action.conComprobante && (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Ver el comprobante del pago de ${action.persona}`} onPress={() => router.push(`/(app)/pagos/${action.pagoId}`)} style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 40 }}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Ver el comprobante del pago de ${action.persona}`} onPress={() => router.push(`/(app)/pagos/${action.pagoId}`)} style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44 }}>
                   <Ionicons name="receipt-outline" size={18} color={palette.purple} />
                   <Label size={13} weight="bold" color={palette.purple}>Ver comprobante</Label>
                 </Pressable>

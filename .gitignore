@@ -41,3 +41,7 @@ Thumbs.db
 # Capturas y volcados de QA en el emulador
 /emulator-*.png
 /*window.xml
+__pycache__/
+/ai/deepseek-benchmark-*.local.json
+apps/mobile/dist-beta/
+ops/artifacts/

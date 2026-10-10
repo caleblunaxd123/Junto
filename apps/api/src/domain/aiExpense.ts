@@ -1,3 +1,4 @@
+import { extractSpanishAmountCents } from './spanishMoney';
 export interface AiMember {
   id: string;
   nombre: string;
@@ -77,6 +78,9 @@ export function extractExplicitAmountCents(text: string): number | null {
 export function extractLikelyAmountCents(text: string): number | null {
   const explicit = extractExplicitAmountCents(text);
   if (explicit) return explicit;
+  const written = extractSpanishAmountCents(text);
+  if (written) return written;
+  if (/\bsol(?:es)?\b|\bpen\b|s\s*\//i.test(text)) return null;
 
   const normalized = normalizePersonName(text);
   if (!/\b(?:pague|pago|gaste|gasto|costo|salio)\b/.test(normalized)) return null;
@@ -110,7 +114,8 @@ export function inferPayerId(
   currentUserId: string
 ): string | null {
   const normalizedText = ` ${normalizePersonName(text)} `;
-  if (/\b(?:yo\s+)?pague\b/.test(normalizedText)) return currentUserId;
+  if (/\bno\s+(?:pague|gaste|compre)\b/.test(normalizedText)) return null;
+  if (/\b(?:yo\s+)?(?:pague|gaste|compre)\b/.test(normalizedText)) return currentUserId;
 
   const firstNameCounts = new Map<string, number>();
   for (const member of members) {

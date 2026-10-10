@@ -13,6 +13,22 @@ test("distribution cannot silently use a local API or missing legal/support conf
 });
 const { appLinkHost } = require("../apps/mobile/release-config");
 const appConfig = require("../apps/mobile/app.config.js");
+
+test("distribution and App Links refuse IPv6/local aliases and normalized IP tricks", () => {
+  const unsafe = ["localhost.", "api.localhost", "api.local", "api.internal", "api.lan", "server",
+    "127.0.0.2", "127.1", "2130706433", "0x7f000001", "169.254.1.1", "100.64.0.1", "0.0.0.0",
+    "[::1]", "[::]", "[fc00::1]", "[fd12::1]", "[fe80::1]", "[::ffff:127.0.0.1]", "[ff02::1]", "[2001:db8::1]"];
+  for (const host of unsafe) {
+    for (const field of ["EXPO_PUBLIC_API_URL", "EXPO_PUBLIC_PRIVACY_URL", "EXPO_PUBLIC_DELETE_ACCOUNT_URL", "EXPO_PUBLIC_WEB_URL"]) {
+      assert.throws(() => validateReleaseEnvironment({ ...valid, [field]: `https://${host}/path` }), /HTTPS/, `${field}: ${host}`);
+    }
+    assert.equal(appLinkHost({ EXPO_PUBLIC_WEB_URL: `https://${host}` }), null, host);
+  }
+  for (const host of ["api.junto.pe", "8.8.8.8", "[2606:4700:4700::1111]"]) {
+    validateReleaseEnvironment({ ...valid, EXPO_PUBLIC_API_URL: `https://${host}/api` });
+  }
+  assert.equal(appLinkHost({ EXPO_PUBLIC_WEB_URL: "https://user:secret@junto.pe" }), null);
+});
 test("invitation links open the app through verified https App Links", () => {
   assert.equal(appLinkHost({ EXPO_PUBLIC_WEB_URL: "https://junto.pe", EXPO_PUBLIC_API_URL: "https://api.junto.pe" }), "junto.pe");
   assert.equal(appLinkHost({ EXPO_PUBLIC_API_URL: "https://api.junto.pe" }), "api.junto.pe");

@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   View,
   Image,
@@ -11,8 +12,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
-import { useGrupos, usePagos } from "../../src/hooks/useGrupos";
-import { useAuthStore } from "../../src/store/auth.store";
+import { useGrupos, usePagos } from "../../../src/hooks/useGrupos";
+import { useAuthStore } from "../../../src/store/auth.store";
 import {
   Avatar,
   Button,
@@ -21,29 +22,37 @@ import {
   ErrorBox,
   palette,
   design,
-} from "../../src/components/ui/Design";
-import { Brand, SectionTitle } from "../../src/components/ui/Reference";
-import { centavosASoles } from "../../src/types";
-import { useQuickBills } from "../../src/hooks/useQuickBills";
-import { groupCover } from "../../src/components/ui/Artwork";
-import { pendingActions } from "../../src/lib/pending";
-import { PendingActions } from "../../src/components/PendingActions";
-import { AddButton, CreateSheet } from "../../src/components/CreateSheet";
+} from "../../../src/components/ui/Design";
+import { Brand, SectionTitle } from "../../../src/components/ui/Reference";
+import { centavosASoles } from "../../../src/types";
+import { useQuickBills } from "../../../src/hooks/useQuickBills";
+import { art, groupCover } from "../../../src/components/ui/Artwork";
+import { homeState } from "../../../src/lib/homeState";
+import { pendingActions } from "../../../src/lib/pending";
+import { PendingActions } from "../../../src/components/PendingActions";
+import { Invitations } from "../../../src/components/Invitations";
+import { GroupNotices } from "../../../src/components/GroupNotices";
+import { ModeChoice } from "../../../src/components/ModeChoice";
+import { modeWords } from "../../../src/lib/groupMode";
+import { AddButton, CreateSheet } from "../../../src/components/CreateSheet";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AppDialog as Alert } from "../../src/components/ui/AppDialog";
-import { clearTryBill, loadTryBill, tryBillToDraft, type SavedTryBill } from "../../src/lib/tryBillHandoff";
+import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
+import { clearTryBill, loadTryBill, tryBillToDraft, type SavedTryBill } from "../../../src/lib/tryBillHandoff";
+import { useResponsiveLayout } from "../../../src/components/ui/responsive";
 
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
 
 export default function Home() {
   const { usuario } = useAuthStore();
+  const { desktop, web } = useResponsiveLayout();
   const {
-    data: groups = [],
+    data: groupData,
     isLoading,
     isError,
     refetch,
     isRefetching,
   } = useGrupos();
+  const groups = groupData ?? [];
   const payments = usePagos();
   const refetchPayments = payments.refetch;
   const [search, setSearch] = useState("");
@@ -51,12 +60,20 @@ export default function Home() {
   const [allPending, setAllPending] = useState(false);
   const bills = useQuickBills();
   const refreshBills = bills.refetch;
+  const qc = useQueryClient();
   const refreshAll = useCallback(() => {
     refetch();
     refetchPayments();
     refreshBills();
-  }, [refetch, refetchPayments, refreshBills]);
+    void qc.invalidateQueries({ queryKey: ["invitaciones"] });
+    void qc.invalidateQueries({ queryKey: ["notificaciones"] });
+  }, [refetch, refetchPayments, refreshBills, qc]);
   useFocusEffect(refreshAll);
+  // While Home is open, groups refresh on their own so unread badges and balances stay current.
+  useFocusEffect(useCallback(() => {
+    const timer = setInterval(() => { refetch(); }, 15_000);
+    return () => clearInterval(timer);
+  }, [refetch]));
   // A calculation kept from "Probar sin cuenta" (only with consent, only on this phone).
   const [trial, setTrial] = useState<SavedTryBill | null>(null);
   useFocusEffect(useCallback(() => { loadTryBill().then(setTrial).catch(() => setTrial(null)); }, []));
@@ -81,28 +98,46 @@ export default function Home() {
   const filtered = groups.filter((g) =>
     g.nombre.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
   );
-  const empty = !isLoading && !isError && !groups.length && !bills.isLoading && !openBills.length;
+  const { empty, unavailable, canShowAllClear } = homeState(
+    { loading: isLoading, error: isError, hasData: groupData !== undefined },
+    { loading: payments.isLoading, error: payments.isError, hasData: payments.data !== undefined },
+    { loading: bills.isLoading, error: bills.isError, hasData: bills.data !== undefined },
+    groups.length, openBills.length,
+  );
+  const refreshing = isRefetching || payments.isRefetching || bills.isRefetching;
   return (
     <SafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: palette.background }}>
       <ScrollView
-        contentContainerStyle={{ padding: 16, paddingBottom: 110, gap: 16 }}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refreshAll} tintColor={palette.primary} />}
+        contentContainerStyle={{ width: "100%", maxWidth: web ? 1160 : undefined, alignSelf: "center", padding: desktop ? 32 : 16, paddingBottom: desktop ? 40 : 110, gap: desktop ? 24 : 16 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={palette.primary} />}
       >
         <View style={[design.row, { justifyContent: "space-between" }]}>
-          <Brand compact />
+          {desktop ? <Label size={12} weight="bold" color={palette.muted} style={{ letterSpacing: 1 }}>TU ESPACIO EN JUNTO</Label> : <Brand compact />}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Abrir mi perfil"
-            onPress={() => router.push("/(app)/perfil")}
+            onPress={() => router.push("/(app)/(tabs)/perfil")}
             hitSlop={8}
           >
             <Avatar name={usuario?.nombre || "Tú"} photo={usuario?.fotoUrl} seed={usuario?.id} />
           </Pressable>
         </View>
-        <Label accessibilityRole="header" size={26} weight="extra">
+        <Label accessibilityRole="header" size={desktop ? 34 : 26} weight="extra">
           Hola, {usuario?.nombre.split(" ")[0] || "amigo"}
         </Label>
+        {desktop && <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+          <View style={{ flex: 1, minWidth: 200 }}><Label size={15} color={palette.muted}>Todo lo compartido, en un solo lugar.</Label></View>
+          <Button compact title="Dividir una cuenta de hoy" onPress={() => router.push("/(app)/cuentas/rapida")} />
+          <Button compact secondary title="Agregar" onPress={() => setSheet(true)} />
+        </View>}
 
+        <Invitations />
+        <GroupNotices />
+        {/* The two ways to start, always one tap away and explained in one line each. */}
+        <View style={{ gap: 8 }}>
+          <Label weight="bold" size={15}>Crear un grupo</Label>
+          <ModeChoice tiles onPick={(modo) => router.push(`/(app)/grupos/crear?modo=${modo}`)} />
+        </View>
         {trial && (
           <Card style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", gap: 8 }}>
             <Label weight="bold">Tu cálculo de prueba sigue aquí</Label>
@@ -115,17 +150,28 @@ export default function Home() {
             </View>
           </Card>
         )}
-        {empty ? (
-          <Card style={{ gap: 14 }}>
+        {unavailable ? (
+          <Card style={{ gap: 14, backgroundColor: palette.lilac }}>
+            <Ionicons name="cloud-offline-outline" size={34} color={palette.purple} />
+            <Label size={21} weight="extra">No pudimos actualizar tus cuentas</Label>
+            <Label size={14} color={palette.muted}>Todavía no podemos mostrar tus cuentas ni comprobar si hay pagos pendientes. Revisa tu conexión y vuelve a intentar.</Label>
+            {(groupData !== undefined || bills.data !== undefined) && <Label size={12} color={palette.muted}>Conservamos la última consulta, pero no la mostramos como saldo actualizado. Un fallo de conexión no significa que estés al día.</Label>}
+            <Button title="Actualizar mis cuentas" loading={refreshing} onPress={refreshAll} />
+            <Button title="Ver cómo funciona" secondary onPress={() => router.push("/(app)/ejemplo")} />
+          </Card>
+        ) : empty ? (
+          <Card style={{ gap: 24, flexDirection: desktop ? "row" : "column", alignItems: desktop ? "center" : "stretch", padding: desktop ? 32 : 18 }}>
+            <Image source={art.character} resizeMode="contain" accessibilityLabel="Tu compañero de JUNTO, listo para ayudarte con las cuentas" style={{ width: desktop ? "40%" : "100%", height: desktop ? 280 : 140 }} />
+            <View style={{ flex: desktop ? 1 : undefined, gap: 14, minWidth: 0 }}>
             <Label size={19} weight="extra">¿Por dónde empezamos?</Label>
             <Label size={14} color={palette.muted}>
-              Divide la cuenta de hoy en tres pasos, o crea un grupo para los gastos que se repiten.
+              Elige arriba el tipo de grupo. Si es solo una cena y tus amigos no usan JUNTO, divide una cuenta de hoy.
             </Label>
-            <Button title="Dividir una cuenta de hoy" onPress={() => router.push("/(app)/cuentas/rapida")} />
-            <Button title="Crear un grupo" secondary onPress={() => router.push("/(app)/grupos/crear")} />
+            <Button title="Dividir una cuenta de hoy" secondary onPress={() => router.push("/(app)/cuentas/rapida")} />
             <Pressable accessibilityRole="button" onPress={() => router.push("/(app)/ejemplo")} style={{ minHeight: 44, justifyContent: "center", alignItems: "center" }}>
               <Label size={13} weight="bold" color={palette.purple}>Ver un ejemplo explicado</Label>
             </Pressable>
+            </View>
           </Card>
         ) : (
           <>
@@ -147,7 +193,7 @@ export default function Home() {
                   </Pressable>
                 )}
               </>
-            ) : groups.length > 0 && !payments.isLoading ? (
+            ) : canShowAllClear ? (
               <Card style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, backgroundColor: palette.mint, borderColor: "#BDEBD9" }}>
                 <Ionicons name="checkmark-circle" size={28} color="#007B60" />
                 <View style={{ flex: 1 }}>
@@ -157,6 +203,8 @@ export default function Home() {
               </Card>
             ) : null}
 
+            <View style={{ flexDirection: desktop ? "row" : "column", gap: desktop ? 24 : 16, alignItems: "stretch" }}>
+            <View style={{ flex: desktop ? 1.25 : undefined, minWidth: 0, gap: 16 }}>
             <SectionTitle
               title="Tus grupos"
               action={groups.length ? "Ver cuentas" : undefined}
@@ -170,11 +218,7 @@ export default function Home() {
                 <Button title="Reintentar" onPress={() => refetch()} />
               </>
             ) : groups.length === 0 ? (
-              <Card style={{ padding: 14 }}>
-                <Label weight="bold">Aún no tienes grupos</Label>
-                <Label size={13} color={palette.muted}>Para el depa, la pareja o un viaje: guarda quién pagó y quién debe a quién.</Label>
-                <Button title="Crear un grupo" secondary compact onPress={() => router.push("/(app)/grupos/crear")} />
-              </Card>
+              <Label size={13} color={palette.muted}>Aún no tienes grupos. Crea uno arriba.</Label>
             ) : (
               <>
                 {groups.length > 5 && (
@@ -198,7 +242,7 @@ export default function Home() {
                     <Pressable
                       key={g.id}
                       accessibilityRole="button"
-                      accessibilityLabel={`${g.nombre}. ${g.miembros.length} personas. ${status}${waiting ? `. ${waiting} pago por confirmar` : ""}`}
+                      accessibilityLabel={`${g.nombre}. ${g.miembros.length} personas. ${status}${waiting ? `. ${waiting} pago por confirmar` : ""}${g.noLeidos ? `. ${g.noLeidos} sin leer` : ""}`}
                       onPress={() => router.push(`/(app)/grupos/${g.id}`)}
                     >
                       <Card style={{ padding: 12, borderRadius: 22, flexDirection: "row", gap: 12, alignItems: "center" }}>
@@ -209,6 +253,7 @@ export default function Home() {
                         />
                         <View style={{ flex: 1, gap: 4 }}>
                           <Label size={16} weight="extra" numberOfLines={2}>{g.nombre}</Label>
+                          {!!g.modo && <Label size={11} weight="bold" color={g.modo === "division" ? palette.purple : "#007B60"}>{modeWords(g.modo).name.toUpperCase()}</Label>}
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                             <View style={{ flexDirection: "row" }}>
                               {g.miembros.slice(0, 4).map((m, i) => (
@@ -229,7 +274,13 @@ export default function Home() {
                             {waiting ? `${status} · ${waiting} por confirmar` : status}
                           </Label>
                         </View>
-                        <Ionicons name="chevron-forward" size={18} color={palette.muted} />
+                        {g.noLeidos ? (
+                          <View accessibilityLabel={`${g.noLeidos} ${g.noLeidos === 1 ? "novedad" : "novedades"} sin leer`} style={{ minWidth: 26, height: 26, borderRadius: 13, paddingHorizontal: 7, alignItems: "center", justifyContent: "center", backgroundColor: "#25D366" }}>
+                            <Label size={13} weight="extra" color="white">{g.noLeidos > 99 ? "99+" : g.noLeidos}</Label>
+                          </View>
+                        ) : (
+                          <Ionicons name="chevron-forward" size={18} color={palette.muted} />
+                        )}
                       </Card>
                     </Pressable>
                   );
@@ -238,6 +289,8 @@ export default function Home() {
               </>
             )}
 
+            </View>
+            <View style={{ flex: desktop ? 1 : undefined, minWidth: 0, gap: 16 }}>
             <SectionTitle
               title="Cuentas de un día"
               action={bills.data?.length ? "Ver todas" : undefined}
@@ -270,13 +323,15 @@ export default function Home() {
               ))
             ) : (
               <Label size={13} color={palette.muted}>
-                Para una cena o un cumple sin crear grupo: toca «+» y elige «Una cuenta de hoy».
+                {desktop ? "Para una cena o un cumple sin crear grupo: elige «Dividir una cuenta de hoy»." : "Para una cena o un cumple sin crear grupo: toca «+» y elige «Una cuenta de hoy»."}
               </Label>
             )}
+            </View>
+            </View>
           </>
         )}
       </ScrollView>
-      {!empty && <AddButton onPress={() => setSheet(true)} />}
+      {!empty && !desktop && <AddButton onPress={() => setSheet(true)} />}
       <CreateSheet visible={sheet} onClose={() => setSheet(false)} groups={groups} />
     </SafeAreaView>
   );

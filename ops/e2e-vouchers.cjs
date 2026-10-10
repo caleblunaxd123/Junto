@@ -15,6 +15,7 @@ const { PrismaClient } = require("@prisma/client");
 if (!/@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL || "")) throw new Error("Local JUNTO database required");
 const db = new PrismaClient();
 const API = process.env.JUNTO_QA_API || "http://localhost:3005/api";
+const { acceptInvite } = require("./accept-invite.cjs");
 const WEB = process.env.JUNTO_QA_WEB || "http://localhost:8081";
 const CHROMIUM = process.env.CHROMIUM_PATH || "/opt/pw-browsers/chromium";
 const OUT = process.env.QA_SCREENSHOTS;
@@ -58,7 +59,10 @@ const shot = (p, name) => (OUT ? p.screenshot({ path: path.join(OUT, `${name}.pn
   const marta = await account("Marta", "Ríos");
   await db.usuario.update({ where: { id: marta.usuario.id }, data: { celular: "987654321" } });
   const group = await call("/grupos", ana.accessToken, "POST", { nombre: "Viaje a Paracas", tipo: "viaje", aprobacionPagos: "administrador" });
-  for (const person of [luis, marta]) await call(`/grupos/${group.id}/invitar`, ana.accessToken, "POST", { identificador: person.email });
+  for (const person of [luis, marta]) {
+    await call(`/grupos/${group.id}/invitar`, ana.accessToken, "POST", { identificador: person.email });
+    await acceptInvite(API, person.accessToken, group.id);
+  }
   const expense = await call(`/grupos/${group.id}/gastos`, marta.accessToken, "POST", { descripcion: "Pollada en la playa", montoTotal: 5000, pagadoPor: marta.usuario.id, participantes: [luis, marta].map((x) => ({ usuarioId: x.usuario.id })) });
   await call("/comentarios", marta.accessToken, "POST", { gastoId: expense.id, texto: "Incluye las gaseosas 🙂" });
 

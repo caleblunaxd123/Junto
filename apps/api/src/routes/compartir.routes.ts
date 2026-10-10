@@ -12,7 +12,7 @@ router.get("/correo/estado", (_req, res) => {
 });
 
 const sendSchema = z.object({
-  recurso: z.object({ tipo: z.enum(["cuenta_rapida", "grupo", "gasto"]), id: z.string().uuid() }).strict(),
+  recurso: z.object({ tipo: z.enum(["cuenta_rapida", "grupo", "gasto", "invitacion"]), id: z.string().uuid() }).strict(),
   destinatario: z.string().trim().min(3).max(254),
   solicitudId: z.string().regex(/^[A-Za-z0-9_-]{8,80}$/),
   huella: z.string().regex(/^[0-9a-f]{16}$/),

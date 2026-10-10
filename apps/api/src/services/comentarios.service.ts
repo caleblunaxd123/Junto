@@ -4,7 +4,8 @@ import { sendPushNotification } from "../lib/firebase";
 import { transactionLock } from "../lib/transactionLock";
 
 export const COMMENT_LIMITS = { per10Minutes: 30, maxLength: 500 };
-export type CommentTarget = { gastoId: string; pagoId?: undefined } | { pagoId: string; gastoId?: undefined };
+// A group message (the group chat) has neither an expense nor a payment.
+export type CommentTarget = { gastoId: string; pagoId?: undefined; grupoId?: undefined } | { pagoId: string; gastoId?: undefined; grupoId?: undefined } | { grupoId: string; gastoId?: undefined; pagoId?: undefined };
 
 const first = (name: string) => name.trim().split(/\s+/)[0] || name;
 
@@ -20,7 +21,11 @@ export function cleanComment(text: string) {
 /** The expense or payment, its group and who is involved, if the viewer is an active member. */
 async function resolveTarget(userId: string, target: CommentTarget) {
   let found: { grupoId: string; titulo: string; involucrados: string[] } | null = null;
-  if (target.gastoId) {
+  if (target.grupoId) {
+    const grupo = await prisma.grupo.findUnique({ where: { id: target.grupoId }, select: { id: true, nombre: true, miembros: { where: { activo: true }, select: { usuarioId: true } } } });
+    // Everyone in the group hears about a group message, like a group chat.
+    if (grupo) found = { grupoId: grupo.id, titulo: `en «${grupo.nombre}»`, involucrados: grupo.miembros.map((m) => m.usuarioId) };
+  } else if (target.gastoId) {
     const gasto = await prisma.gasto.findUnique({ where: { id: target.gastoId }, select: { grupoId: true, activo: true, descripcion: true, creadoPor: true, pagadoPor: true } });
     if (gasto?.activo) found = { grupoId: gasto.grupoId, titulo: `«${gasto.descripcion}»`, involucrados: [gasto.creadoPor, gasto.pagadoPor] };
   } else {
@@ -28,19 +33,24 @@ async function resolveTarget(userId: string, target: CommentTarget) {
     if (pago) found = { grupoId: pago.grupoId, titulo: `el pago de S/ ${(pago.monto / 100).toFixed(2)}`, involucrados: [pago.pagadorId, pago.receptorId] };
   }
   const member = found && await prisma.grupoMiembro.findFirst({ where: { grupoId: found.grupoId, usuarioId: userId, activo: true, grupo: { activo: true } }, select: { rol: true } });
-  if (!found || !member) throw new UserError(target.gastoId ? "No encontramos este gasto." : "No encontramos este pago.", 404);
+  if (!found || !member) throw new UserError(target.grupoId ? "No encontramos este grupo." : target.gastoId ? "No encontramos este gasto." : "No encontramos este pago.", 404);
   return { ...found, esAdmin: member.rol === "admin" };
+}
+
+function commentWhere(target: CommentTarget) {
+  return target.grupoId ? { grupoId: target.grupoId, gastoId: null, pagoId: null } : target.gastoId ? { gastoId: target.gastoId } : { pagoId: target.pagoId };
 }
 
 export async function listComments(userId: string, target: CommentTarget) {
   const { esAdmin } = await resolveTarget(userId, target);
   const rows = await prisma.comentario.findMany({
-    where: target.gastoId ? { gastoId: target.gastoId } : { pagoId: target.pagoId },
+    where: commentWhere(target),
     include: { autor: { select: { id: true, nombre: true, fotoUrl: true } }, reportes: { where: { usuarioId: userId }, select: { id: true } } },
-    orderBy: { fechaCreacion: "asc" },
+    // The newest 200, shown oldest first: a long thread never hides what was just written.
+    orderBy: { fechaCreacion: "desc" },
     take: 200,
   });
-  return rows.map(({ reportes, ...row }) => ({
+  return rows.reverse().map(({ reportes, ...row }) => ({
     id: row.id,
     texto: row.eliminado ? "" : row.texto,
     eliminado: row.eliminado,
@@ -57,7 +67,7 @@ export async function createComment(userId: string, input: CommentTarget & { tex
   if (!texto) throw new UserError("Escribe un comentario.");
   if (texto.length > COMMENT_LIMITS.maxLength) throw new UserError(`El comentario puede tener hasta ${COMMENT_LIMITS.maxLength} caracteres.`);
   const target = await resolveTarget(userId, input);
-  const where = input.gastoId ? { gastoId: input.gastoId } : { pagoId: input.pagoId };
+  const where = commentWhere(input);
   // A double tap or a retry right after sending returns the same comment, never a copy.
   const result = await prisma.$transaction(async (tx) => {
     await transactionLock(tx, `comments:${userId}`);
@@ -65,7 +75,7 @@ export async function createComment(userId: string, input: CommentTarget & { tex
     if (repeated) return { id: repeated.id, repetido: true as const };
     const recent = await tx.comentario.count({ where: { autorId: userId, fechaCreacion: { gte: new Date(Date.now() - 10 * 60_000) } } });
     if (recent >= COMMENT_LIMITS.per10Minutes) throw new UserError("Escribiste muchos comentarios seguidos. Espera unos minutos.", 429);
-    const created = await tx.comentario.create({ data: { ...where, grupoId: target.grupoId, autorId: userId, texto }, select: { id: true, autor: { select: { nombre: true } } } });
+    const created = await tx.comentario.create({ data: { gastoId: input.gastoId, pagoId: input.pagoId, grupoId: target.grupoId, autorId: userId, texto }, select: { id: true, autor: { select: { nombre: true } } } });
     return { ...created, repetido: false as const };
   });
   if (result.repetido) return result;
@@ -78,8 +88,8 @@ export async function createComment(userId: string, input: CommentTarget & { tex
     ? await prisma.usuario.findMany({ where: { id: { in: recipients }, activo: true, expoPushToken: { not: null }, grupoMiembros: { some: { grupoId: target.grupoId, activo: true } } }, select: { expoPushToken: true } })
     : [];
   const preview = texto.length > 90 ? `${texto.slice(0, 87)}…` : texto;
-  await Promise.all(people.map((p) => sendPushNotification(p.expoPushToken!, `${first(created.autor.nombre)} comentó ${target.titulo}`, preview, {
-    grupoId: target.grupoId, ...(input.gastoId ? { gastoId: input.gastoId } : { pagoId: input.pagoId! }), type: "comentario",
+  void Promise.all(people.map((p) => sendPushNotification(p.expoPushToken!, `${first(created.autor.nombre)} ${input.grupoId ? "escribió" : "comentó"} ${target.titulo}`, preview, {
+    grupoId: target.grupoId, ...(input.gastoId ? { gastoId: input.gastoId } : input.pagoId ? { pagoId: input.pagoId } : {}), type: input.grupoId ? "mensaje" : "comentario",
   }).catch(() => console.error("[Notification] Comment saved; push delivery failed"))));
   return { id: created.id, repetido: false };
 }

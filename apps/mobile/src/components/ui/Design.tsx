@@ -17,6 +17,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { avatarColors, initials } from "../../lib/people";
+import { feedbackTitle } from "../../lib/errorMessage";
+import { useResponsiveLayout } from "./responsive";
 
 export const palette = {
   background: "#FFFCF7",
@@ -149,6 +151,7 @@ export function Screen({
   onBack,
   footer,
   compact = false,
+  wide = false,
 }: {
   children: React.ReactNode;
   title?: string;
@@ -161,7 +164,11 @@ export function Screen({
   onBack?: () => void;
   footer?: React.ReactNode;
   compact?: boolean;
+  /** Landing pages and multi-column workspaces, instead of a form-sized column. */
+  wide?: boolean;
 }) {
+  const { desktop, web } = useResponsiveLayout();
+  const maxWidth = wide ? 1160 : 800;
   const scrollView = React.useRef<ScrollView>(null);
   useFocusEffect(
     React.useCallback(() => {
@@ -169,7 +176,7 @@ export function Screen({
     }, [resetOnFocus]),
   );
   const content = (
-    <View style={{ padding: 16, gap: 16 }}>
+    <View style={{ width: "100%", maxWidth: web ? maxWidth : undefined, alignSelf: "center", padding: desktop ? 32 : 16, gap: desktop ? 24 : 16 }}>
       {title && (
         <View
           style={{
@@ -184,7 +191,7 @@ export function Screen({
               accessibilityRole="button"
               accessibilityLabel="Volver"
               onPress={onBack || (() =>
-                router.canGoBack() ? router.back() : router.replace("/(app)")
+                router.canGoBack() ? router.back() : router.replace("/(app)/(tabs)")
               )}
               style={design.back}
             >
@@ -192,7 +199,7 @@ export function Screen({
             </Pressable>
           )}
           <View style={{ flex: 1 }}>
-            <Label weight="extra" size={compact ? 23 : 27}>
+            <Label accessibilityRole="header" weight="extra" size={desktop ? 30 : compact ? 23 : 27}>
               {title}
             </Label>
             {subtitle && <Label color={palette.muted}>{subtitle}</Label>}
@@ -207,7 +214,7 @@ export function Screen({
       style={{ flex: 1, backgroundColor: palette.background }}
       edges={["top", "left", "right", "bottom"]}
     >
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       {scroll ? (
         <ScrollView
           ref={scrollView}
@@ -220,7 +227,7 @@ export function Screen({
       ) : (
         content
       )}
-      {footer && <View style={{ padding: 16, gap: 8, borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: palette.background }}>{footer}</View>}
+      {footer && <View style={{ borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: palette.background }}><View style={{ width: "100%", maxWidth: web ? maxWidth : undefined, alignSelf: "center", padding: 16, gap: 8 }}>{footer}</View></View>}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -266,17 +273,27 @@ export function Avatar({
     </View>
   );
 }
-export function ErrorBox({ message }: { message: string }) {
+export function FeedbackBox({ message, title, tone = "info" }: { message: string; title: string; tone?: "info" | "success" | "warning" | "error" }) {
+  const colors = {
+    info: {bg: palette.lilac, border: "#DDD2F6", color: "#6543C4", icon: "information-circle-outline" as const},
+    success: {bg: palette.mint, border: "#BDEBD9", color: "#007B60", icon: "checkmark-circle-outline" as const},
+    warning: {bg: palette.yellow, border: "#F1DFA8", color: "#79520A", icon: "time-outline" as const},
+    error: {bg: palette.blush, border: "#F6D8DD", color: "#BD2938", icon: "alert-circle-outline" as const},
+  }[tone];
   return (
     <View
       accessibilityRole="alert"
       accessibilityLiveRegion="polite"
-      style={{ backgroundColor: palette.blush, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: "#F6D8DD", flexDirection: "row", alignItems: "flex-start", gap: 10 }}
+      style={{ backgroundColor: colors.bg, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "flex-start", gap: 10 }}
     >
-      <View style={{ width: 28, height: 28, borderRadius: 10, backgroundColor: "#FADDE1", alignItems: "center", justifyContent: "center" }}><Ionicons name="alert-circle-outline" size={20} color={palette.coral} /></View>
-      <Label size={13} color={palette.coral} style={{ flex: 1 }}>{message}</Label>
+      <Ionicons name={colors.icon} size={24} color={colors.color} style={{ marginTop: 2 }} />
+      <View style={{ flex: 1, gap: 4 }}><Label size={13} weight="bold" color={colors.color}>{title}</Label><Label size={12} color={palette.ink}>{message}</Label></View>
     </View>
   );
+}
+export function ErrorBox({ message, title }: { message: string; title?: string }) {
+  const heading = title || feedbackTitle(message);
+  return <FeedbackBox message={message} title={heading} tone={heading === "Revisa este paso" ? "error" : "warning"} />;
 }
 export const design = StyleSheet.create({
   card: {

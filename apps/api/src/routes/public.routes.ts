@@ -8,8 +8,27 @@ import { Router, Response } from 'express';
 const router = Router();
 
 const androidPackage = () => process.env.ANDROID_PACKAGE || 'com.junto.app';
-const playStoreUrl = () => process.env.PLAY_STORE_URL || `https://play.google.com/store/apps/details?id=${androidPackage()}`;
+// Do not send beta testers to a store listing that has not been published.
+const playStoreUrl = () => {
+  try {
+    const url = new URL(process.env.PLAY_STORE_URL || '');
+    return url.protocol === 'https:' && url.hostname === 'play.google.com' && !url.username && !url.password ? url.href : '';
+  } catch { return ''; }
+};
+const publicHome = () => {
+  try {
+    const url = new URL(process.env.PUBLIC_WEB_URL || '');
+    return url.protocol === 'https:' && !url.username && !url.password ? url.origin + '/' : '';
+  } catch { return ''; }
+};
 const supportEmail = () => process.env.SUPPORT_EMAIL || '';
+const betaWebUrl = () => {
+  try {
+    const url = new URL(process.env.BETA_WEB_URL || '');
+    const home = new URL(process.env.PUBLIC_WEB_URL || '');
+    return url.protocol === 'https:' && url.origin === home.origin && url.pathname === '/app/' && !url.search && !url.hash && !url.username && !url.password ? url.href : '';
+  } catch { return ''; }
+};
 const legalOwner = () => process.env.LEGAL_OWNER || 'el equipo de JUNTO';
 
 function escapeHTML(value: string) {
@@ -47,13 +66,14 @@ router.get('/unirse/:code', (req, res) => {
     page(res, 'Invitación', '<h1>Este enlace no es válido</h1><p>Pide a quien te invitó que comparta el enlace de nuevo.</p>', 404);
     return;
   }
-  // Chrome on Android opens the app if installed, otherwise falls back to Google Play.
-  const intent = `intent://unirse/${code}#Intent;scheme=junto;package=${androidPackage()};S.browser_fallback_url=${encodeURIComponent(playStoreUrl())};end`;
+  // Installed Android builds open directly. Beta users get an honest landing, not a fake listing.
+  const fallback = playStoreUrl() || publicHome();
+  const intent = `intent://unirse/${code}#Intent;scheme=junto;package=${androidPackage()};${fallback ? `S.browser_fallback_url=${encodeURIComponent(fallback)};` : ''}end`;
   page(res, 'Invitación', `<h1>Te invitaron a un grupo en JUNTO</h1>
 <p>Comparte gastos con tu grupo y mira en todo momento quién le debe a quién.</p>
 <div class="card">
-<a class="btn primary" href="${escapeHTML(intent)}">Abrir en JUNTO</a>
-<a class="btn secondary" href="${escapeHTML(playStoreUrl())}">Descargar en Google Play</a>
+${betaWebUrl() ? `<a class="btn primary" href="${escapeHTML(betaWebUrl() + 'unirse/' + code)}">Ver grupo y aceptar invitación</a><p class="muted">Funciona en iPhone y Android. Entra con tu correo; no necesitas instalar la app ni pagar. No te unes hasta que lo confirmes.</p><a class="btn secondary" href="${escapeHTML(intent)}">Ya tengo JUNTO en Android: abrir app</a>` : `<a class="btn primary" href="${escapeHTML(intent)}">Abrir en JUNTO</a>`}
+${playStoreUrl() ? `<a class="btn secondary" href="${escapeHTML(playStoreUrl())}">Descargar en Google Play</a>` : '<p class="muted">JUNTO está en fase de pruebas y aún no está publicado en Google Play. Pide la versión de prueba a quien te invitó.</p>'}
 <p class="muted">¿Acabas de instalar la app? Vuelve a tocar el enlace de invitación, o abre JUNTO, toca «+» → «Unirme con un enlace» y pega este código: <code>${escapeHTML(code)}</code></p>
 </div>`);
 });
@@ -72,7 +92,7 @@ router.get('/privacidad', (_req, res) => {
 <h2>Comentarios</h2>
 <p>Los comentarios en gastos y pagos los ven las personas activas del grupo. Quien lo escribió o un administrador del grupo puede eliminarlo; cualquier integrante puede reportarlo y lo revisamos.</p>
 <h2>Quién ve tus datos</h2>
-<p>Solo las personas de cada grupo ven tu nombre, los gastos y los pagos de ese grupo. Usamos proveedores para alojar la base de datos, enviar correos y enviar notificaciones, que tratan los datos solo para prestar ese servicio.</p>
+<p>Solo las personas de cada grupo ven tu nombre, los gastos y los pagos de ese grupo. Si alguien te invita con tu correo o celular, no entras al grupo ni ven tus datos hasta que aceptas la invitación, y a quien invita no le decimos si tienes cuenta. Usamos proveedores para alojar la base de datos, enviar correos y enviar notificaciones, que tratan los datos solo para prestar ese servicio.</p>
 <h2>Cuánto tiempo</h2>
 <p>Mientras tu cuenta esté activa. Si la eliminas, borramos tus datos personales, las capturas de comprobantes que subiste y el texto de tus comentarios; los gastos y pagos compartidos con otras personas se conservan como «Usuario eliminado» para no alterar las cuentas de los demás.</p>
 <h2>Tus derechos</h2>
@@ -95,7 +115,8 @@ router.get('/eliminar-cuenta', (_req, res) => {
 router.get('/', (_req, res) => {
   page(res, 'Divide sin drama', `<h1>Las cuentas claras, los buenos momentos juntos</h1>
 <p>Divide la cuenta de hoy o lleva los gastos de tu depa, pareja o viaje.</p>
-<a class="btn primary" href="${escapeHTML(playStoreUrl())}">Descargar en Google Play</a>
+${betaWebUrl() ? `<div class="card"><h2>Prueba JUNTO con tu gente</h2><p>Abre la beta web desde iPhone o Android. Crea tu cuenta con correo, forma un grupo y comparte las cuentas claras.</p><a class="btn primary" href="${escapeHTML(betaWebUrl())}">Probar JUNTO en mi teléfono</a><p class="muted">En iPhone: abre en Safari → Compartir → Añadir a la pantalla de inicio. No es una app de TestFlight. Requiere internet; no incluye notificaciones push ni login con Google.</p></div>` : ''}
+${playStoreUrl() ? `<a class="btn primary" href="${escapeHTML(playStoreUrl())}">Descargar en Google Play</a>` : betaWebUrl() ? '<p class="muted">Beta de pruebas: todavía no está publicada en Google Play ni App Store. Puedes usarla desde el navegador con el botón de arriba.</p>' : '<div class="card"><h2>Estamos preparando JUNTO para ti</h2><p>La app está en fase de pruebas. Esta página no es todavía la aplicación web ni una descarga de Google Play.</p><p class="muted">Si te invitaron a probarla, solicita la versión de prueba a quien organiza tu grupo.</p></div>'}
 <p class="muted"><a href="/privacidad">Privacidad</a> · <a href="/eliminar-cuenta">Eliminar cuenta</a></p>`);
 });
 

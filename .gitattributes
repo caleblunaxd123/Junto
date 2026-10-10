@@ -1,0 +1,4 @@
+# Linux deployment scripts must remain executable by sh after a Windows checkout.
+ops/contabo/*.sh text eol=lf
+ops/contabo/Dockerfile text eol=lf
+ops/contabo/Dockerfile.dockerignore text eol=lf

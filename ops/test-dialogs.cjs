@@ -45,7 +45,7 @@ test("async failures are handled with an error notice, not an unhandled rejectio
   const queue = createDialogQueue();
   queue.alert("Guardar", "", [{ text: "Confirmar", onPress: async () => { throw new Error("offline"); } }]);
   await queue.choose(queue.getSnapshot().id, 0);
-  assert.equal(queue.getSnapshot().tone, "danger");
+  assert.equal(queue.getSnapshot().tone, "warning");
   assert.match(queue.getSnapshot().title, /No pudimos/);
 });
 

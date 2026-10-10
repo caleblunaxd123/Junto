@@ -1,4 +1,5 @@
 import * as Sentry from '@sentry/node';
+import { describeError } from './logSafe';
 
 /** Error monitoring is optional: without SENTRY_DSN nothing is sent anywhere. */
 export function initMonitoring() {
@@ -22,5 +23,6 @@ export function initMonitoring() {
 }
 
 export function reportError(error: unknown) {
-  if (process.env.SENTRY_DSN) Sentry.captureException(error);
+  // Third-party exceptions can contain request URLs, OTPs or credentials in their message.
+  if (process.env.SENTRY_DSN) Sentry.captureException(new Error(describeError(error)));
 }

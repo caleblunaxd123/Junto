@@ -1,0 +1,25 @@
+# Allow-list the build input. Private environment files and native signing keys are never sent.
+**
+!package.json
+!package-lock.json
+!apps/
+!apps/api/
+!apps/api/package.json
+!apps/api/tsconfig.json
+!apps/api/src/
+!apps/api/src/**
+!apps/api/prisma/
+!apps/api/prisma/**
+!apps/mobile/
+!apps/mobile/package.json
+!packages/
+!packages/shared/
+!packages/shared/**
+!ops/
+!ops/contabo/
+!ops/contabo/Dockerfile
+!ops/contabo/Dockerfile.dockerignore
+!ops/contabo/prepare-runtime.cjs
+**/node_modules/**
+**/.env*
+**/*.log

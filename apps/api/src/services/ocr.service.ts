@@ -4,11 +4,14 @@ import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { UserError } from "../domain/errors";
+import { serialQueue } from "../lib/serialQueue";
 
 // One local Tesseract worker shared by receipts and payment vouchers: images never leave the API.
 let worker: Worker | undefined;
 let initialization: Promise<Worker> | undefined;
-let busy = false;
+// When several people upload at once (everyone sending their voucher), they wait their turn for a
+// few seconds instead of being told the reader is busy.
+const queue = serialQueue({ maxWaiting: 6, maxWaitMs: 20_000 });
 const cachePath = join(tmpdir(), "junto-ocr-language-cache");
 
 // Spanish data ships with the API (npm @tesseract.js-data/spa), so reading never depends on a CDN.
@@ -35,9 +38,11 @@ export function decodeImage(base64: string, messages: { tooHeavy: string; format
 }
 
 /** Runs one OCR pass per mode, in order, and returns each text. Throws UserError on busy/timeout/failure. */
-export async function recognizeText(buffer: Buffer, modes: PSM[], messages: { busy: string; timeout: string; failed: string }) {
-  if (busy) throw new UserError(messages.busy, 429);
-  busy = true;
+export function recognizeText(buffer: Buffer, modes: PSM[], messages: { busy: string; timeout: string; failed: string }) {
+  return queue(() => recognizeNow(buffer, modes, messages), () => new UserError(messages.busy, 429));
+}
+
+async function recognizeNow(buffer: Buffer, modes: PSM[], messages: { busy: string; timeout: string; failed: string }) {
   let expired = false;
   const task = (async () => {
     if (!worker) {
@@ -68,6 +73,5 @@ export async function recognizeText(buffer: Buffer, modes: PSM[], messages: { bu
     throw new UserError(messages.failed, 503);
   } finally {
     if (timer) clearTimeout(timer);
-    busy = false;
   }
 }

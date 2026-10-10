@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const { PrismaClient } = require("@prisma/client");
 const origin = require("./local-qa.cjs").localQa();
+const { acceptInvite } = require("./accept-invite.cjs");
 const db = new PrismaClient();
 const suffix = Date.now();
 const password = `JuntoQA${suffix}!`;
@@ -24,8 +25,10 @@ async function account(name) {
 }
 async function run() {
   const [ana, luis] = [await account("Ana"), await account("Luis")];
+  await db.reciboPush.create({ data: { ticketId: `delete-${suffix}`, usuarioId: ana.usuario.id, token: "ExponentPushToken[fictional-only]" } });
   const group = await request("/grupos", ana.accessToken, "POST", { nombre: `QA · Depa ${suffix}`, tipo: "roomies" }, 201);
   await request(`/grupos/${group.id}/invitar`, ana.accessToken, "POST", { identificador: luis.email });
+  await acceptInvite(origin, luis.accessToken, group.id);
   await request(`/grupos/${group.id}/gastos`, ana.accessToken, "POST", {
     descripcion: "Luz", montoTotal: 12000, pagadoPor: ana.usuario.id, participantes: [{ usuarioId: ana.usuario.id }, { usuarioId: luis.usuario.id }],
   }, 201);
@@ -53,6 +56,7 @@ async function run() {
   const deleted = await db.usuario.findUniqueOrThrow({ where: { id: ana.usuario.id } });
   assert.equal(deleted.email, `eliminado-${ana.usuario.id}@junto.invalid`);
   assert.equal(deleted.activo, false);
+  assert.equal(await db.reciboPush.count({ where: { usuarioId: ana.usuario.id } }), 0, "account deletion removes notification metadata");
   // The e-mail can be used again for a brand-new account.
   await request("/auth/register", null, "POST", { nombre: "Ana Nueva QA", email: ana.email, password }, 201);
   console.log("Account deletion QA passed");
