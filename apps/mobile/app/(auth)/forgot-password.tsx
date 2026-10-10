@@ -117,6 +117,8 @@ export default function Recovery() {
             maxLength={254}
             placeholder="nombre@correo.com"
             keyboardType="email-address"
+            returnKeyType="go"
+            onSubmitEditing={() => { if (!sent) void submit(); }}
           />
           {sent && (
             <>
@@ -156,6 +158,8 @@ export default function Recovery() {
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="new-password"
+                returnKeyType="go"
+                onSubmitEditing={() => { void submit(); }}
               />
               <Pressable accessibilityRole="button" disabled={busy} onPress={() => setShowPassword(value => !value)} style={{minHeight: 44, justifyContent: "center"}}>
                 <Label size={13} weight="bold" color="#6543C4">{showPassword ? "Ocultar contraseñas" : "Mostrar contraseñas"}</Label>

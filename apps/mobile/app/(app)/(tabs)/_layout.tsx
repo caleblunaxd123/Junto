@@ -3,6 +3,7 @@ import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { palette } from "../../../src/components/ui/Design";
+import { useResponsiveLayout } from "../../../src/components/ui/responsive";
 
 const screens: [string, string, keyof typeof Ionicons.glyphMap][] = [
   ["index", "Inicio", "home-outline"],
@@ -13,6 +14,7 @@ const screens: [string, string, keyof typeof Ionicons.glyphMap][] = [
 /** The three main places. Every other screen is pushed on top of them (see the parent Stack). */
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const { desktop } = useResponsiveLayout();
   return (
     <Tabs
       screenOptions={{
@@ -22,6 +24,7 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: palette.muted,
         tabBarLabelStyle: { fontFamily: "JakartaBold", fontSize: 12, marginBottom: 2 },
         tabBarStyle: {
+          display: desktop ? "none" : "flex",
           height: 68 + insets.bottom,
           paddingBottom: Math.max(insets.bottom, 8),
           paddingTop: 8,

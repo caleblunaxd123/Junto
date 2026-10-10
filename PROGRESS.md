@@ -44,6 +44,7 @@ Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = fu
 | Build Android (APK/AAB) firmada | Pendiente externo (EAS + Play Console) |
 | Despliegue HTTPS con dominio | Hecho: API y beta web en `https://junto.lunalav.pe/app/`, Contabo/Caddy, base privada |
 | Beta iPhone/Android sin instalación | Hecho en navegadores de prueba: Chromium/WebKit. Falta validación física en Safari iPhone y Chrome Android |
+| Web de escritorio y tamaños adaptativos | Implementado y probado localmente en Chromium/WebKit a seis anchos: bienvenida/auth, lateral, inicio en columnas, formularios y ventanas acotadas; ver `ops/web/RESPONSIVE-20261010.md`. Dispositivos y accesibilidad física pendientes |
 
 ## Lo que todavía no está demostrado
 

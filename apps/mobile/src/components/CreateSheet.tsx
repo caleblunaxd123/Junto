@@ -4,12 +4,14 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, type Href } from "expo-router";
 import { Label, palette } from "./ui/Design";
+import { useResponsiveLayout } from "./ui/responsive";
 
 type Option = { icon: keyof typeof Ionicons.glyphMap; title: string; subtitle: string; href: Href; color: string; bg: string };
 
 /** The single "+" entry point: one question instead of four competing buttons. */
 export function CreateSheet({ visible, onClose, groups }: { visible: boolean; onClose: () => void; groups: { id: string }[] }) {
   const [pressedOption, setPressedOption] = React.useState<string | null>(null);
+  const { tablet } = useResponsiveLayout();
   const options: Option[] = [
     { icon: "receipt-outline", title: "Una cuenta de hoy", subtitle: "Cena, cumple o salida. Tus invitados no necesitan la app.", href: "/(app)/cuentas/rapida", color: "#007B60", bg: palette.mint },
     ...(groups.length
@@ -27,9 +29,9 @@ export function CreateSheet({ visible, onClose, groups }: { visible: boolean; on
   ];
   return (
     <Modal transparent visible={visible} animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "#08264466" }}>
+      <View style={{ flex: 1, justifyContent: tablet ? "center" : "flex-end", alignItems: tablet ? "center" : "stretch", padding: tablet ? 24 : 0, backgroundColor: "#08264466" }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Cerrar" onPress={onClose} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
-        <SafeAreaView edges={["bottom"]} style={{ backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 10 }}>
+        <SafeAreaView edges={["bottom"]} style={{ width: "100%", maxWidth: tablet ? 520 : undefined, borderRadius: tablet ? 28 : undefined, backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 10 }}>
           <Label accessibilityRole="header" size={22} weight="extra">¿Qué quieres agregar?</Label>
           {options.map((option) => (
             <Pressable

@@ -128,12 +128,14 @@ export function FormField({
   icon,
   error,
   hint,
+  inputRef,
   ...props
 }: React.ComponentProps<typeof TextInput> & {
   label: string;
   icon?: keyof typeof Ionicons.glyphMap;
   error?: string;
   hint?: string;
+  inputRef?: React.Ref<TextInput>;
 }) {
   return (
     <View style={{ gap: 8 }}>
@@ -155,6 +157,7 @@ export function FormField({
         {icon && <Ionicons name={icon} size={22} color="#56708E" />}
         <TextInput
           {...props}
+          ref={inputRef}
           accessibilityLabel={props.accessibilityLabel || label}
           accessibilityHint={[props.accessibilityHint, error || hint].filter(Boolean).join(". ") || undefined}
           placeholderTextColor="#8B98AE"

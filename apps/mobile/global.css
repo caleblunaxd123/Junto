@@ -1,3 +1,17 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Visible keyboard focus without changing touch interactions. */
+:focus-visible {
+  outline: 3px solid #8055ed;
+  outline-offset: 3px;
+}
+input, textarea {
+  min-width: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+  }
+}

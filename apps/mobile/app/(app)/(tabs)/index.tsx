@@ -35,11 +35,13 @@ import { AddButton, CreateSheet } from "../../../src/components/CreateSheet";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
 import { clearTryBill, loadTryBill, tryBillToDraft, type SavedTryBill } from "../../../src/lib/tryBillHandoff";
+import { useResponsiveLayout } from "../../../src/components/ui/responsive";
 
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
 
 export default function Home() {
   const { usuario } = useAuthStore();
+  const { desktop, web } = useResponsiveLayout();
   const {
     data: groupData,
     isLoading,
@@ -97,11 +99,11 @@ export default function Home() {
   return (
     <SafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: palette.background }}>
       <ScrollView
-        contentContainerStyle={{ padding: 16, paddingBottom: 110, gap: 16 }}
+        contentContainerStyle={{ width: "100%", maxWidth: web ? 1160 : undefined, alignSelf: "center", padding: desktop ? 32 : 16, paddingBottom: desktop ? 40 : 110, gap: desktop ? 24 : 16 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={palette.primary} />}
       >
         <View style={[design.row, { justifyContent: "space-between" }]}>
-          <Brand compact />
+          {desktop ? <Label size={12} weight="bold" color={palette.muted} style={{ letterSpacing: 1 }}>TU ESPACIO EN JUNTO</Label> : <Brand compact />}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Abrir mi perfil"
@@ -111,9 +113,14 @@ export default function Home() {
             <Avatar name={usuario?.nombre || "Tú"} photo={usuario?.fotoUrl} seed={usuario?.id} />
           </Pressable>
         </View>
-        <Label accessibilityRole="header" size={26} weight="extra">
+        <Label accessibilityRole="header" size={desktop ? 34 : 26} weight="extra">
           Hola, {usuario?.nombre.split(" ")[0] || "amigo"}
         </Label>
+        {desktop && <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
+          <View style={{ flex: 1, minWidth: 200 }}><Label size={15} color={palette.muted}>Todo lo compartido, en un solo lugar.</Label></View>
+          <Button compact title="Dividir una cuenta de hoy" onPress={() => router.push("/(app)/cuentas/rapida")} />
+          <Button compact secondary title="Agregar" onPress={() => setSheet(true)} />
+        </View>}
 
         <Invitations />
         {trial && (
@@ -138,8 +145,9 @@ export default function Home() {
             <Button title="Ver cómo funciona" secondary onPress={() => router.push("/(app)/ejemplo")} />
           </Card>
         ) : empty ? (
-          <Card style={{ gap: 14 }}>
-            <Image source={art.character} resizeMode="contain" accessibilityLabel="Tu compañero de JUNTO, listo para ayudarte con las cuentas" style={{ width: "100%", height: 140 }} />
+          <Card style={{ gap: 24, flexDirection: desktop ? "row" : "column", alignItems: desktop ? "center" : "stretch", padding: desktop ? 32 : 18 }}>
+            <Image source={art.character} resizeMode="contain" accessibilityLabel="Tu compañero de JUNTO, listo para ayudarte con las cuentas" style={{ width: desktop ? "40%" : "100%", height: desktop ? 280 : 140 }} />
+            <View style={{ flex: desktop ? 1 : undefined, gap: 14, minWidth: 0 }}>
             <Label size={19} weight="extra">¿Por dónde empezamos?</Label>
             <Label size={14} color={palette.muted}>
               Divide la cuenta de hoy en tres pasos, o crea un grupo para los gastos que se repiten.
@@ -149,6 +157,7 @@ export default function Home() {
             <Pressable accessibilityRole="button" onPress={() => router.push("/(app)/ejemplo")} style={{ minHeight: 44, justifyContent: "center", alignItems: "center" }}>
               <Label size={13} weight="bold" color={palette.purple}>Ver un ejemplo explicado</Label>
             </Pressable>
+            </View>
           </Card>
         ) : (
           <>
@@ -180,6 +189,8 @@ export default function Home() {
               </Card>
             ) : null}
 
+            <View style={{ flexDirection: desktop ? "row" : "column", gap: desktop ? 24 : 16, alignItems: "stretch" }}>
+            <View style={{ flex: desktop ? 1.25 : undefined, minWidth: 0, gap: 16 }}>
             <SectionTitle
               title="Tus grupos"
               action={groups.length ? "Ver cuentas" : undefined}
@@ -261,6 +272,8 @@ export default function Home() {
               </>
             )}
 
+            </View>
+            <View style={{ flex: desktop ? 1 : undefined, minWidth: 0, gap: 16 }}>
             <SectionTitle
               title="Cuentas de un día"
               action={bills.data?.length ? "Ver todas" : undefined}
@@ -293,13 +306,15 @@ export default function Home() {
               ))
             ) : (
               <Label size={13} color={palette.muted}>
-                Para una cena o un cumple sin crear grupo: toca «+» y elige «Una cuenta de hoy».
+                {desktop ? "Para una cena o un cumple sin crear grupo: elige «Dividir una cuenta de hoy»." : "Para una cena o un cumple sin crear grupo: toca «+» y elige «Una cuenta de hoy»."}
               </Label>
             )}
+            </View>
+            </View>
           </>
         )}
       </ScrollView>
-      {!empty && <AddButton onPress={() => setSheet(true)} />}
+      {!empty && !desktop && <AddButton onPress={() => setSheet(true)} />}
       <CreateSheet visible={sheet} onClose={() => setSheet(false)} groups={groups} />
     </SafeAreaView>
   );

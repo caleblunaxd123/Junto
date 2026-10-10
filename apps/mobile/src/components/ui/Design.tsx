@@ -18,6 +18,7 @@ import { router, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { avatarColors, initials } from "../../lib/people";
 import { feedbackTitle } from "../../lib/errorMessage";
+import { useResponsiveLayout } from "./responsive";
 
 export const palette = {
   background: "#FFFCF7",
@@ -150,6 +151,7 @@ export function Screen({
   onBack,
   footer,
   compact = false,
+  wide = false,
 }: {
   children: React.ReactNode;
   title?: string;
@@ -162,7 +164,11 @@ export function Screen({
   onBack?: () => void;
   footer?: React.ReactNode;
   compact?: boolean;
+  /** Landing pages and multi-column workspaces, instead of a form-sized column. */
+  wide?: boolean;
 }) {
+  const { desktop, web } = useResponsiveLayout();
+  const maxWidth = wide ? 1160 : 800;
   const scrollView = React.useRef<ScrollView>(null);
   useFocusEffect(
     React.useCallback(() => {
@@ -170,7 +176,7 @@ export function Screen({
     }, [resetOnFocus]),
   );
   const content = (
-    <View style={{ padding: 16, gap: 16 }}>
+    <View style={{ width: "100%", maxWidth: web ? maxWidth : undefined, alignSelf: "center", padding: desktop ? 32 : 16, gap: desktop ? 24 : 16 }}>
       {title && (
         <View
           style={{
@@ -193,7 +199,7 @@ export function Screen({
             </Pressable>
           )}
           <View style={{ flex: 1 }}>
-            <Label weight="extra" size={compact ? 23 : 27}>
+            <Label accessibilityRole="header" weight="extra" size={desktop ? 30 : compact ? 23 : 27}>
               {title}
             </Label>
             {subtitle && <Label color={palette.muted}>{subtitle}</Label>}
@@ -221,7 +227,7 @@ export function Screen({
       ) : (
         content
       )}
-      {footer && <View style={{ padding: 16, gap: 8, borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: palette.background }}>{footer}</View>}
+      {footer && <View style={{ borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: palette.background }}><View style={{ width: "100%", maxWidth: web ? maxWidth : undefined, alignSelf: "center", padding: 16, gap: 8 }}>{footer}</View></View>}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

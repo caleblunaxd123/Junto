@@ -3,7 +3,7 @@ import React from "react";
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ModalSurface } from "../../../src/components/ui/ModalSurface";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { captureRef, releaseCapture } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
@@ -100,7 +100,7 @@ export default function QuickBillDetail() {
       {!bill.cobrado && !bill.archivada && <Button title="Corregir personas o montos" secondary disabled={query.isError} onPress={() => router.push({ pathname: "/(app)/cuentas/rapida", params: { id } })} />}
       {(bill.archivada || !bill.pendiente) && <Button title={bill.archivada ? "Reactivar cuenta" : "Archivar cuenta completada"} secondary disabled={mutation.isPending || query.isError} onPress={archive} />}
       <Button title="Ver mis cuentas" secondary onPress={() => router.replace("/(app)/cuentas/rapidas")} />
-      <Modal visible={!!part} animationType="slide" onRequestClose={() => !mutation.isPending && setSelected(undefined)}><SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 16 }}>
+      <Modal transparent visible={!!part} animationType="slide" onRequestClose={() => !mutation.isPending && setSelected(undefined)}><ModalSurface><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 16 }}>
         <Label accessibilityRole="header" size={25} weight="extra">Aporte de {part?.nombre}</Label>
         <View style={design.row}>
           <Card style={{ flex: 1, padding: 12, gap: 2 }}><Label size={11} color={palette.muted}>Su parte</Label><Label weight="extra" size={17}>{money(part?.total || 0)}</Label></Card>
@@ -129,8 +129,8 @@ export default function QuickBillDetail() {
           note: "La organización confirma los aportes después de comprobar que recibió el dinero.",
         }, body: `${bill.datos.nombre} · JUNTO\n${part.nombre}, tu parte es ${money(part.total)}; falta confirmar ${money(part.total - paid)}.${bill.datos.cobrarA ? ` Aportar a ${bill.datos.cobrarA}.` : ""}\n${bill.datos.instrucciones || ""}\nConfirmaciones manuales de la organización. JUNTO no cobra ni transfiere dinero.` }); setSelected(undefined); }} />}
         <Button title="Cerrar sin cambios" secondary disabled={mutation.isPending} onPress={() => setSelected(undefined)} />
-      </ScrollView></SafeAreaView></Modal>
-      <Modal visible={preview} animationType="slide" onRequestClose={() => !exporting && setPreview(false)}><SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}>
+      </ScrollView></ModalSurface></Modal>
+      <Modal transparent visible={preview} animationType="slide" onRequestClose={() => !exporting && setPreview(false)}><ModalSurface>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <View style={{ padding: 16, flexDirection: "row", alignItems: "center", gap: 12 }}>
           <Pressable accessibilityRole="button" accessibilityLabel="Volver al reparto" disabled={exporting} onPress={() => setPreview(false)} style={design.back}><Ionicons name="arrow-back" size={22} color={palette.ink} /></Pressable>
@@ -156,7 +156,7 @@ export default function QuickBillDetail() {
           {shareMessage && <ShareChannels reportRef={emailReport} message={shareMessage} disabled={query.isError || exporting} />}
         </ScrollView>
         </KeyboardAvoidingView>
-      </SafeAreaView></Modal>
+      </ModalSurface></Modal>
       <ShareMessageSheet message={reminder} onClose={() => setReminder(null)} disabled={query.isError} />
     </>}
   </Screen>;

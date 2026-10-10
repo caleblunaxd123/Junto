@@ -34,11 +34,13 @@ import { memberLabels, meFirst } from "../../../src/lib/people";
 import { centavosASoles, type ActividadEvento } from "../../../src/types";
 import { ShareMessageSheet } from "../../../src/components/ui/ShareMessage";
 import { groupShareMessage, type ShareMessage } from "../../../src/lib/shareMessage";
+import { useResponsiveLayout } from "../../../src/components/ui/responsive";
 
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
 type Tab = "Gastos" | "Saldos" | "Actividad";
 
 export default function Group() {
+  const { desktop, tablet, web } = useResponsiveLayout();
   const { id } = useLocalSearchParams<{ id: string }>();
   const user = useAuthStore((s) => s.usuario);
   const qc = useQueryClient();
@@ -102,7 +104,7 @@ export default function Group() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}>
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 20 }}
+        contentContainerStyle={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", padding: desktop ? 24 : 0, paddingBottom: 20 }}
         refreshControl={<RefreshControl refreshing={isRefetching} tintColor={palette.primary} onRefresh={refreshAll} />}
       >
         {isLoading ? (
@@ -115,7 +117,7 @@ export default function Group() {
           </View>
         ) : (
           <>
-            <View style={{ minHeight: 190, paddingBottom: 16, backgroundColor: palette.mint, overflow: "hidden" }}>
+            <View style={{ minHeight: desktop ? 250 : 190, borderRadius: desktop ? 28 : 0, paddingBottom: 16, backgroundColor: palette.mint, overflow: "hidden" }}>
               <Image
                 source={groupArt(group.tipo)}
                 accessibilityIgnoresInvertColors
@@ -381,7 +383,7 @@ export default function Group() {
         )}
       </ScrollView>
       {group && (
-        <View style={{ flexDirection: "row", gap: 8, padding: 12, borderTopWidth: 1, borderColor: palette.line, backgroundColor: palette.background }}>
+        <View style={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", flexDirection: "row", gap: 8, padding: 12, borderTopWidth: 1, borderColor: palette.line, backgroundColor: palette.background }}>
           {group.balanceUsuario.debes > 0 && (
             <View style={{ flex: 3 }}>
               <Button title="Subir comprobante" secondary accessibilityHint="Sube la captura de tu Yape o Plin para registrar tu pago" onPress={() => router.push(`/(app)/pagos/pagar?grupoId=${id}&subir=1`)} />
@@ -393,9 +395,9 @@ export default function Group() {
         </View>
       )}
       <Modal transparent visible={menu} animationType="slide" onRequestClose={() => setMenu(false)}>
-        <View style={{ flex: 1, justifyContent: "flex-end", backgroundColor: "#08264466" }}>
+        <View style={{ flex: 1, justifyContent: tablet ? "center" : "flex-end", alignItems: tablet ? "center" : "stretch", padding: tablet ? 24 : 0, backgroundColor: "#08264466" }}>
           <Pressable accessibilityRole="button" accessibilityLabel="Cerrar opciones" onPress={() => setMenu(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
-          <SafeAreaView edges={["bottom"]} style={{ backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 12 }}>
+          <SafeAreaView edges={["bottom"]} style={{ width: "100%", maxWidth: tablet ? 560 : undefined, borderRadius: tablet ? 28 : undefined, backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 12 }}>
             <Label accessibilityRole="header" size={22} weight="extra">{group?.nombre || "Tu grupo"}</Label>
             <Button title="Invitar personas" onPress={() => { setMenu(false); goInvite(); }} />
             <Button title="Compartir cuentas por WhatsApp o correo" secondary disabled={shareUnavailable} onPress={() => { if (group) { setMenu(false); setShareMessage(groupShareMessage(group, group.pagosPorConfirmar ?? groupPayments.length)); } }} />

@@ -14,6 +14,7 @@ import DateTimePicker from "../../../src/components/ui/ExpenseDatePicker";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../src/lib/api";
 import { errorMessage } from "../../../src/lib/errorMessage";
+import { useResponsiveLayout } from "../../../src/components/ui/responsive";
 import { router, useLocalSearchParams } from "expo-router";
 import {
   useGrupos,
@@ -56,6 +57,7 @@ function Field({
   );
 }
 export default function Expense({ editing = false }: { editing?: boolean }) {
+  const { tablet } = useResponsiveLayout();
   const rawParams = useLocalSearchParams<{
     grupoId?: string;
     texto?: string;
@@ -785,12 +787,17 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
               style={{
                 flex: 1,
                 backgroundColor: "#08264455",
-                justifyContent: "flex-end",
+                justifyContent: tablet ? "center" : "flex-end",
+                alignItems: tablet ? "center" : "stretch",
+                padding: tablet ? 24 : 0,
               }}
             >
               <View
                 style={{
                   backgroundColor: "white",
+                  width: "100%",
+                  maxWidth: tablet ? 560 : undefined,
+                  borderRadius: tablet ? 28 : undefined,
                   padding: 24,
                   borderTopLeftRadius: 28,
                   borderTopRightRadius: 28,

@@ -1,6 +1,6 @@
 import React from "react";
 import { ActivityIndicator, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, Share, useWindowDimensions, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { ModalSurface } from "./ModalSurface";
 import { Ionicons } from "@expo/vector-icons";
 import * as MailComposer from "expo-mail-composer";
 import * as Clipboard from "expo-clipboard";
@@ -35,8 +35,8 @@ const money = (cents: number) => `S/ ${(cents / 100).toFixed(2)}`;
 function ReportImagePreview({ uri, onClose }: { uri: string; onClose: () => void }) {
   const { width } = useWindowDimensions();
   const [ratio, setRatio] = React.useState(0.6);
-  return <Modal visible animationType="slide" onRequestClose={onClose}>
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}>
+  return <Modal transparent visible animationType="slide" onRequestClose={onClose}>
+    <ModalSurface>
       <View style={{ padding: 16, flexDirection: "row", alignItems: "center", gap: 12 }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Cerrar imagen adjunta" onPress={onClose} style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: palette.mint, justifyContent: "center", alignItems: "center" }}><Ionicons name="close" size={22} color={palette.ink} /></Pressable>
         <View style={{ flex: 1 }}><Label weight="extra" size={22}>Tu resumen visual</Label><Label size={11} color={palette.muted}>Así se verá la imagen adjunta al correo.</Label></View>
@@ -44,10 +44,10 @@ function ReportImagePreview({ uri, onClose }: { uri: string; onClose: () => void
       <ScrollView contentContainerStyle={{ padding: 16 }}>
         <Image source={{ uri }} accessibilityLabel="Resumen de JUNTO con el total y los aportes por persona" resizeMode="contain"
           onLoad={event => { const { width: w, height: h } = event.nativeEvent.source; if (w > 0 && h > 0) setRatio(w / h); }}
-          style={{ width: Math.max(1, width - 32), aspectRatio: ratio }} />
+          style={{ width: Math.max(1, Math.min(width >= 768 ? 680 : width, width) - 32), aspectRatio: ratio }} />
       </ScrollView>
       <View style={{ padding: 16 }}><Button title="Volver al correo" secondary onPress={onClose} /></View>
-    </SafeAreaView>
+    </ModalSurface>
   </Modal>;
 }
 
@@ -263,8 +263,8 @@ export function ShareChannels({ message, disabled = false, reportRef, initialCha
     </View>
     {!!notice && <Card style={{ backgroundColor: palette.mint, padding: 12 }}><Label accessibilityLiveRegion="polite" size={13}>{notice}</Label></Card>}
     <Label size={11} color={palette.muted} style={{ textAlign: "center" }}>Tú eliges a quién enviarlo. JUNTO no mueve dinero.</Label>
-    <Modal visible={showMail} animationType="slide" onRequestClose={() => !busy && setShowMail(false)}>
-      <SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}>
+    <Modal transparent visible={showMail} animationType="slide" onRequestClose={() => !busy && setShowMail(false)}>
+      <ModalSurface>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={{ padding: 16, flexDirection: "row", alignItems: "center", gap: 12 }}>
             <Pressable accessibilityRole="button" accessibilityLabel="Volver a las opciones para compartir" accessibilityState={{ disabled: busy }} disabled={busy} onPress={() => setShowMail(false)} style={{ width: 44, height: 44, backgroundColor: "#F0F5FC", borderRadius: 22, justifyContent: "center", alignItems: "center" }}><Ionicons name="arrow-back" size={22} color={palette.ink} /></Pressable>
@@ -297,7 +297,7 @@ export function ShareChannels({ message, disabled = false, reportRef, initialCha
             <Label size={11} color={palette.muted}>{serverMail ? "«Enviar desde JUNTO» entrega el resumen al proveedor, pero no confirma su recepción o lectura. «Abrir en mi app» solo prepara el mensaje: tú pulsas enviar." : "Solo preparas el mensaje: revisa el destinatario y pulsa enviar en tu app de correo."} No necesitamos acceder a tu buzón ni a tus contactos.</Label>
           </ScrollView>
         </KeyboardAvoidingView>
-      </SafeAreaView>
+      </ModalSurface>
     </Modal>
     {!!imagePreview && <ReportImagePreview uri={imagePreview} onClose={() => { setImagePreview(null); setShowMail(true); }} />}
   </View>;
@@ -305,8 +305,8 @@ export function ShareChannels({ message, disabled = false, reportRef, initialCha
 
 export function ShareMessageSheet({ message, onClose, disabled = false, initialChannel, initialRecipient }: { message: ShareMessage | null; onClose: () => void; disabled?: boolean; initialChannel?: "mail"; initialRecipient?: string }) {
   const report = React.useRef<View>(null);
-  return <Modal visible={!!message} animationType="slide" onRequestClose={onClose}>
-    <SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}>
+  return <Modal transparent visible={!!message} animationType="slide" onRequestClose={onClose}>
+    <ModalSurface>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={{ flexDirection: "row", alignItems: "center", padding: 16, gap: 12 }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Cerrar vista para compartir" onPress={onClose} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 22, backgroundColor: "#F0F5FC" }}><Ionicons name="close" size={22} color={palette.ink} /></Pressable>
@@ -318,6 +318,6 @@ export function ShareMessageSheet({ message, onClose, disabled = false, initialC
       {!!message && <ScrollView style={{ flexGrow: 0, maxHeight: "75%", borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: "white" }} keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 }}><ShareChannels key={`${message.body}:${initialChannel || ""}:${initialRecipient || ""}`} message={message} reportRef={report} disabled={disabled} initialChannel={initialChannel} initialRecipient={initialRecipient} /></ScrollView>}
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </ModalSurface>
   </Modal>;
 }

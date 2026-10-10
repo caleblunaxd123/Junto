@@ -19,6 +19,7 @@ import { Button, Label, palette } from "../src/components/ui/Design";
 import { Platform, View } from "react-native";
 import type { ErrorBoundaryProps } from "expo-router";
 import "../global.css";
+import { DesktopShell } from "../src/components/ui/DesktopShell";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -42,7 +43,7 @@ function RootLayoutInner() {
 
   return (
     <>
-      <Stack screenOptions={{ headerShown: false }} />
+      <DesktopShell><Stack screenOptions={{ headerShown: false }} /></DesktopShell>
       <StatusBar style="dark" />
       <OfflineBanner />
       <DialogHost />

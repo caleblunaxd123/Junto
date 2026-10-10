@@ -6,7 +6,7 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { Link, router } from "expo-router";
 import {
   Screen,
   Card,
@@ -24,8 +24,14 @@ import { useGoogleLogin } from "../../hooks/useGoogleLogin";
 import { GoogleButton, OrDivider } from "./GoogleButton";
 import { emailError, nameError, passwordError } from "../../lib/authValidation";
 import { errorMessage } from "../../lib/errorMessage";
+import { useResponsiveLayout } from "./responsive";
 export function AuthForm({ register = false }: { register?: boolean }) {
   const auth = useAuthStore();
+  const { desktop } = useResponsiveLayout();
+  const passwordInput = useRef<TextInput>(null);
+  const nameInput = useRef<TextInput>(null);
+  const emailInput = useRef<TextInput>(null);
+  const privacyUrl = process.env.EXPO_PUBLIC_PRIVACY_URL;
   const google = useGoogleLogin();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -42,7 +48,12 @@ export function AuthForm({ register = false }: { register?: boolean }) {
     setError("");
     setTouched({email: true, name: true, password: true});
     const address = email.trim().toLowerCase();
-    if (Object.values(errors).some(Boolean)) return;
+    if (Object.values(errors).some(Boolean)) {
+      if (errors.name) nameInput.current?.focus();
+      else if (errors.email) emailInput.current?.focus();
+      else passwordInput.current?.focus();
+      return;
+    }
     gate.current = true;
     try {
       setBusy(true);
@@ -82,30 +93,31 @@ export function AuthForm({ register = false }: { register?: boolean }) {
     }
   }
   return (
-      <Screen>
-        <View style={{ minHeight: 150, marginTop: 4 }}>
+      <Screen wide={desktop}>
+        <View style={{ flexDirection: desktop ? "row" : "column", alignItems: desktop ? "center" : "stretch", gap: desktop ? 56 : 16, paddingVertical: desktop ? 24 : 0 }}>
+        <View style={{ minHeight: desktop ? 540 : 150, marginTop: 4, flex: desktop ? 1 : undefined, minWidth: 0, gap: desktop ? 20 : 0 }}>
           <Image
             source={require("../../../assets/illustrations/auth-couple.png")}
             resizeMode="contain"
             style={{
               position: "absolute",
-              right: -16,
-              bottom: -6,
-              width: "50%",
-              height: 150,
+              right: desktop ? 0 : -16,
+              bottom: desktop ? 0 : -6,
+              width: desktop ? "100%" : "50%",
+              height: desktop ? 280 : 150,
             }}
           />
-          <Brand compact />
-          <View style={{ width: "49%", marginTop: 8, gap: 3 }}>
-            <Label size={20} weight="extra" style={{ lineHeight: 25 }}>
+          <Brand compact={!desktop} />
+          <View style={{ width: desktop ? "100%" : "49%", marginTop: 8, gap: desktop ? 12 : 3 }}>
+            <Label accessibilityRole="header" size={desktop ? 36 : 20} weight="extra" style={{ lineHeight: desktop ? 44 : 25 }}>
               {register ? "Crea tu cuenta gratis" : "Qué bueno verte"}
             </Label>
-            <Label size={13} color={palette.muted}>
-              {register ? "Toma menos de un minuto." : "Tus cuentas te esperan."}
+            <Label size={desktop ? 17 : 13} color={palette.muted}>
+              {desktop ? "Comparte gastos, no complicaciones. La misma cuenta desde tu celular o tu computadora." : register ? "Toma menos de un minuto." : "Tus cuentas te esperan."}
             </Label>
           </View>
         </View>
-        <Card style={{ gap: 18, padding: 18, borderWidth: 0 }}>
+        <Card style={{ gap: 18, padding: desktop ? 28 : 18, borderWidth: desktop ? 1 : 0, width: desktop ? "48%" : undefined, maxWidth: desktop ? 480 : undefined }}>
           <View
             style={{
               flexDirection: "row",
@@ -165,6 +177,9 @@ export function AuthForm({ register = false }: { register?: boolean }) {
           {register && (
             <FormField
               label="Nombre completo"
+              inputRef={nameInput}
+              returnKeyType="next"
+              onSubmitEditing={() => emailInput.current?.focus()}
               icon="person-outline"
               value={name}
               onChangeText={value => { setName(value); setError(""); }}
@@ -178,6 +193,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
           )}
           <FormField
             label="Correo electrónico"
+            inputRef={emailInput}
             hint={register ? "Gmail, Outlook u otro correo. Recibirás un código para verificar tu cuenta; no usamos SMS." : undefined}
             icon="mail-outline"
             value={email}
@@ -190,6 +206,8 @@ export function AuthForm({ register = false }: { register?: boolean }) {
             keyboardType="email-address"
             autoCapitalize="none"
             autoComplete="email"
+            returnKeyType="next"
+            onSubmitEditing={() => passwordInput.current?.focus()}
             placeholder="nombre@correo.com"
           />
           <View style={{ gap: 8 }}>
@@ -210,6 +228,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
             >
               <Ionicons name="lock-closed-outline" size={21} color="#56708E" />
               <TextInput
+                ref={passwordInput}
                 accessibilityLabel="Contraseña"
                 value={password}
                 onChangeText={value => { setPassword(value); setError(""); }}
@@ -220,6 +239,8 @@ export function AuthForm({ register = false }: { register?: boolean }) {
                 secureTextEntry={!show}
                 autoCapitalize="none"
                 autoComplete={register ? "new-password" : "current-password"}
+                returnKeyType="go"
+                onSubmitEditing={() => { void submit(); }}
                 placeholder={register ? "Mínimo 8 caracteres y un número" : "Tu contraseña"}
                 placeholderTextColor="#8B98AE"
                 style={{
@@ -291,9 +312,14 @@ export function AuthForm({ register = false }: { register?: boolean }) {
             disabled={google.busy}
           />
         </Card>
+        </View>
         <Label size={11} color={palette.muted} style={{ textAlign: "center" }}>
           JUNTO no guarda ni transfiere dinero.
         </Label>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 20, justifyContent: "center" }}>
+          <Link href="/(auth)/onboarding" asChild><Pressable accessibilityRole="link" accessibilityLabel="Ver cómo funciona JUNTO" style={{ minHeight: 44, justifyContent: "center" }}><Label size={12} weight="bold" color={palette.purple}>Ver cómo funciona</Label></Pressable></Link>
+          {privacyUrl?.startsWith("https://") && <Link href={privacyUrl as `https://${string}`} target="_blank" rel="noopener noreferrer" asChild><Pressable accessibilityRole="link" accessibilityLabel="Política de privacidad · se abre en otra pestaña" style={{ minHeight: 44, justifyContent: "center" }}><Label size={12} color={palette.muted}>Política de privacidad</Label></Pressable></Link>}
+        </View>
       </Screen>
   );
 }
