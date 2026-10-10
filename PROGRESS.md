@@ -11,7 +11,7 @@ Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = fu
 | Registro, verificación por código, login, recuperación, cerrar sesión | Hecho | `ops/test-redesign.cjs`, `ops/test-security-ux.cjs` (OTP de un solo uso, rotación de sesiones, límite de intentos) |
 | Continuar con Google | Parcial | Backend probado con claims (`ops/test-google-sign-in.cjs`); falta el inicio de sesión real en Android con la cuenta del propietario |
 | Probar sin cuenta (sin servidor) | Hecho | Nombres opcionales, invitados por persona, propina; conservar el cálculo con consentimiento (`ops/test-mobile-ux.cjs`) |
-| Grupos, invitaciones por enlace/correo/celular | Hecho | Por correo o celular la persona acepta antes de entrar (`ops/test-groups-ledger.cjs`, recorrido web); App Links necesita dominio y huella de Play |
+| Grupos e invitaciones | Hecho en beta web | Enlace con aceptación; email HTML real por SMTP; celular prepara borrador WhatsApp, no SMS. Aviso interno separado. Recepción en Gmail autorizada, 10/oct/2026 (`ops/test-production-beta.cjs`) |
 | Navegación (pantallas de detalle apiladas) | Hecho | «Volver» y formularios limpios (`ops/e2e-web.cjs`, guarda en `ops/test-ui-patterns.cjs`) |
 | Tope de un pago, salida de grupo, gastos con ex-integrantes, recordatorios | Hecho | `ops/test-groups-ledger.cjs`, `apps/api/src/domain/payable.test.ts` |
 | Dependencias de la API sin avisos de seguridad | Hecho | `npm audit`: quedan solo herramientas de compilación y una de expo-router que exige otra versión mayor de Expo |
@@ -22,7 +22,7 @@ Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = fu
 | Lector de boletas (OCR local en la API) | Parcial | Propone el total y exige revisión; probado con boleta ficticia. Falta probar boletas reales variadas |
 | Compartir por WhatsApp, menú del teléfono, copiar | Hecho | `ops/test-sharing.cjs`; envío real depende del teléfono |
 | Correo abierto en Gmail/Outlook | Parcial | Android adjunta imagen; iOS HTML; web texto. Falta prueba en teléfonos con cuentas reales |
-| Correo HTML enviado desde la API | Hecho en código | `ops/test-share-email-api.cjs` con SMTP local. Falta proveedor real (Resend/SES) y prueba de recepción |
+| Correo HTML enviado desde la API | Hecho y probado en Gmail | SMTP Gmail en Contabo; verificación, bienvenida, recuperación e invitación recibidas en el buzón autorizado. Límites/deduplicación con SMTP local. Outlook real pendiente |
 | Recordatorios manuales y automáticos (cron diario) | Parcial | Rutas y job existen; notificaciones dependen de Firebase/EAS |
 | Notificaciones push | Pendiente externo | Código listo; requiere proyecto EAS y Firebase del propietario |
 | Eliminar cuenta (app y web) | Hecho | `ops/test-account-deletion.cjs` |
@@ -42,8 +42,13 @@ Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = fu
 | Logs sin claves, OTP ni montos | Hecho (`apps/api/src/domain/logSafe.test.ts`) |
 | Sentry en la API | Opcional, requiere DSN |
 | Build Android (APK/AAB) firmada | Pendiente externo (EAS + Play Console) |
-| Despliegue HTTPS con dominio | Pendiente externo |
+| Despliegue HTTPS con dominio | Hecho: API y beta web en `https://junto.lunalav.pe/app/`, Contabo/Caddy, base privada |
+| Beta iPhone/Android sin instalación | Hecho en navegadores de prueba: Chromium/WebKit. Falta validación física en Safari iPhone y Chrome Android |
 
 ## Lo que todavía no está demostrado
 
 Ver «Pruebas pendientes en dispositivos y servicios reales» en `RELEASE_CHECKLIST.md`. Pasar lint, TypeScript y las pruebas locales no equivale a estar listo para Play Store.
+
+La validación publicada del 10/oct/2026 está en `ops/web/VALIDATION-20261010.md`.
+Acceso de invitado con alias y código por correo, sin contraseña, es una propuesta pendiente:
+la beta actual exige cuenta con correo verificado, pero no exige instalar una app.
