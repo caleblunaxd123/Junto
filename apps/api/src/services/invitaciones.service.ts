@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma";
 import { UserError } from "../domain/errors";
 import { sendPushNotification } from "../lib/firebase";
 import { transactionLock } from "../lib/transactionLock";
+import { saveJoinNotices, pushJoinNotice } from "./groupNotices.service";
 
 export const INVITE_LIMITS = { perDay: 40, quietDaysAfterRejection: 7 };
 // Same answer whether or not the e-mail/phone has an account: inviting must not reveal who uses JUNTO.
@@ -77,18 +78,26 @@ export async function myInvitations(userId: string) {
 }
 
 export async function answerInvitation(userId: string, id: string, accept: boolean) {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const invitation = await tx.invitacion.findFirst({ where: { id, invitadoId: userId }, include: { grupo: { select: { id: true, nombre: true, activo: true } } } });
     if (!invitation || !invitation.grupo.activo) throw new UserError("Esta invitación ya no está disponible.", 404);
-    if (invitation.estado !== "pendiente") throw new UserError("Ya respondiste esta invitación.", 409);
+    await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${invitation.grupoId}::uuid FOR UPDATE`;
+    const current = await tx.invitacion.findUnique({ where: { id }, include: { grupo: { select: { activo: true } } } });
+    if (!current?.grupo.activo) throw new UserError("Esta invitación ya no está disponible.", 404);
+    if (current.estado !== "pendiente") throw new UserError("Ya respondiste esta invitación.", 409);
     const changed = await tx.invitacion.updateMany({ where: { id, estado: "pendiente" }, data: { estado: accept ? "aceptada" : "rechazada", fechaRespuesta: new Date() } });
     if (changed.count !== 1) throw new UserError("Ya respondiste esta invitación.", 409);
+    let recipients: string[] = [];
     if (accept) {
       const member = await tx.grupoMiembro.findUnique({ where: { grupoId_usuarioId: { grupoId: invitation.grupoId, usuarioId: userId } } });
       // Rejoining never restores an old admin role; someone already in the group keeps theirs.
       if (!member) await tx.grupoMiembro.create({ data: { grupoId: invitation.grupoId, usuarioId: userId, rol: "miembro" } });
-      else if (!member.activo) await tx.grupoMiembro.update({ where: { id: member.id }, data: { activo: true, rol: "miembro" } });
+      else if (!member.activo) await tx.grupoMiembro.update({ where: { id: member.id }, data: { activo: true, rol: "miembro", fechaUnion: new Date() } });
+      if (!member?.activo) recipients = await saveJoinNotices(tx, invitation.grupoId, userId, invitation.invitadoPor);
     }
-    return { grupoId: invitation.grupo.id, nombre: invitation.grupo.nombre, aceptada: accept };
+    return { grupoId: invitation.grupo.id, nombre: invitation.grupo.nombre, aceptada: accept, recipients };
   });
+  void pushJoinNotice(result.grupoId, userId, result.recipients);
+  const { recipients: _recipients, ...response } = result;
+  return response;
 }

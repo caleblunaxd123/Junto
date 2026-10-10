@@ -68,6 +68,7 @@ export interface GrupoConBalance extends Grupo {
       tuParte: number;
       pagosEnviados: number;
       pagosRecibidos: number;
+      pagosPorConfirmar?: number;
       neto: number;
     }[];
     saldos?: Saldo[];

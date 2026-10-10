@@ -40,7 +40,7 @@ test("push registration and taps stop when the account changes or the listener u
     if (parent?.filename.endsWith("push.ts")) {
       if (request === "react-native") return { Platform: { OS: "android" } };
       if (request === "expo-constants") return { __esModule: true, default: { expoConfig: { extra: { eas: { projectId: "qa" } } } }, ExecutionEnvironment: { StoreClient: "store" } };
-      if (request === "expo-secure-store") return { getItemAsync: async key => storage.get(key) || null, setItemAsync: async (key, value) => storage.set(key, value), deleteItemAsync: async key => storage.delete(key) };
+      if (request === "./tokenStorage") return { getItemAsync: async key => storage.get(key) || null, setItemAsync: async (key, value) => storage.set(key, value), deleteItemAsync: async key => storage.delete(key) };
       if (request === "./api") return { api: { put: async (...args) => puts.push(args) } };
       if (request === "./queryClient") return { queryClient: { invalidateQueries: async () => {} } };
       if (request === "expo-notifications") return notifications;

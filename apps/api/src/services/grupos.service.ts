@@ -3,6 +3,7 @@ import { UserError as Error } from '../domain/errors';
 import { prisma } from '../lib/prisma';
 import { calcularSaldosGrupo, resumenCuentasGrupo } from './balance.service';
 import type { CrearGrupoInput, EditarGrupoInput } from '../schemas/grupos.schema';
+import { saveJoinNotices, pushJoinNotice } from './groupNotices.service';
 
 function generateLinkInvitacion(): string {
   return randomBytes(12).toString('base64url');
@@ -123,14 +124,20 @@ export async function unirseConLink(linkInvitacion: string, usuarioId: string) {
   const grupo = await prisma.grupo.findFirst({ where: { linkInvitacion, activo: true } });
   if (!grupo) throw new Error('Link de invitación inválido');
 
-  await prisma.$transaction(async (tx) => {
+  const recipients = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${grupo.id}::uuid FOR UPDATE`;
+    const current = await tx.grupo.findFirst({ where: { id: grupo.id, linkInvitacion, activo: true } });
+    if (!current) throw new Error('Link de invitación inválido');
+    const invitation = await tx.invitacion.findFirst({ where: { grupoId: grupo.id, invitadoId: usuarioId, estado: 'pendiente' }, select: { invitadoPor: true } });
     const member = await tx.grupoMiembro.findUnique({ where: { grupoId_usuarioId: { grupoId: grupo.id, usuarioId } } });
     // Rejoining through the link never restores an old admin role.
     if (!member) await tx.grupoMiembro.create({ data: { grupoId: grupo.id, usuarioId, rol: 'miembro' } });
-    else if (!member.activo) await tx.grupoMiembro.update({ where: { id: member.id }, data: { activo: true, rol: 'miembro' } });
+    else if (!member.activo) await tx.grupoMiembro.update({ where: { id: member.id }, data: { activo: true, rol: 'miembro', fechaUnion: new Date() } });
     // A pending invitation to this group is answered by joining.
     await tx.invitacion.updateMany({ where: { grupoId: grupo.id, invitadoId: usuarioId, estado: 'pendiente' }, data: { estado: 'aceptada', fechaRespuesta: new Date() } });
+    return !member?.activo ? saveJoinNotices(tx, grupo.id, usuarioId, invitation?.invitadoPor) : [];
   });
+  void pushJoinNotice(grupo.id, usuarioId, recipients);
 
   return { grupoId: grupo.id, nombre: grupo.nombre };
 }

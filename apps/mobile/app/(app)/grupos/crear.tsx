@@ -7,7 +7,7 @@ import { useAuthStore } from "../../../src/store/auth.store";
 import { api } from "../../../src/lib/api";
 import { queryClient } from "../../../src/lib/queryClient";
 import { guessGroupType } from "../../../src/lib/groupType";
-import { Screen, Label, Button, ErrorBox, palette, design } from "../../../src/components/ui/Design";
+import { Screen, Card, Label, Button, ErrorBox, palette, design } from "../../../src/components/ui/Design";
 import { FormField } from "../../../src/components/ui/Reference";
 import { art } from "../../../src/components/ui/Artwork";
 import { errorMessage } from "../../../src/lib/errorMessage";
@@ -104,6 +104,10 @@ export default function CreateGroup() {
         </>
       }
     >
+      <Card style={{ backgroundColor: palette.mint, gap: 6 }}>
+        <Label weight="bold">Un total. La parte de cada persona. Los pagos claros.</Label>
+        <Label size={13} color={palette.muted}>Primero crea el grupo e invita a tu gente. Cuando se unan, define la cuenta y el reparto. Cada integrante registra lo que devuelve por Yape, Plin o efectivo; quien lo recibe lo confirma.</Label>
+      </Card>
       <FormField
         label="¿Cómo se llama?"
         icon="people-outline"

@@ -62,6 +62,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     grupoId?: string;
     texto?: string;
     gastoId?: string;
+    cuenta?: string;
   }>();
   const params = {
     ...rawParams,
@@ -308,7 +309,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   return (
     <Screen
       resetOnFocus
-      title={params.gastoId ? "Corregir gasto" : "Agregar gasto"}
+      title={params.gastoId ? "Corregir gasto" : params.cuenta === "1" ? "Total y reparto" : "Agregar gasto"}
       subtitle={
         params.gastoId
           ? "Se actualizará el gasto existente, no se creará otro."
@@ -318,6 +319,11 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       }
       back
     >
+      {params.cuenta === "1" && !params.gastoId && <Card style={{ backgroundColor: palette.mint, gap: 8 }}>
+        <Label weight="bold">Registra la cuenta una sola vez</Label>
+        <Label size={13}>Escribe el total ya pagado, elige quién lo adelantó y reparte entre quienes participaron. Ejemplo: S/ 500 entre 5 son S/ 100 por persona.</Label>
+        <Label size={12} color={palette.muted}>Después, los integrantes usan «Registrar mi pago» para indicar cuánto devolvieron. No vuelvan a añadir esos pagos como gastos. Si falta alguien, invítalo antes de guardar el reparto.</Label>
+      </Card>}
       {params.gastoId && original.isLoading ? (
         <ActivityIndicator color={palette.primary} />
       ) : params.gastoId && original.isError ? (
@@ -530,7 +536,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
               </Pressable>
             </Field>
             )}
-            <Field label="Pagó">
+            <Field label={params.cuenta === "1" ? "¿Quién adelantó el total?" : "Pagó"}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Pagó: ${selectedPayer ? nameOf(selectedPayer.usuarioId) : "elige"}. Cambiar`}
@@ -772,7 +778,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
           )}
           {!!error && <ErrorBox message={error} />}
           <Button
-            title={params.gastoId ? "Guardar corrección" : "Guardar gasto"}
+            title={params.gastoId ? "Guardar corrección" : params.cuenta === "1" ? "Guardar total y reparto" : "Guardar gasto"}
             onPress={save}
             loading={create.isPending}
             disabled={!valid || !description.trim() || !payer}

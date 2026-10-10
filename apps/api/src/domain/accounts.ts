@@ -9,7 +9,8 @@ export function calculateAccounts(members: AccountMember[], expenses: AccountExp
     const tuParte = expenses.reduce((sum, e) => sum + e.participantes.filter((p) => p.usuarioId === member.id).reduce((value, p) => value + p.montoAsignado, 0), 0);
     const pagosEnviados = confirmed.filter((p) => p.pagadorId === member.id).reduce((sum, p) => sum + p.monto, 0);
     const pagosRecibidos = confirmed.filter((p) => p.receptorId === member.id).reduce((sum, p) => sum + p.monto, 0);
-    return { usuarioId: member.id, nombre: member.nombre, pagaste, tuParte, pagosEnviados, pagosRecibidos, neto: pagaste - tuParte + pagosEnviados - pagosRecibidos };
+    const pagosPorConfirmar = payments.filter((p) => p.estado === 'reportado' && p.pagadorId === member.id).reduce((sum, p) => sum + p.monto, 0);
+    return { usuarioId: member.id, nombre: member.nombre, pagaste, tuParte, pagosEnviados, pagosRecibidos, pagosPorConfirmar, neto: pagaste - tuParte + pagosEnviados - pagosRecibidos };
   });
   const debtors = cuentas.filter((a) => a.neto < 0).map((a) => ({ id: a.usuarioId, nombre: a.nombre, monto: -a.neto }));
   const creditors = cuentas.filter((a) => a.neto > 0).map((a) => ({ id: a.usuarioId, nombre: a.nombre, monto: a.neto }));

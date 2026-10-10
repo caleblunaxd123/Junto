@@ -108,7 +108,7 @@ export function listenForNotificationTaps(router: Router, isCurrent: () => boole
       });
       const received = Notifications.addNotificationReceivedListener(() => {
         if (cancelled || !isCurrent()) return;
-        for (const key of ["pagos", "grupos", "actividad", "comentarios", "invitaciones"]) void queryClient.invalidateQueries({ queryKey: [key] });
+        for (const key of ["pagos", "grupos", "actividad", "comentarios", "invitaciones", "notificaciones"]) void queryClient.invalidateQueries({ queryKey: [key] });
       });
       remove = () => { subscription.remove(); received.remove(); };
       const initial = await Notifications.getLastNotificationResponseAsync();

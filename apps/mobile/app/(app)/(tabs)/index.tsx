@@ -31,6 +31,7 @@ import { homeState } from "../../../src/lib/homeState";
 import { pendingActions } from "../../../src/lib/pending";
 import { PendingActions } from "../../../src/components/PendingActions";
 import { Invitations } from "../../../src/components/Invitations";
+import { GroupNotices } from "../../../src/components/GroupNotices";
 import { AddButton, CreateSheet } from "../../../src/components/CreateSheet";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
@@ -63,6 +64,7 @@ export default function Home() {
     refetchPayments();
     refreshBills();
     void qc.invalidateQueries({ queryKey: ["invitaciones"] });
+    void qc.invalidateQueries({ queryKey: ["notificaciones"] });
   }, [refetch, refetchPayments, refreshBills, qc]);
   useFocusEffect(refreshAll);
   // A calculation kept from "Probar sin cuenta" (only with consent, only on this phone).
@@ -123,6 +125,7 @@ export default function Home() {
         </View>}
 
         <Invitations />
+        <GroupNotices />
         {trial && (
           <Card style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", gap: 8 }}>
             <Label weight="bold">Tu cálculo de prueba sigue aquí</Label>

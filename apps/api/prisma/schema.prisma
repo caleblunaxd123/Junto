@@ -48,6 +48,8 @@ model Usuario {
   comentarios         Comentario[]
   reportesComentarios ReporteComentario[]
   recibosPush         ReciboPush[]
+  avisosRecibidos     AvisoGrupo[] @relation("AvisoDestinatario")
+  avisosOriginados    AvisoGrupo[] @relation("AvisoIntegrante")
 
   @@map("usuarios")
 }
@@ -110,6 +112,7 @@ model Grupo {
   comprobantes    Comprobante[]
   comentarios     Comentario[]
   invitaciones    Invitacion[]
+  avisos          AvisoGrupo[]
 
   @@map("grupos")
 }
@@ -129,6 +132,22 @@ model GrupoMiembro {
   @@unique([grupoId, usuarioId])
   @@index([usuarioId])
   @@map("grupo_miembros")
+}
+
+// Saved in the same transaction as joining. Push is optional, the in-app notice is durable.
+model AvisoGrupo {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  grupoId      String   @map("grupo_id") @db.Uuid
+  usuarioId    String   @map("usuario_id") @db.Uuid
+  integranteId String   @map("integrante_id") @db.Uuid
+  fecha        DateTime @default(now())
+  leido        Boolean  @default(false)
+  grupo        Grupo    @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  usuario      Usuario  @relation("AvisoDestinatario", fields: [usuarioId], references: [id], onDelete: Cascade)
+  integrante   Usuario  @relation("AvisoIntegrante", fields: [integranteId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, leido, fecha])
+  @@map("avisos_grupo")
 }
 
 model Gasto {

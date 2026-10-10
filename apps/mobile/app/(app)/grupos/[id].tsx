@@ -35,9 +35,10 @@ import { centavosASoles, type ActividadEvento } from "../../../src/types";
 import { ShareMessageSheet } from "../../../src/components/ui/ShareMessage";
 import { groupShareMessage, type ShareMessage } from "../../../src/lib/shareMessage";
 import { useResponsiveLayout } from "../../../src/components/ui/responsive";
+import { GroupContributions } from "../../../src/components/GroupContributions";
 
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
-type Tab = "Gastos" | "Saldos" | "Actividad";
+type Tab = "Reparto" | "Gastos" | "Actividad";
 
 export default function Group() {
   const { desktop, tablet, web } = useResponsiveLayout();
@@ -55,7 +56,7 @@ export default function Group() {
     refetchPayments();
   }, [refetch, refetchExpenses, refetchPayments]);
   useFocusEffect(refreshAll);
-  const [tab, setTab] = useState<Tab>("Gastos");
+  const [tab, setTab] = useState<Tab>("Reparto");
   const [menu, setMenu] = useState(false);
   const [error, setError] = useState("");
   const [shareMessage, setShareMessage] = useState<ShareMessage | null>(null);
@@ -153,6 +154,14 @@ export default function Group() {
             </View>
 
             <View style={{ padding: 16, gap: 16 }}>
+              <Card style={{ padding: 20, gap: 8, backgroundColor: palette.mint, borderColor: "#A4EDD7" }}>
+                <Label size={13} weight="bold" color="#007B60">TOTAL DE LA CUENTA DEL GRUPO</Label>
+                <Label size={32} weight="extra">{money(group.resumen.totalGastado)}</Label>
+                <Label size={13} color={palette.muted}>{group.resumen.cantidadGastos
+                  ? `De ${group.resumen.cantidadGastos} ${group.resumen.cantidadGastos === 1 ? "gasto registrado" : "gastos registrados"}. Las devoluciones no aumentan este total.`
+                  : "Define cuánto se pagó y cómo se reparte. Después cada integrante registra lo que te devuelve."}</Label>
+                {!group.resumen.cantidadGastos && <Button compact title="Definir total y reparto" onPress={() => router.push(`/(app)/gastos/agregar?grupoId=${id}&cuenta=1`)} />}
+              </Card>
               {isRefetchError && (
                 <>
                   <ErrorBox message="No pudimos actualizar el grupo. Ves los montos de la última consulta." />
@@ -183,8 +192,8 @@ export default function Group() {
                       {group.resumen.cantidadGastos
                         ? "No debes ni te deben nada aquí."
                         : group.miembros.length < 2
-                          ? "Invita a las personas con las que compartes gastos y agrega el primero."
-                          : "Agrega el primero: quién pagó y para quién fue."}
+                          ? "Invita a los integrantes. Cuando se unan, define el total y sus partes."
+                          : "Define el total una sola vez, elige quién lo adelantó y cuánto corresponde a cada persona."}
                     </Label>
                     {group.miembros.length < 2 && (
                       <View style={{ marginTop: 8 }}>
@@ -217,9 +226,10 @@ export default function Group() {
               <SectionTitle title="Integrantes" action="Invitar" onPress={goInvite} />
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
                 {meFirst(group.miembros, (m) => m.usuarioId, user?.id).map((m) => {
-                  const net = group.resumen.cuentas.find((a) => a.usuarioId === m.usuarioId)?.neto || 0;
+                  const account = group.resumen.cuentas.find((a) => a.usuarioId === m.usuarioId);
+                  const net = account?.neto || 0;
                   const isMe = m.usuarioId === user?.id;
-                  const state = net < 0 ? (isMe ? "Debes" : "Debe") : net > 0 ? (isMe ? "Te deben" : "Le deben") : "Al día";
+                  const state = net < 0 ? (isMe ? "Debes" : "Debe") : net > 0 ? (isMe ? "Te deben" : "Le deben") : account?.tuParte ? "Al día" : "Sin parte asignada";
                   const color = net < 0 ? palette.coral : net > 0 ? "#007B60" : palette.muted;
                   return (
                     <View
@@ -254,16 +264,18 @@ export default function Group() {
               )}
 
               <View accessibilityRole="tablist" style={{ flexDirection: "row", padding: 5, backgroundColor: "white", borderRadius: 20 }}>
-                {(["Gastos", "Saldos", "Actividad"] as const).map((t, i) => (
+                {(["Reparto", "Gastos", "Actividad"] as const).map((t, i) => (
                   <Pressable
                     accessibilityRole="tab"
+                    accessibilityLabel={t}
+                    aria-selected={t === tab}
                     accessibilityState={{ selected: t === tab }}
                     key={t}
                     onPress={() => setTab(t)}
                     style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", minHeight: 48, gap: 5, backgroundColor: t === tab ? palette.mint : "white", borderRadius: 16 }}
                   >
                     <Ionicons
-                      name={(["list", "swap-horizontal-outline", "time-outline"] as const)[i]}
+                      name={(["people-outline", "list", "time-outline"] as const)[i]}
                       color={t === tab ? "#078B70" : palette.muted}
                       size={18}
                     />
@@ -334,8 +346,10 @@ export default function Group() {
                     )}
                   </>
                 )
-              ) : tab === "Saldos" ? (
+              ) : tab === "Reparto" ? (
                 <>
+                  {!!group.resumen.cantidadGastos && <GroupContributions group={group} userId={user?.id} />}
+                  {!!group.saldos.length && <Label accessibilityRole="header" weight="extra" size={19}>¿A quién se le devuelve?</Label>}
                   {!group.saldos.length ? (
                     <Label color={palette.muted}>
                       {group.resumen.cantidadGastos ? "Nadie le debe nada a nadie." : "Todavía no se registraron gastos."}
@@ -386,11 +400,11 @@ export default function Group() {
         <View style={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", flexDirection: "row", gap: 8, padding: 12, borderTopWidth: 1, borderColor: palette.line, backgroundColor: palette.background }}>
           {group.balanceUsuario.debes > 0 && (
             <View style={{ flex: 3 }}>
-              <Button title="Subir comprobante" secondary accessibilityHint="Sube la captura de tu Yape o Plin para registrar tu pago" onPress={() => router.push(`/(app)/pagos/pagar?grupoId=${id}&subir=1`)} />
+              <Button title="Registrar mi pago" accessibilityHint="Registra una devolución por Yape, Plin, transferencia o efectivo. No agrega un gasto." onPress={() => router.push(`/(app)/pagos/pagar?grupoId=${id}`)} />
             </View>
           )}
           <View style={{ flex: 2 }}>
-            <Button title={group.balanceUsuario.debes > 0 ? "＋ Gasto" : "＋ Agregar gasto"} accessibilityHint="Registrar un gasto del grupo" onPress={() => router.push(`/(app)/gastos/agregar?grupoId=${id}`)} />
+            <Button secondary={group.balanceUsuario.debes > 0} title={group.resumen.cantidadGastos ? "＋ Otro gasto" : "Definir total"} accessibilityHint="Solo añade un monto nuevo pagado a la cuenta, no una devolución" onPress={() => router.push(`/(app)/gastos/agregar?grupoId=${id}${group.resumen.cantidadGastos ? "" : "&cuenta=1"}`)} />
           </View>
         </View>
       )}
