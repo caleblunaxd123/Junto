@@ -32,6 +32,18 @@ SPA pasan. Las capturas locales quedan en `ops/artifacts/`, ignorado por Git.
 
 ## Publicación y límites
 
+Publicado en `https://junto.lunalav.pe/app/`: web `junto-web:20261010-beta3`,
+fuente `c0efaed`. La API sigue en `junto-api:20261010-beta2`; base y otros servicios
+sin cambios. Imagen web beta2 conservada. Web saludable, usuario `node`, filesystem
+de solo lectura y sin puertos publicados (tampoco API ni PostgreSQL).
+
+Prueba HTTPS real en Chromium y WebKit de PC: bienvenida, login con Enter usando
+la cuenta QA existente, seis anchos con sesión/grupo conservados, abrir grupo,
+preparar invitación por correo en ventana centrada y logout eliminando token.
+Sin envío de correo, sin nuevos registros/grupos/repartos en producción. `/ready`,
+SPA de onboarding/login y manifest responden 200; bundle publicado confirmado.
+Los recorridos locales incluyen además una ventana de PC de 1440×600 para correo.
+
 Esta ronda no requiere migraciones ni cambios de API, SMTP, DNS o TLS. Conservar
 la imagen web anterior para rollback. `ops/test-production-responsive.cjs` usa
 exclusivamente la cuenta QA ficticia ya autorizada, no envía correos y no crea
