@@ -3,7 +3,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(process.env.WEB_ROOT || path.join(__dirname, '../../apps/mobile/dist-beta'));
-const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.json':'application/json', '.webmanifest':'application/manifest+json', '.png':'image/png', '.ico':'image/x-icon', '.svg':'image/svg+xml', '.ttf':'font/ttf', '.woff2':'font/woff2' };
+const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.json':'application/json', '.webmanifest':'application/manifest+json', '.png':'image/png', '.ico':'image/x-icon', '.svg':'image/svg+xml', '.ttf':'font/ttf', '.woff2':'font/woff2', '.apk':'application/vnd.android.package-archive' };
 function createServer() {
   return http.createServer((req,res) => {
     res.setHeader('X-Content-Type-Options','nosniff');
@@ -28,6 +28,7 @@ function createServer() {
     }
     try {
       const stat=fs.statSync(selected);res.setHeader('Content-Type',types[path.extname(selected)]||'application/octet-stream');
+      if(path.extname(selected)==='.apk')res.setHeader('Content-Disposition',`attachment; filename="${path.basename(selected).replace(/[^a-zA-Z0-9._-]/g,'_')}"`);
       if(/\/(assets|_expo)\//.test(pathname))res.setHeader('Cache-Control','public, max-age=31536000, immutable');
       res.setHeader('Content-Length',stat.size);res.writeHead(200);
       if(req.method==='HEAD')res.end();else fs.createReadStream(selected).pipe(res);

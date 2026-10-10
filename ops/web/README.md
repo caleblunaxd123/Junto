@@ -67,6 +67,11 @@ la web: habilita el botón público y el destino de invitaciones. Conservar imag
 configuración anterior para rollback. No modificar otros dominios, MX ni TLS de la zona.
 No publicar la fuente, `.env`, mapas, llaves ni el APK debug antiguo.
 
+Un APK **release de beta interna** verificado puede distribuirse como archivo estático
+en `/app/descargas/JUNTO-beta-20261010.apk`, con MIME Android y disposición de
+descarga. Mantenerlo fuera de Git; incluir únicamente el binario en el export servido.
+No es una publicación de Play Store ni incluye claves privadas. Véase `ops/android/README.md`.
+
 Para Android nativo, compilar una APK de distribución interna con configuración HTTPS
 y certificado propio; no distribuir el APK de desarrollo que necesita Metro. Para
 TestFlight se requiere membresía Apple Developer y una compilación iOS validada.
