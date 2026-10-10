@@ -72,8 +72,7 @@ router.get('/unirse/:code', (req, res) => {
   page(res, 'Invitación', `<h1>Te invitaron a un grupo en JUNTO</h1>
 <p>Comparte gastos con tu grupo y mira en todo momento quién le debe a quién.</p>
 <div class="card">
-<a class="btn primary" href="${escapeHTML(intent)}">Abrir en JUNTO</a>
-${betaWebUrl() ? `<a class="btn secondary" href="${escapeHTML(betaWebUrl() + 'unirse/' + code)}">Entrar desde iPhone o navegador</a><p class="muted">Beta web: entra con tu correo. No necesitas instalar la app ni pagar. Debes confirmar que quieres unirte al grupo.</p>` : ''}
+${betaWebUrl() ? `<a class="btn primary" href="${escapeHTML(betaWebUrl() + 'unirse/' + code)}">Ver grupo y aceptar invitación</a><p class="muted">Funciona en iPhone y Android. Entra con tu correo; no necesitas instalar la app ni pagar. No te unes hasta que lo confirmes.</p><a class="btn secondary" href="${escapeHTML(intent)}">Ya tengo JUNTO en Android: abrir app</a>` : `<a class="btn primary" href="${escapeHTML(intent)}">Abrir en JUNTO</a>`}
 ${playStoreUrl() ? `<a class="btn secondary" href="${escapeHTML(playStoreUrl())}">Descargar en Google Play</a>` : '<p class="muted">JUNTO está en fase de pruebas y aún no está publicado en Google Play. Pide la versión de prueba a quien te invitó.</p>'}
 <p class="muted">¿Acabas de instalar la app? Vuelve a tocar el enlace de invitación, o abre JUNTO, toca «+» → «Unirme con un enlace» y pega este código: <code>${escapeHTML(code)}</code></p>
 </div>`);
@@ -117,7 +116,7 @@ router.get('/', (_req, res) => {
   page(res, 'Divide sin drama', `<h1>Las cuentas claras, los buenos momentos juntos</h1>
 <p>Divide la cuenta de hoy o lleva los gastos de tu depa, pareja o viaje.</p>
 ${betaWebUrl() ? `<div class="card"><h2>Prueba JUNTO con tu gente</h2><p>Abre la beta web desde iPhone o Android. Crea tu cuenta con correo, forma un grupo y comparte las cuentas claras.</p><a class="btn primary" href="${escapeHTML(betaWebUrl())}">Probar JUNTO en mi teléfono</a><p class="muted">En iPhone: abre en Safari → Compartir → Añadir a la pantalla de inicio. No es una app de TestFlight. Requiere internet; no incluye notificaciones push ni login con Google.</p></div>` : ''}
-${playStoreUrl() ? `<a class="btn primary" href="${escapeHTML(playStoreUrl())}">Descargar en Google Play</a>` : '<div class="card"><h2>Estamos preparando JUNTO para ti</h2><p>La app está en fase de pruebas. Esta página no es todavía la aplicación web ni una descarga de Google Play.</p><p class="muted">Si te invitaron a probarla, solicita la versión de prueba a quien organiza tu grupo.</p></div>'}
+${playStoreUrl() ? `<a class="btn primary" href="${escapeHTML(playStoreUrl())}">Descargar en Google Play</a>` : betaWebUrl() ? '<p class="muted">Beta de pruebas: todavía no está publicada en Google Play ni App Store. Puedes usarla desde el navegador con el botón de arriba.</p>' : '<div class="card"><h2>Estamos preparando JUNTO para ti</h2><p>La app está en fase de pruebas. Esta página no es todavía la aplicación web ni una descarga de Google Play.</p><p class="muted">Si te invitaron a probarla, solicita la versión de prueba a quien organiza tu grupo.</p></div>'}
 <p class="muted"><a href="/privacidad">Privacidad</a> · <a href="/eliminar-cuenta">Eliminar cuenta</a></p>`);
 });
 
