@@ -10,6 +10,7 @@ import { memberLabels, meFirst } from "../../../src/lib/people";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { ShareMessageSheet } from "../../../src/components/ui/ShareMessage";
 import type { ShareMessage } from "../../../src/lib/shareMessage";
+import { invitationShareMessage, validShareEmail } from "@junto/shared/share";
 import {
   Screen,
   Card,
@@ -17,6 +18,7 @@ import {
   Avatar,
   Button,
   ErrorBox,
+  FeedbackBox,
   palette,
   design,
 } from "../../../src/components/ui/Design";
@@ -31,6 +33,7 @@ export default function Invite() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [shareMessage, setShareMessage] = useState<ShareMessage | null>(null);
+  const [initialChannel, setInitialChannel] = useState<"mail" | undefined>();
   const shareGate = React.useRef(false);
   const inviteGate = React.useRef(false);
   async function invite() {
@@ -39,11 +42,17 @@ export default function Invite() {
     try {
       setBusy(true);
       setError("");
+      setMessage("");
+      const value = identifier.trim();
+      if (!validShareEmail(value) && !/^(?:\+?51\s*)?9\d{8}$/.test(value.replace(/\s/g, ""))) {
+        setError("Escribe un correo válido o un celular peruano de 9 dígitos que empiece con 9.");
+        return;
+      }
       const { data } = await api.post(`/grupos/${grupoId}/invitar`, {
         identificador: identifier.trim(),
       });
       // Invited people accept before joining; the answer never reveals who has an account.
-      setMessage(data.alreadyMember ? "Esta persona ya pertenece al grupo." : `✓ Invitación lista. ${data.mensaje ?? ""}`.trim());
+      setMessage(data.alreadyMember ? "Esta persona ya pertenece al grupo." : "Solicitud procesada. Si ese contacto corresponde a una cuenta, verá la invitación en su Inicio. Esto no envía correo, SMS ni WhatsApp. También puedes compartirle el enlace.");
       setIdentifier("");
       refetch();
       qc.invalidateQueries({ queryKey: ["grupos"] });
@@ -56,13 +65,14 @@ export default function Invite() {
       setBusy(false);
     }
   }
-  async function share() {
+  async function share(channel?: "mail") {
     if (shareGate.current) return;
     shareGate.current = true;
     try {
       setError("");
       const { data } = await api.post(`/grupos/${grupoId}/invitar`, {});
-      setShareMessage({ subject: `Únete a ${group?.nombre || "mi grupo"} · JUNTO`, body: `Únete a «${group?.nombre || "mi grupo"}» en JUNTO para llevar las cuentas juntos:\n${invitationUrl(data.linkCode)}\n\nCualquiera con el enlace puede unirse: compártelo solo con las personas del grupo. JUNTO registra gastos y pagos hechos por fuera; no mueve dinero.` });
+      setInitialChannel(channel);
+      setShareMessage({ ...invitationShareMessage(group?.nombre || "mi grupo", invitationUrl(data.linkCode)), resource: { tipo: "invitacion", id: grupoId } });
     } catch {
       setError("No pudimos preparar el enlace. Reintenta.");
     } finally { shareGate.current = false; }
@@ -86,9 +96,11 @@ export default function Invite() {
           {fresh ? "Ahora suma a tu gente" : "Comparte el enlace"}
         </Label>
         <Label size={14} color={palette.muted}>
-          Envíales el enlace por WhatsApp. Al abrirlo instalan JUNTO (si no lo tienen) y entran directo a «{group?.nombre || "tu grupo"}».
+          Comparte el enlace para que revisen «{group?.nombre || "tu grupo"}», entren con su cuenta y decidan si quieren unirse. No necesitas acceder a sus contactos.
         </Label>
-        <Button title="Compartir enlace de invitación" onPress={share} />
+        <Button title="Compartir enlace de invitación" onPress={() => share()} />
+        <Button secondary title="Enviar invitación por correo" onPress={() => share("mail")} />
+        <Label size={12} color={palette.muted}>WhatsApp: eliges el chat y pulsas enviar. Correo: puedes enviarlo desde JUNTO o desde Gmail/Outlook.</Label>
       </Card>
       {!!invitados && Number(invitados) > 0 && (
         <Label size={13} color={palette.muted}>
@@ -97,12 +109,13 @@ export default function Invite() {
       )}
       {!!error && <ErrorBox message={error} />}
       <View style={{ gap: 8 }}>
-        <Label weight="bold" size={14}>¿Ya usa JUNTO? Invítalo por correo o celular</Label>
+        <Label weight="bold" size={16}>¿Ya tiene cuenta? Invita dentro de JUNTO</Label>
+        <Label size={12} color={palette.muted}>Busca por su correo o celular registrado. Esta opción no manda mensajes fuera de la app.</Label>
         <View style={design.row}>
           <TextInput
             accessibilityLabel="Correo o celular para invitar"
             value={identifier}
-            onChangeText={setIdentifier}
+            onChangeText={(value) => { setIdentifier(value); setMessage(""); setError(""); }}
             autoCapitalize="none"
             keyboardType="email-address"
             placeholder="ana@correo.com o 999888777"
@@ -112,7 +125,7 @@ export default function Invite() {
           />
           <Button compact title="Invitar" onPress={invite} loading={busy} disabled={identifier.trim().length < 5} />
         </View>
-        {!!message && <Label size={13} color="#078B70">{message}</Label>}
+        {!!message && <FeedbackBox title="Invitación dentro de JUNTO" tone="info" message={message} />}
       </View>
       <Label size={18} weight="extra">
         En el grupo ({group?.miembros.length || 0})
@@ -135,7 +148,7 @@ export default function Invite() {
       <Label size={12} color={palette.muted}>
         Cualquiera con el enlace puede unirse: compártelo solo con tu grupo.
       </Label>
-      <ShareMessageSheet message={shareMessage} onClose={() => setShareMessage(null)} />
+      <ShareMessageSheet message={shareMessage} initialChannel={initialChannel} onClose={() => setShareMessage(null)} />
     </Screen>
   );
 }

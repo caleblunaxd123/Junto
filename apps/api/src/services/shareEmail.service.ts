@@ -8,6 +8,7 @@ import {
   shareEmailText,
   shareFingerprint,
   validShareEmail,
+  invitationShareMessage,
   type ShareMessage,
 } from "@junto/shared/share";
 import { prisma } from "../lib/prisma";
@@ -19,7 +20,7 @@ import { quickBillReadSchema } from "../schemas/quickBill.schema";
 import { getGrupoDetalle } from "./grupos.service";
 import { getGastoDetalle } from "./gastos.service";
 
-export type ShareResource = { tipo: "cuenta_rapida" | "grupo" | "gasto"; id: string };
+export type ShareResource = { tipo: "cuenta_rapida" | "grupo" | "gasto" | "invitacion"; id: string };
 export type ShareEmailStatus = "enviando" | "aceptado" | "fallido" | "incierto";
 
 /** Abuse limits: JUNTO sends summaries of your own records, it is not an open mail relay. */
@@ -29,6 +30,19 @@ const notFound = () => new UserError("No encontramos ese resumen o no tienes acc
 
 /** Rebuilds the summary from authoritative server data, after checking the person may see it. */
 export async function buildShareMessage(userId: string, recurso: ShareResource): Promise<ShareMessage> {
+  if (recurso.tipo === "invitacion") {
+    const membership = await prisma.grupoMiembro.findFirst({
+      where: { grupoId: recurso.id, usuarioId: userId, activo: true, grupo: { activo: true } },
+      select: { grupo: { select: { nombre: true, linkInvitacion: true } } },
+    });
+    if (!membership?.grupo.linkInvitacion) throw notFound();
+    let origin: URL;
+    try { origin = new URL(process.env.PUBLIC_WEB_URL || ""); }
+    catch { throw new UserError("El enlace público de JUNTO aún no está configurado.", 503, "ENLACE_NO_CONFIGURADO"); }
+    if (origin.protocol !== "https:" || origin.username || origin.password)
+      throw new UserError("El enlace público de JUNTO debe usar HTTPS.", 503, "ENLACE_NO_CONFIGURADO");
+    return invitationShareMessage(membership.grupo.nombre, `${origin.origin}/unirse/${membership.grupo.linkInvitacion}`);
+  }
   if (recurso.tipo === "cuenta_rapida") {
     const row = await prisma.cuentaRapida.findFirst({ where: { id: recurso.id, creadoPor: userId } });
     if (!row) throw notFound();

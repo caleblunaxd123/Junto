@@ -1,0 +1,8 @@
+**
+!ops/
+!ops/web/
+!ops/web/server.cjs
+!apps/
+!apps/mobile/
+!apps/mobile/dist-beta/
+!apps/mobile/dist-beta/**

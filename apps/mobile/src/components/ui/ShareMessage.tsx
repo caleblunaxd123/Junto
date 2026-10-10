@@ -73,6 +73,21 @@ export function ShareSummary({ message, reportRef }: { message: ShareMessage; re
   const [expanded, setExpanded] = React.useState(false);
   React.useEffect(() => setExpanded(false), [message.body]);
   const preview = message.preview;
+  if (message.invitation) return <View style={{ gap: 14 }}>
+    <Card style={{ backgroundColor: palette.mint, borderColor: "#BDEBD9", padding: 22 }}>
+      <Ionicons name="people-outline" size={36} color="#007E65" />
+      <Label size={12} weight="bold" color="#007E65">UNA INVITACIÓN, NO UN COBRO</Label>
+      <Label size={25} weight="extra">{message.invitation.groupName}</Label>
+      <Label size={14} color={palette.muted}>Anoten quién pagó y vean quién le debe a quién. Cada persona decide si quiere unirse.</Label>
+    </Card>
+    <Card><Label size={15} weight="bold">Así se unirá tu gente</Label>
+      <Label size={13}>1. Abren el enlace de invitación.</Label>
+      <Label size={13}>2. Crean su cuenta o inician sesión.</Label>
+      <Label size={13}>3. Revisan el grupo y confirman que quieren unirse.</Label>
+      <Label size={12} color={palette.muted} selectable>{message.invitation.url}</Label>
+    </Card>
+    <FeedbackBox tone="info" title="Comparte solo con tu grupo" message="Cualquiera con este enlace puede unirse. Abrir WhatsApp o tu correo no envía el mensaje: tú eliges a quién y pulsas enviar." />
+  </View>;
   return <View style={{ gap: 14 }}>
     <View ref={reportRef} collapsable={false} style={{ gap: 14, backgroundColor: palette.background, padding: 2 }}>
     {preview ? <>
@@ -136,12 +151,12 @@ export function ShareSummary({ message, reportRef }: { message: ShareMessage; re
 }
 
 /** User-reviewed handoff. Opening another app is not evidence that a message was sent. */
-export function ShareChannels({ message, disabled = false, reportRef }: { message: ShareMessage; disabled?: boolean; reportRef?: React.RefObject<View | null> }) {
+export function ShareChannels({ message, disabled = false, reportRef, initialChannel }: { message: ShareMessage; disabled?: boolean; reportRef?: React.RefObject<View | null>; initialChannel?: "mail" }) {
   const [recipient, setRecipient] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");
   const [notice, setNotice] = React.useState("");
-  const [showMail, setShowMail] = React.useState(false);
+  const [showMail, setShowMail] = React.useState(initialChannel === "mail");
   const [imagePreview, setImagePreview] = React.useState<string | null>(null);
   React.useEffect(() => () => { if (imagePreview) releaseCapture(imagePreview); }, [imagePreview]);
   const gate = React.useRef(false);
@@ -226,7 +241,7 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
   }
   function confirmSend() {
     if (!validShareEmail(email)) { setError("Escribe el correo de la persona que lo recibirá."); return; }
-    Alert.alert("¿Enviar este resumen?", `JUNTO lo enviará a ${email} con tu nombre. Si te responden, la respuesta llegará a tu correo.`, [
+    Alert.alert(message.invitation ? "¿Enviar esta invitación?" : "¿Enviar este resumen?", `JUNTO lo enviará a ${email} con tu nombre. Si te responden, la respuesta llegará a tu correo.`, [
       { text: "Cancelar", style: "cancel" },
       { text: "Enviar", onPress: () => run(sendFromJunto, "") },
     ], {
@@ -236,7 +251,7 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
     });
   }
   return <View style={{ gap: 10 }}>
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><Label size={15} weight="extra" style={{ flex: 1 }}>Comparte las cuentas claras</Label>{busy && <ActivityIndicator size="small" color={palette.primary} />}</View>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}><Label size={15} weight="extra" style={{ flex: 1 }}>{message.invitation ? "¿Cómo enviamos la invitación?" : "Comparte las cuentas claras"}</Label>{busy && <ActivityIndicator size="small" color={palette.primary} />}</View>
     {!!error && <View accessibilityLiveRegion="assertive"><ErrorBox message={error} /></View>}
     <View style={{ flexDirection: "row", gap: 10 }}>
       <ChannelButton title="WhatsApp" icon="logo-whatsapp" primary disabled={disabled || busy} onPress={() => run(whatsapp, "Elige el chat y pulsa enviar en WhatsApp. JUNTO no puede confirmar el envío.")} />
@@ -288,20 +303,20 @@ export function ShareChannels({ message, disabled = false, reportRef }: { messag
   </View>;
 }
 
-export function ShareMessageSheet({ message, onClose, disabled = false }: { message: ShareMessage | null; onClose: () => void; disabled?: boolean }) {
+export function ShareMessageSheet({ message, onClose, disabled = false, initialChannel }: { message: ShareMessage | null; onClose: () => void; disabled?: boolean; initialChannel?: "mail" }) {
   const report = React.useRef<View>(null);
   return <Modal visible={!!message} animationType="slide" onRequestClose={onClose}>
     <SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={{ flexDirection: "row", alignItems: "center", padding: 16, gap: 12 }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Cerrar vista para compartir" onPress={onClose} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center", borderRadius: 22, backgroundColor: "#F0F5FC" }}><Ionicons name="close" size={22} color={palette.ink} /></Pressable>
-        <View style={{ flex: 1, gap: 2 }}><Label accessibilityRole="header" weight="extra" size={22}>Listo para compartir</Label><Label size={11} color={palette.muted}>Revisa el reparto. Tú decides cómo enviarlo.</Label></View>
+        <View style={{ flex: 1, gap: 2 }}><Label accessibilityRole="header" weight="extra" size={22}>{message?.invitation ? "Invita a tu gente" : "Listo para compartir"}</Label><Label size={11} color={palette.muted}>{message?.invitation ? "Revisa el grupo. Tú decides a quién enviarlo." : "Revisa el reparto. Tú decides cómo enviarlo."}</Label></View>
       </View>
       <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 12 }}>
         {!!message && <ShareSummary message={message} reportRef={report} />}
       </ScrollView>
       {!!message && <ScrollView style={{ flexGrow: 0, maxHeight: "75%", borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: "white" }} keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 }}><ShareChannels message={message} reportRef={report} disabled={disabled} /></ScrollView>}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 }}><ShareChannels key={`${message.body}:${initialChannel || ""}`} message={message} reportRef={report} disabled={disabled} initialChannel={initialChannel} /></ScrollView>}
       </KeyboardAvoidingView>
     </SafeAreaView>
   </Modal>;

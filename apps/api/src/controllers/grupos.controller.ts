@@ -4,6 +4,8 @@ import { calcularSaldosGrupo } from "../services/balance.service";
 import { crearGrupoSchema, editarGrupoSchema, invitarSchema } from "../schemas/grupos.schema";
 import { z } from "zod";
 import { INVITE_SENT, invitePerson } from "../services/invitaciones.service";
+import { validShareEmail } from "@junto/shared/share";
+import { UserError } from "../domain/errors";
 
 export async function crearGrupo(
   req: Request,
@@ -91,6 +93,8 @@ export async function invitar(req: Request, res: Response, next: NextFunction) {
       .parse(req.body ?? {});
     const target = identificador ?? celular;
     if (target) {
+      if (!validShareEmail(target) && !/^(?:\+?51)?9\d{8}$/.test(target.replace(/\s/g, "")))
+        throw new UserError("Escribe un correo válido o un celular peruano de 9 dígitos que empiece con 9.", 400);
       // Invited people must accept: nobody is added to a group (or shown to it) without consent.
       const result = await invitePerson(req.params.id, req.user!.userId, target);
       res.json({ ...result, invitacionEnviada: !result.alreadyMember, linkCode: group.linkInvitacion });

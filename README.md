@@ -144,7 +144,7 @@ DATABASE_URL=postgresql://…localhost…/<base de pruebas> node ops/e2e-web.cjs
 
 `ops/e2e-vouchers.cjs` recorre comprobantes: Luis sube la captura, Ana (administradora) la revisa y aprueba, Marta ve quién aprobó y todos comentan. Genera un comprobante ficticio único con `python3` + Pillow; `QA_SCREENSHOTS=<carpeta>` guarda capturas (las de `ops/screenshots/comprobantes/` salieron de ahí).
 
-En web `expo-secure-store` no existe y zustand usa `import.meta`; para correrlo localmente se usó un reemplazo temporal en `node_modules` y `unstable_transformImportMeta` en babel, **sin** subir esos cambios. La web no sustituye pruebas nativas de teclado, Google, adjuntos o navegación de Android/iOS.
+La beta web usa `tokenStorage.web.ts`: la sesión se conserva solo en `sessionStorage` de la pestaña, no en `localStorage`; Android/iOS siguen usando SecureStore nativo. Babel transforma `import.meta` para zustand. No modificar `node_modules` para habilitar web. La web no sustituye pruebas nativas de teclado, Google, adjuntos o navegación de Android/iOS. Véase `ops/web/README.md`.
 
 ## Google y Android local
 

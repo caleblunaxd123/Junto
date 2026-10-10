@@ -5,7 +5,7 @@ type GoogleModule = typeof import("@react-native-google-signin/google-signin");
 const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
 /** The button only appears when the build has a Google OAuth client configured. */
-export const googleConfigured = !!WEB_CLIENT_ID;
+export const googleConfigured = !!WEB_CLIENT_ID && Platform.OS !== "web";
 
 export class GoogleSignInError extends Error {}
 
@@ -55,6 +55,7 @@ export async function getGoogleIdToken(): Promise<string | null> {
 
 /** Best effort, so the next person on this phone sees the account picker. */
 export async function googleSignOut() {
+  if (Platform.OS === "web") return;
   const google = WEB_CLIENT_ID ? load() : null;
   await google?.GoogleSignin.signOut().catch(() => undefined);
 }

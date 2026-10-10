@@ -21,5 +21,8 @@
     "gaxios": {
       "uuid": "^11.1.1"
     }
+  },
+  "devDependencies": {
+    "playwright-core": "^1.64.0"
   }
 }

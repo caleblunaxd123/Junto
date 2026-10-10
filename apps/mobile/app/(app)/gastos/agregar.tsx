@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateTimePicker from "../../../src/components/ui/ExpenseDatePicker";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../src/lib/api";
 import { errorMessage } from "../../../src/lib/errorMessage";

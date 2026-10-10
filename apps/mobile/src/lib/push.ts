@@ -1,6 +1,6 @@
 import { Platform } from "react-native";
 import Constants, { ExecutionEnvironment } from "expo-constants";
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from "./tokenStorage";
 import type { Router } from "expo-router";
 import { api } from "./api";
 import { notificationTarget } from "./notificationTarget";
@@ -13,6 +13,7 @@ type NotificationsModule = typeof import("expo-notifications");
  * so push is only wired in development/standalone builds that have an EAS project.
  */
 function pushSupported() {
+  if (Platform.OS === "web") return false;
   if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) return false;
   return !!projectId();
 }

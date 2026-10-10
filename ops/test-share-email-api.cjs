@@ -7,7 +7,7 @@ const net = require("node:net");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 const { PrismaClient } = require("@prisma/client");
-const { quickBillShareMessage, groupShareMessage, expenseShareMessage, shareFingerprint } = require("../packages/shared/share.js");
+const { quickBillShareMessage, groupShareMessage, expenseShareMessage, invitationShareMessage, shareFingerprint } = require("../packages/shared/share.js");
 require("./local-qa.cjs").localQa();
 const { acceptInvite } = require("./accept-invite.cjs");
 const db = new PrismaClient();
@@ -15,7 +15,7 @@ const suffix = Date.now();
 const inbox = [];
 // Only shared summaries count; account verification and welcome mails also pass through the receiver.
 const received = { get length() { return shared().length; } };
-const shared = () => inbox.filter((raw) => decode(raw).includes("te compartió este resumen desde JUNTO"));
+const shared = () => inbox.filter((raw) => /te compartió este resumen desde JUNTO|te envió esta invitación desde JUNTO/.test(decode(raw)));
 let smtpMode = "ok"; // "ok" | "hang"
 
 function decode(raw) {
@@ -48,11 +48,12 @@ function startSmtp() {
 }
 function startApi(port, extraEnv) {
   const child = spawn(process.execPath, [path.join(__dirname, "../apps/api/dist/index.js")], {
-    env: { ...process.env, PORT: String(port), NODE_ENV: "test", RESEND_API_KEY: "", SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", ...extraEnv },
+    env: { ...process.env, PORT: String(port), NODE_ENV: "test", PUBLIC_WEB_URL: "https://junto.example.invalid", RESEND_API_KEY: "", SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", ...extraEnv },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let log = ""; child.stdout.on("data", (d) => (log += d)); child.stderr.on("data", (d) => (log += d));
-  return { child, log: () => log, ready: (async () => { for (let i = 0; i < 60; i++) { try { if ((await fetch(`http://127.0.0.1:${port}/health`)).ok) return; } catch { /* starting */ } await new Promise((r) => setTimeout(r, 250)); } throw new Error(`API ${port} did not start:\n${log}`); })() };
+  child.on("error", error => { log += `API spawn error: ${error.message}`; });
+  return { child, log: () => log, ready: (async () => { for (let i = 0; i < 120; i++) { if (child.exitCode !== null) throw new Error(`API ${port} exited ${child.exitCode}: ${log}`); try { if ((await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) })).ok) return; } catch { /* starting */ } await new Promise((r) => setTimeout(r, 250)); } throw new Error(`API ${port} did not start:\n${log}`); })() };
 }
 function client(port) {
   return async (pathname, token, method = "GET", body) => {
@@ -203,6 +204,26 @@ async function run() {
     assert.equal(burst.filter((r) => r.status === 429).length, 4);
     assert.equal(received.length - beforeParallel, 5);
 
+    // Invitation e-mails also work for an unregistered friend: reviewed link only, never debts.
+    const ines = await account("Ines QA");
+    const inviteGroup = (await api("/grupos", ines.accessToken, "POST", { nombre: "Viaje <script> QA", tipo: "viaje" })).data;
+    const inviteLink = (await api(`/grupos/${inviteGroup.id}/invitar`, ines.accessToken, "POST", {})).data;
+    const invitationMessage = invitationShareMessage(inviteGroup.nombre, `https://junto.example.invalid/unirse/${inviteLink.linkCode}`);
+    const invitationSend = { recurso: { tipo: "invitacion", id: inviteGroup.id }, destinatario: "nuevo-amigo@example.invalid", solicitudId: `invite_mail_${suffix}`, huella: shareFingerprint(invitationMessage) };
+    assert.equal((await send(invitationSend, rosa.accessToken)).status, 404);
+    assert.equal((await send({ ...invitationSend, huella: "0000000000000000" }, ines.accessToken)).status, 409);
+    const inviteBefore = received.length;
+    const invitationResults = await Promise.all([send(invitationSend, ines.accessToken), send(invitationSend, ines.accessToken)]);
+    assert.deepEqual(invitationResults.map(r => r.status), [202, 202]);
+    assert.equal(received.length, inviteBefore + 1);
+    const inviteHtml = decode(shared().at(-1)).split("Content-Type: text/html")[1];
+    assert.match(inviteHtml, /Ver invitación/);
+    assert.match(inviteHtml, /https:\/\/junto.example.invalid\/unirse\//);
+    assert.match(inviteHtml, /Viaje &lt;script&gt; QA/);
+    assert.doesNotMatch(inviteHtml, /<script>|S\/ [0-9]/);
+    assert.equal(await db.invitacion.count({ where: { grupoId: inviteGroup.id } }), 0, "external e-mail does not fabricate an account or autojoin");
+    assert.equal((await api(`/grupos/${inviteGroup.id}/invitar`, ines.accessToken, "POST", { identificador: "not-a-contact" })).status, 400);
+    assert.equal((await api(`/grupos/${inviteGroup.id}/invitar`, ines.accessToken, "POST", { identificador: "888888888" })).status, 400);
     // Logs never carry the e-mail body, amounts or the recipient.
     for (const secret of ["amiga@example.invalid", "S/ 36.00", "Yape <a"]) assert.ok(!withMail.log().includes(secret), secret);
     // Deleting the account removes its sending history.
@@ -213,4 +234,5 @@ async function run() {
     withMail.child.kill(); withoutMail.child.kill(); smtp.close();
   }
 }
-run().finally(() => db.$disconnect()).catch((error) => { console.error(error); process.exit(1); });
+if (require.main === module) run().finally(() => db.$disconnect()).catch((error) => { console.error(error); process.exit(1); });
+module.exports = { startSmtp, startApi, client, inbox, decode, disconnect: () => db.$disconnect() };

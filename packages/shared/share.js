@@ -18,6 +18,20 @@ function validShareEmail(value) {
   return local.length <= 64 && !local.startsWith(".") && !local.endsWith(".") && !local.includes("..");
 }
 
+function invitationShareMessage(groupName, url) {
+  const link = new URL(url);
+  if (link.protocol !== "https:" || link.username || link.password || link.search || link.hash || !/^\/unirse\/[A-Za-z0-9_-]{8,128}$/.test(link.pathname))
+    throw new Error("Enlace de invitación inválido.");
+  const name = line(groupName);
+  return {
+    subject: `Únete a ${name} · JUNTO`,
+    invitation: { groupName: name, url: link.href },
+    body: [`Te invito a «${name}» en JUNTO.`, "", "Anotamos quién pagó y vemos quién le debe a quién, sin enredos.", link.href,
+      "", "Abre el enlace, crea tu cuenta o inicia sesión y confirma que quieres unirte. Si no quieres participar, ignora esta invitación.",
+      "", "Cualquiera con el enlace puede unirse: compártelo solo con las personas de tu grupo.", "", footer].join("\n"),
+  };
+}
+
 function expenseShareMessage(expense, groupName) {
   const assigned = expense.participantes.reduce((sum, person) => sum + person.montoAsignado, 0);
   if (assigned !== expense.montoTotal) throw new Error("El reparto no coincide con el total. Actualiza el gasto antes de compartir.");
@@ -135,8 +149,25 @@ function shareEmailHtml(message, meta = {}) {
     if (!Number.isSafeInteger(cents) || cents < 0) throw new Error("Monto inválido en el correo.");
     return `S/ ${(cents / 100).toFixed(2)}`;
   };
-  const sender = meta.sentBy ? `<p style="margin:0 0 18px;padding:12px 14px;background:#FFFCF7;border:1px solid #F1E6D2;border-radius:12px;font-size:14px;line-height:1.6;color:#082644;"><strong>${escape(line(meta.sentBy))}</strong> te compartió este resumen desde JUNTO.</p>` : "";
-  const content = preview ? `${sender}
+  const sender = meta.sentBy ? `<p style="margin:0 0 18px;padding:12px 14px;background:#FFFCF7;border:1px solid #F1E6D2;border-radius:12px;font-size:14px;line-height:1.6;color:#082644;"><strong>${escape(line(meta.sentBy))}</strong> ${message.invitation ? 'te envió esta invitación' : 'te compartió este resumen'} desde JUNTO.</p>` : "";
+  const invitation = message.invitation;
+  // Revalidate before interpolating a URL into an HTML attribute (never arbitrary client HTML).
+  if (invitation) invitationShareMessage(invitation.groupName, invitation.url);
+  const content = invitation ? `${sender}
+    <p style="margin:0 0 12px;font-size:12px;font-weight:700;letter-spacing:1px;color:#00856A;">UN PLAN PARA COMPARTIR</p>
+    <h1 style="margin:0 0 18px;font-size:28px;line-height:1.3;color:#082644;">Tu grupo te espera</h1>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#E7FBF3;border:1px solid #CFF0E3;border-radius:18px;"><tr><td style="padding:24px;">
+      <p style="margin:0 0 6px;font-size:13px;color:#3F7067;">Te invitaron a</p>
+      <p style="margin:0;font-size:24px;font-weight:800;color:#082644;word-break:break-word;">${escape(invitation.groupName)}</p>
+    </td></tr></table>
+    <p style="margin:20px 0;font-size:15px;line-height:1.7;color:#64748B;">Anoten quién pagó, dividan los gastos y vean quién le debe a quién. Tú decides si quieres participar.</p>
+    <table role="presentation" cellspacing="0" cellpadding="0" width="100%"><tr><td align="center" bgcolor="#00856A" style="border-radius:16px;">
+      <a href="${escape(invitation.url)}" style="display:block;padding:18px;color:#FFFFFF;font-size:16px;font-weight:700;text-decoration:none;">Ver invitación</a>
+    </td></tr></table>
+    <p style="margin:22px 0 0;padding:16px;background:#F2EDFF;border-radius:14px;font-size:13px;line-height:1.8;color:#082644;"><strong>¿Cómo entro?</strong><br>1. Abre el enlace.<br>2. Crea tu cuenta o inicia sesión.<br>3. Revisa el grupo y confirma que quieres unirte.</p>
+    <p style="margin:18px 0 0;font-size:12px;line-height:1.6;color:#64748B;">No entras al grupo hasta que lo aceptes. Si no esperabas este correo, puedes ignorarlo. El enlace permite unirse a quien lo tenga: no lo publiques.</p>
+    <p style="font-size:12px;line-height:1.6;word-break:break-all;color:#64748B;">Si el botón no abre, copia este enlace:<br>${escape(invitation.url)}</p>
+  ` : preview ? `${sender}
     <h1 style="margin:0 0 8px;font-size:24px;line-height:1.3;color:#082644;word-break:break-word;">${escape(preview.title)}</h1>
     <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#64748B;">${escape(preview.caption)}</p>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#E7FBF3;border:1px solid #CFF0E3;border-radius:18px;">
@@ -180,13 +211,13 @@ function shareEmailHtml(message, meta = {}) {
 /** Plain-text alternative for the same e-mail (screen readers, text-only clients). */
 function shareEmailText(message, meta = {}) {
   return [
-    ...(meta.sentBy ? [`${line(meta.sentBy)} te compartió este resumen desde JUNTO.`, ""] : []),
+    ...(meta.sentBy ? [`${line(meta.sentBy)} ${message.invitation ? 'te envió esta invitación' : 'te compartió este resumen'} desde JUNTO.`, ""] : []),
     message.body,
     ...(meta.sentBy ? ["", `Recibes este correo porque ${line(meta.sentBy)} escribió tu dirección en JUNTO. No guardamos tu correo para enviarte otros mensajes.`] : []),
   ].join("\n");
 }
 
 module.exports = {
-  shareMoney, validShareEmail, expenseShareMessage, groupShareMessage, quickBillSharePreview, quickBillShareMessage,
+  shareMoney, validShareEmail, invitationShareMessage, expenseShareMessage, groupShareMessage, quickBillSharePreview, quickBillShareMessage,
   tryBillShareMessage, shareFingerprint, shareEmailHtml, shareEmailText,
 };

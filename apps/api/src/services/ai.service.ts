@@ -136,6 +136,13 @@ export async function interpretarGasto(
   }
 
   try {
+    // A v1 gateway generates monetary data and cannot safely accept this contract.
+    // Until the compatible local candidate is deployed, stay on the reviewed manual path.
+    const health = await axios.get(`${baseUrl.replace(/\/$/, "")}/health`, {
+      timeout: 2000,
+    });
+    if (health.data?.contract !== 2)
+      throw new AiServiceError("No puedo interpretar este mensaje con seguridad todavía. Escribe el monto, quién pagó y para quién fue, o completa el formulario manual.", 503);
     const response = await axios.post(
       `${baseUrl.replace(/\/$/, "")}/v1/extract-expense`,
       { text: input.texto, members: directory.map(member => member.nombre),

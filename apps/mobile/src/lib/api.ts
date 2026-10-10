@@ -3,7 +3,7 @@ import axios, {
   AxiosError,
   InternalAxiosRequestConfig,
 } from "axios";
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from "./tokenStorage";
 import { isAuthEntry } from "./authEntry";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";

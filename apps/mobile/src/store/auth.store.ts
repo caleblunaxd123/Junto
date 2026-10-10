@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from "../lib/tokenStorage";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { validInvitationCode } from "../lib/invitation";
 import { googleSignOut } from "../lib/google";

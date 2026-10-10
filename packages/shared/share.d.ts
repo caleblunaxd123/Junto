@@ -17,7 +17,8 @@ export type ShareMessage = {
   subject: string;
   body: string;
   preview?: SharePreview;
-  resource?: { tipo: "cuenta_rapida" | "grupo" | "gasto"; id: string };
+  invitation?: { groupName: string; url: string };
+  resource?: { tipo: "cuenta_rapida" | "grupo" | "gasto" | "invitacion"; id: string };
 };
 export type ShareExpense = {
   descripcion: string;
@@ -32,6 +33,7 @@ export type ShareGroup = {
 };
 export function shareMoney(value: number): string;
 export function validShareEmail(value: string): boolean;
+export function invitationShareMessage(groupName: string, url: string): ShareMessage;
 export function expenseShareMessage(expense: ShareExpense, groupName: string): ShareMessage;
 export function groupShareMessage(group: ShareGroup, pendingPayments?: number): ShareMessage;
 export function quickBillSharePreview(input: QuickBillInput, aportes?: Record<string, number>): SharePreview;
