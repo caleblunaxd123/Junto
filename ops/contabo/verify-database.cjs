@@ -11,7 +11,7 @@ const db = new PrismaClient();
   assert.equal(permissions.create_schema,false);
   assert.equal(permissions.update_migrations,false);
   if (!process.argv.includes('--existing')) assert.equal(await db.usuario.count(),0,'Do not silently import local QA users into production');
-  const tables = await db.$queryRaw`SELECT tablename, has_table_privilege(current_user, format('%I.%I', schemaname, tablename), 'SELECT,INSERT,UPDATE,DELETE') AS writable FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
+  const tables = await db.$queryRaw`SELECT tablename, has_table_privilege(current_user, format('%I.%I', schemaname, tablename), 'SELECT') AND has_table_privilege(current_user, format('%I.%I', schemaname, tablename), 'INSERT') AND has_table_privilege(current_user, format('%I.%I', schemaname, tablename), 'UPDATE') AND has_table_privilege(current_user, format('%I.%I', schemaname, tablename), 'DELETE') AS writable FROM pg_tables WHERE schemaname = 'public' AND tablename <> '_prisma_migrations'`;
   assert.ok(tables.length > 0);
   assert.ok(tables.every(table => table.writable), 'Runtime CRUD must cover every migrated application table');
   console.log('PASS: API role is non-owner, cannot create schema or alter migration history, and has application-table CRUD.' + (process.argv.includes('--existing') ? ' Existing production accounts preserved.' : ' New production database has no QA accounts.'));

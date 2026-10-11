@@ -24,6 +24,8 @@ async function run() {
     await page.getByPlaceholder('Tu contraseña').fill(state.password);
     await page.getByPlaceholder('Tu contraseña').press('Enter');
     await page.waitForURL(url => !url.pathname.includes('/login'));
+    // A fresh browser profile sees the optional first-use guide; dismiss it explicitly.
+    await page.getByRole('button', { name: 'Cerrar guía', exact: true }).click();
     await page.getByRole('button', { name: /Prueba ficticia · JUNTO Beta/ }).waitFor();
     for (const width of [360, 390, 768, 1024, 1440, 1920]) {
       await page.setViewportSize({ width, height: 900 }); await page.waitForTimeout(350);

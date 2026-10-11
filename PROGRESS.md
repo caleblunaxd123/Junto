@@ -1,13 +1,13 @@
 # JUNTO — estado real
 
-## Monedas y pagos externos: candidata local, no publicada (11/10/2026)
+## Monedas y pagos externos: beta 1.3.0 publicada (11/10/2026)
 
 - País del plan explícito, sin GPS; su moneda es una sugerencia. Se puede elegir PEN, COP, USD, EUR, MXN o BRL independientemente del país. Los grupos existentes conservan PEN y país desconocido. Moneda y país quedan bloqueados para no reinterpretar el libro.
 - Los pagos conservan moneda/monto original, fecha real y tasa aplicada. Se consulta una referencia diaria de Frankfurter por fecha del pago, con fuente/fecha y uso explícito. Referencia y cambio acordado quedan registrados por separado; no es una cotización bancaria en tiempo real. Si falla la consulta, se permite el cambio acordado manual. El servidor recalcula con enteros y rechaza discrepancias, excedentes y autoaprobación.
 - «Ya pagué» reporta, no confirma ni reduce la deuda. Confirma quien recibe, no necesariamente el creador. La administración puede representar a un receptor añadido solo por nombre. Pagador/receptor reciben avisos internos persistentes aunque no haya token push; un pago pendiente se revisa en lugar de crear otro.
 - Resúmenes por moneda: no se suman soles, pesos y dólares. Mensajes compartidos, chat, actividad y recordatorios muestran la moneda del grupo. APKs sin soporte reciben una indicación de actualización ante grupos o invitaciones de otras monedas.
 - Validación local en base aislada `junto_payment_flow_qa_20261011`: 17 migraciones aplicadas, esquema sin desfase, API build y 79 pruebas de dominio; integraciones de moneda, cumpleaños con invitado excluido, receptor distinto del creador, receptor sin cuenta, pagos recibidos, concurrencia e importación. OCR real con imágenes ficticias y controles de privacidad/duplicados. No se enviaron correos ni push reales en esta ronda.
-- Pendientes antes de publicar: regresión completa de navegador y APK, auditoría del artefacto, CI y despliegue con respaldo. No se generó ni publicó todavía la candidata 1.3.0/versionCode 7.
+- Publicada tras CI verde de `79587a4`: API compatible y web 1.3.0, 17 migraciones, respaldo restaurado/validado y copia externa cifrada. APK versionCode 7 con Google, mismo firmante, bundle incluido y SHA-256 local/HTTPS idéntico; instalada sobre la anterior en el emulador, conserva sesión y arranca. Chromium/WebKit por HTTPS: acceso/salida QA, seis anchos, grupo y preparación de correo sin envío. Referencia de mercado autenticada consultada por HTTPS. Detalles/limitaciones de reversión: `ops/web/DEPLOY-20261011-MONEDAS.md`.
 - «Subir comprobante» desde el grupo/chat abre el flujo privado del pago. OCR propone importes con moneda explícita PEN/COP/USD/EUR/MXN/BRL; `$` ambiguo o varias monedas/importes exige revisión. No lee automáticamente cualquier foto del chat ni confirma dinero por una captura.
 - Alcance y pruebas: `ops/web/FLOW-PAYMENTS-20261011.md`. Google en la APK nueva, push con la app cerrada y validación física siguen pendientes; los avisos internos no acreditan recepción push.
 

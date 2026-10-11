@@ -1,6 +1,6 @@
 # Monedas y pagos externos — candidata 1.3.0
 
-Estado: código y export local QA, no desplegados en Contabo. No se anuncia APK nuevo publicado ni recepción push física.
+Beta web/APK publicada después de la validación local y CI; despliegue y hashes en `DEPLOY-20261011-MONEDAS.md`. Recepción push física y Google en la nueva APK siguen pendientes.
 
 ## Recorrido
 
