@@ -295,32 +295,39 @@ export async function getComprobanteImagen(pagoId: string, userId: string) {
  * once, since the receiver is the one who would confirm it. Needed for people added by name, who
  * have no app to report it, and handy for cash.
  */
-export async function registrarRecibido(input: RegistrarRecibidoInput, receptorId: string) {
+export async function registrarRecibido(input: RegistrarRecibidoInput, userId: string) {
+  const receptorId = input.receptorId || userId;
   if (receptorId === input.pagadorId) throw new Error("No puedes registrar un pago de ti mismo");
   const pago = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${input.grupoId}::uuid FOR UPDATE`;
     const miembros = await tx.grupoMiembro.findMany({
-      where: { grupoId: input.grupoId, activo: true, grupo: { activo: true }, usuario: { activo: true }, usuarioId: { in: [receptorId, input.pagadorId] } },
-      select: { usuarioId: true, usuario: { select: { sinCuenta: true } } },
+      where: { grupoId: input.grupoId, activo: true, grupo: { activo: true }, usuario: { activo: true }, usuarioId: { in: [...new Set([userId, receptorId, input.pagadorId])] } },
+      select: { usuarioId: true, rol: true, usuario: { select: { sinCuenta: true } } },
     });
-    if (miembros.length !== 2) throw new Error("Ambas personas deben pertenecer al grupo");
-    if (miembros.find((m) => m.usuarioId === receptorId)?.usuario.sinCuenta) throw new Error("No perteneces a este grupo", 403);
+    if (miembros.length !== new Set([userId, receptorId, input.pagadorId]).size) throw new Error("Ambas personas deben pertenecer al grupo");
+    const actor = miembros.find((m) => m.usuarioId === userId);
+    const receiver = miembros.find((m) => m.usuarioId === receptorId);
+    if (!actor || actor.usuario.sinCuenta) throw new Error("No perteneces a este grupo", 403);
+    if (receptorId !== userId && (actor.rol !== "admin" || !receiver?.usuario.sinCuenta))
+      throw new Error("Solo un administrador puede registrar pagos recibidos por alguien sin cuenta.", 403);
+    // An administrator cannot use this shortcut to confirm their own outgoing payment.
+    if (userId === input.pagadorId) throw new Error("No puedes confirmar tu propio pago. Regístralo como pago por confirmar.", 403);
     const { cuentas } = await resumenCuentasGrupo(input.grupoId, tx);
     const waiting = await tx.pago.findMany({ where: { grupoId: input.grupoId, estado: "reportado" }, select: { pagadorId: true, receptorId: true, monto: true } });
     const { owes, owed, limit } = payableLimit(cuentas, waiting, input.pagadorId, receptorId);
     if (!owes) throw new Error("Esta persona no tiene una deuda pendiente en el grupo");
-    if (!owed) throw new Error("No tienes dinero por recibir en este grupo");
+    if (!owed) throw new Error(receptorId === userId ? "No tienes dinero por recibir en este grupo" : "Esta persona no tiene dinero por recibir en el grupo");
     if (!limit) throw new Error("Ya hay pagos de esta persona esperando tu confirmación: confírmalos primero.");
-    if (input.monto > limit) throw new Error(`El pago no puede superar S/ ${(limit / 100).toFixed(2)}: es lo que esta persona aún te debe`);
+    if (input.monto > limit) throw new Error(`El pago no puede superar S/ ${(limit / 100).toFixed(2)}: es lo que esta persona aún ${receptorId === userId ? "te debe" : "debe al receptor"}`);
     const now = new Date();
     const created = await tx.pago.create({
-      data: { grupoId: input.grupoId, pagadorId: input.pagadorId, receptorId, monto: input.monto, feejunto: 0, metodo: input.metodo, estado: "exitoso", nota: input.nota || null, fechaResolucion: now, resueltoPor: receptorId },
+      data: { grupoId: input.grupoId, pagadorId: input.pagadorId, receptorId, monto: input.monto, feejunto: 0, metodo: input.metodo, estado: "exitoso", nota: input.nota || null, fechaResolucion: now, resueltoPor: userId },
     });
     return tx.pago.findUniqueOrThrow({ where: { id: created.id }, include: pagoInclude });
   });
   void notify(
     [input.pagadorId], "Pago registrado",
-    `${first(pago.receptor.nombre)} registró que le pagaste ${money(input.monto)} en ${pago.grupo.nombre}.`,
+    `${receptorId === userId ? first(pago.receptor.nombre) : `${first(pago.resolutor?.nombre || "Administrador")} (administrador)`} registró que pagaste ${money(input.monto)} a ${first(pago.receptor.nombre)} en ${pago.grupo.nombre}.`,
     { grupoId: input.grupoId, pagoId: pago.id, type: "pago_confirmado" },
   );
   return pago;

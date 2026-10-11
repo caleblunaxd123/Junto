@@ -23,7 +23,7 @@ export function CreateSheet({ visible, onClose, groups }: { visible: boolean; on
           bg: palette.mint,
         }]
       : []),
-    { icon: "people-outline", title: "Nuevo grupo", subtitle: "Viaje, salida, cumple o depa. Agrega a tu gente por su nombre.", href: "/(app)/grupos/crear", color: "#1D5FA8", bg: "#E2F0FF" },
+    { icon: "people-outline", title: "Dividir gastos", subtitle: "Viaje, salida, cumple o depa. Agrega a tu gente por su nombre.", href: "/(app)/grupos/crear", color: "#1D5FA8", bg: "#E2F0FF" },
     { icon: "link-outline", title: "Unirme con un enlace", subtitle: "Pega la invitación que te compartieron.", href: "/(app)/unirme", color: "#8A5A00", bg: palette.yellow },
   ];
   return (

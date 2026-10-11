@@ -14,6 +14,8 @@ export const reportarPagoSchema = z.object({
 // The receiver records money they already got (cash, or from someone added by name).
 export const registrarRecibidoSchema = z.object({
   nota: z.string().trim().max(100).optional(),
+  // An admin may record receipt for a name-only receiver, never for another real account.
+  receptorId: z.string().uuid().optional(),
   pagadorId: z.string().uuid(),
   grupoId: z.string().uuid(),
   monto: z.number().int().positive().max(999_999_999),

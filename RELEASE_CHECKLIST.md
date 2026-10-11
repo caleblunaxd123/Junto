@@ -2,6 +2,13 @@
 
 ## Resuelto en código (verificable en este repositorio)
 
+Cambios locales posteriores a la beta 1.2.0 (todavía requieren despliegue aprobado):
+
+- «Dividir gastos» es la acción principal grande de Inicio; sigue creando un grupo único de gastos compartidos.
+- El cálculo conservado de «Probar sin cuenta» y «Cuentas anteriores» pueden pasar a un grupo, con selección explícita de identidad/pagador. La cuenta anterior permanece como historial de solo lectura, sin volver a sumar su deuda.
+- La administración registra pagos recibidos por personas sin cuenta, nunca su propio pago ni pagos recibidos por otra cuenta real. Se guarda quién lo confirmó.
+- Repetir estos flujos en Android físico, Safari iPhone y TalkBack antes de dar por lista esta versión. Monedas por país todavía pendientes; la versión actual registra importes en soles.
+
 | Tema | Qué hay ahora | Cómo comprobarlo |
 | --- | --- | --- |
 | Invitaciones fuera de la app | Se comparte `https://<dominio>/unirse/CODE`. La API sirve esa página: abre la app si está instalada y si no lleva a Google Play. `app.config.js` declara App Links (`autoVerify`) para ese dominio y la API publica `/.well-known/assetlinks.json`. En la app, «+» → «Unirme con un enlace» acepta el enlace o el código pegado. | `node ops/test-release-config.cjs`, `node ops/test-mobile-ux.cjs` |

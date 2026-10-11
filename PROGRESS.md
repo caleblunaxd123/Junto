@@ -46,6 +46,19 @@ Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = fu
 - Pasaron 75 pruebas de dominio, 15 de UX móvil, 5 de Inicio, TypeScript/lint y la integración de importaciones. Chromium y WebKit recorrieron el cálculo → grupo en 390 y 1440 px, con cumpleaños y saldo exacto. Sin correos externos ni cambios en producción.
 - Monedas por grupo y sugerencia según país del viaje: en preparación, todavía no habilitadas. No se cambian monedas de cuentas existentes ni se mezclan/convierten saldos automáticamente.
 
+### Pagos recibidos por integrantes sin cuenta
+
+- La administración puede registrar un pago recibido por un integrante agregado por nombre. Solo sirve mientras el receptor no tenga cuenta; no permite aprobar el propio pago del administrador ni sustituir la confirmación de otra cuenta real.
+- Queda registrado el receptor efectivo y el administrador que lo confirmó. La app explica quién pagó a quién y exige comprobar que el receptor recibió el dinero. El total de gastos no cambia; disminuye únicamente la deuda confirmada.
+- `ops/test-admin-received.cjs`: importes parciales y completos, límite, solicitudes simultáneas, intrusos, miembros sin permisos y receptor que hereda su lugar con una cuenta real. Sin envíos externos. TypeScript, lint, build API y 75 pruebas de dominio aprobados.
+
+### Inicio: «Dividir gastos» como acción principal
+
+- Botón verde de ancho completo, altura mínima 116 px, texto grande, respuesta al toque y descripción del paso siguiente. Está visible también cuando todavía no hay grupos. Se evita otro botón «Nuevo grupo» compitiendo en escritorio o en el estado vacío.
+- Guía rápida, menú «Agregar» y título del formulario usan el mismo término. El grupo sigue siendo el contenedor de gastos; no se introducen tipos de «cobranza» ni un segundo modelo.
+- Chromium/WebKit verifican navegación, acción accesible y layout a 390/1440 px, además de registrar un pago parcial de Luis a Ana desde administración. Capturas QA locales; todavía no publicado ni validado en teléfono físico.
+- Se corrigió la transición del panel «Cuentas» al formulario de pago: en web ya no compiten dos trampas de foco durante la animación. El campo se habilita cuando el diálogo está abierto; una edición rápida a S/ 25.00 guarda ese importe y deja S/ 75.00 pendientes, comprobado en WebKit.
+
 ## Producto
 
 | Área | Estado | Evidencia |

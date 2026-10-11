@@ -53,6 +53,7 @@ export default function Home() {
   const payments = usePagos();
   const refetchPayments = payments.refetch;
   const [search, setSearch] = useState("");
+  const [splitPressed, setSplitPressed] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [allPending, setAllPending] = useState(false);
   const bills = useQuickBills();
@@ -114,26 +115,24 @@ export default function Home() {
         {usuario && <FirstSteps userId={usuario.id} />}
         {desktop && <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
           <View style={{ flex: 1, minWidth: 200 }}><Label size={15} color={palette.muted}>Todo lo compartido, en un solo lugar.</Label></View>
-          <Button compact title="Nuevo grupo" onPress={() => router.push("/(app)/grupos/crear")} />
           <Button compact secondary title="Agregar" onPress={() => setSheet(true)} />
         </View>}
 
         <Invitations />
         <GroupNotices />
         {/* One way to start, explained with a real example. */}
-        {!empty && (
-          <Pressable accessibilityRole="button" accessibilityLabel="Nuevo grupo. Divide un gasto: anota quién pagó y JUNTO te dice quién le debe a quién." onPress={() => router.push("/(app)/grupos/crear")}
-            style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 20, backgroundColor: palette.mint, borderWidth: 1.5, borderColor: "#A4EDD7" }}>
-            <View style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "white" }}>
-              <Ionicons name="people-outline" size={24} color="#007B60" />
+          <Pressable accessibilityRole="button" accessibilityLabel="Dividir gastos" accessibilityHint="Agrega a las personas y anota quién pagó para calcular cuánto le toca a cada uno." onPress={() => router.push("/(app)/grupos/crear")}
+            onPressIn={() => setSplitPressed(true)} onPressOut={() => setSplitPressed(false)}
+            style={{ flexDirection: "row", alignItems: "center", minHeight: 116, gap: 14, padding: 20, borderRadius: 24, backgroundColor: splitPressed ? "#006B55" : "#007B60" }}>
+            <View style={{ width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", backgroundColor: "white" }}>
+              <Ionicons name="receipt-outline" size={28} color="#007B60" />
             </View>
-            <View style={{ flex: 1 }}>
-              <Label weight="extra" size={15}>Nuevo grupo</Label>
-              <Label size={12} color={palette.muted}>Anota quién pagó y JUNTO te dice quién le debe a quién.</Label>
+            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+              <Label weight="extra" size={23} color="white">Dividir gastos</Label>
+              <Label size={13} color="#FFFFFF">Agrega a tu gente y anota quién pagó. JUNTO calcula cuánto le toca a cada uno.</Label>
             </View>
-            <Ionicons name="add-circle" size={28} color="#007B60" />
+            <Ionicons name="arrow-forward" size={24} color="white" />
           </Pressable>
-        )}
         {trial && (
           <Card style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", gap: 8 }}>
             <Label weight="bold">Tu cálculo de prueba sigue aquí</Label>
@@ -166,7 +165,6 @@ export default function Home() {
             <View style={{ padding: 14, borderRadius: 16, backgroundColor: palette.yellow }}>
               <Label size={13}>Ejemplo: pagaste S/ 300 por 4 personas → cada una te debe S/ 75.</Label>
             </View>
-            <Button title="Nuevo grupo" onPress={() => router.push("/(app)/grupos/crear")} />
             <Pressable accessibilityRole="button" onPress={() => router.push("/(app)/ejemplo")} style={{ minHeight: 44, justifyContent: "center", alignItems: "center" }}>
               <Label size={13} weight="bold" color={palette.purple}>Ver un ejemplo explicado</Label>
             </Pressable>
@@ -230,7 +228,7 @@ export default function Home() {
                 <Button title="Reintentar" onPress={() => refetch()} />
               </>
             ) : groups.length === 0 ? (
-              <Label size={13} color={palette.muted}>Aún no tienes grupos. Crea uno arriba.</Label>
+              <Label size={13} color={palette.muted}>Aún no tienes grupos. Pulsa «Dividir gastos» para empezar.</Label>
             ) : (
               <>
                 {groups.length > 5 && (

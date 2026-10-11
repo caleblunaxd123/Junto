@@ -52,8 +52,8 @@ export default function CreateGroup() {
 
   return (
     <Screen
-      title="Nuevo grupo"
-      subtitle="Viaje, salida, cumpleaños o depa"
+      title="Dividir gastos"
+      subtitle="Primero, ponle nombre al plan y agrega a tu gente."
       back
       footer={
         <>

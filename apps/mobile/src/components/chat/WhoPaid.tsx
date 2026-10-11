@@ -1,5 +1,5 @@
 import React from "react";
-import { Modal, Pressable, ScrollView, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Avatar, Button, Label, palette } from "../ui/Design";
@@ -19,7 +19,7 @@ type Member = GrupoConBalance["miembros"][number];
 export function WhoPaid({ group, userId, visible, onClose, onPay, onRecord, onRemind, onShare, onLink }: {
   group: GrupoConBalance; userId?: string; visible: boolean; onClose: () => void;
   onPay: () => void;
-  onRecord: (person: { id: string; nombre: string }, max: number) => void;
+  onRecord: (person: { id: string; nombre: string }, max: number, receiver?: { id: string; nombre: string }) => void;
   onRemind: () => void;
   onShare: (member: Member) => void;
   onLink: (member: Member) => void;
@@ -32,7 +32,7 @@ export function WhoPaid({ group, userId, visible, onClose, onPay, onRecord, onRe
   const admin = group.rolUsuario === "admin";
   const legacyFree = group.cuenta?.libres ? freeParts(group.cuenta) : [];
   return (
-    <Modal transparent statusBarTranslucent navigationBarTranslucent visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal transparent statusBarTranslucent navigationBarTranslucent visible={visible} animationType={Platform.OS === "web" ? "none" : "slide"} onRequestClose={onClose}>
       <View style={{ flex: 1, justifyContent: tablet ? "center" : "flex-end", alignItems: tablet ? "center" : "stretch", padding: tablet ? 24 : 0, backgroundColor: "#08264466" }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Cerrar" onPress={onClose} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
         <SafeAreaView edges={["bottom"]} style={{ width: "100%", maxWidth: tablet ? 600 : undefined, maxHeight: "90%", borderRadius: tablet ? 28 : undefined, backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 12 }}>
@@ -70,6 +70,7 @@ export function WhoPaid({ group, userId, visible, onClose, onPay, onRecord, onRe
                   </View>
                   {waiting && <Label size={12} color="#8A5A00">Hay un pago esperando confirmación.</Label>}
                   {iOwe && <Button compact title={`Pagar ${money(s.monto)}`} onPress={() => { onClose(); onPay(); }} />}
+                  {!iOwe && !owedToMe && admin && members.get(s.acreedorId)?.usuario.sinCuenta && <Button compact title={`Registrar pago recibido por ${name(s.acreedorId, s.acreedorNombre)}`} onPress={() => onRecord({ id: s.deudorId, nombre: s.deudorNombre }, s.monto, { id: s.acreedorId, nombre: s.acreedorNombre })} />}
                   {owedToMe && (
                     <View style={{ flexDirection: "row", gap: 8 }}>
                       <View style={{ flex: 1 }}><Button compact title="Ya me pagó" onPress={() => onRecord({ id: s.deudorId, nombre: s.deudorNombre }, s.monto)} /></View>

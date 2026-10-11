@@ -86,7 +86,7 @@ export default function Group() {
   const [sending, setSending] = useState(false);
   const [expressions, setExpressions] = useState(false);
   const [shareMessage, setShareMessage] = useState<ShareMessage | null>(null);
-  const [recordFor, setRecordFor] = useState<{ person: { id: string; nombre: string }; max: number } | null>(null);
+  const [recordFor, setRecordFor] = useState<{ person: { id: string; nombre: string }; receiver?: { id: string; nombre: string }; max: number } | null>(null);
   const [linkFor, setLinkFor] = useState<NonNullable<typeof group>["miembros"][number] | null>(null);
   const feed = useRef<ScrollView>(null);
   const seen = useRef<string | null>(null);
@@ -195,7 +195,7 @@ export default function Group() {
   async function recordPayment(monto: number, metodo: string) {
     if (!recordFor) return;
     try {
-      await api.post("/pagos/recibido", { grupoId: id, pagadorId: recordFor.person.id, monto, metodo });
+      await api.post("/pagos/recibido", { grupoId: id, pagadorId: recordFor.person.id, ...(recordFor.receiver ? { receptorId: recordFor.receiver.id } : {}), monto, metodo });
     } catch (err) {
       throw new Error(errorMessage(err, "No pudimos registrar el pago. Revisa tu conexión y reintenta."));
     }
@@ -412,11 +412,11 @@ export default function Group() {
       </KeyboardAvoidingView>
 
       <WhoPaid group={group} userId={user?.id} visible={whoPaid} onClose={() => setWhoPaid(false)} onPay={goPay}
-        onRecord={(person, max) => { setWhoPaid(false); setRecordFor({ person, max }); }}
+        onRecord={(person, max, receiver) => { setWhoPaid(false); setRecordFor({ person, max, receiver }); }}
         onRemind={() => setReminders(true)}
         onShare={(member) => { setWhoPaid(false); setShareMessage(personalInvite(group, member, user?.nombre ?? "")); }}
         onLink={(member) => { setWhoPaid(false); setLinkFor(member); }} />
-      <RecordPayment person={recordFor?.person ?? null} max={recordFor?.max ?? 0} onClose={() => setRecordFor(null)} onSave={recordPayment} />
+      <RecordPayment person={recordFor?.person ?? null} receiver={recordFor?.receiver} max={recordFor?.max ?? 0} onClose={() => setRecordFor(null)} onSave={recordPayment} />
       <LinkMember member={linkFor} candidates={group.miembros.filter((m) => !sinCuenta(m))} onClose={() => setLinkFor(null)} onPick={linkMember} />
 
       <Modal transparent statusBarTranslucent navigationBarTranslucent visible={reminders} animationType="slide" onRequestClose={() => setReminders(false)}>
