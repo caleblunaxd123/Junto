@@ -2,6 +2,18 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { validateReleaseEnvironment } = require("../apps/mobile/release-config");
 const valid = { EXPO_PUBLIC_APP_ENV: "production", EXPO_PUBLIC_API_URL: "https://api.example.org", EXPO_PUBLIC_PRIVACY_URL: "https://example.org/privacy", EXPO_PUBLIC_DELETE_ACCOUNT_URL: "https://example.org/delete", EXPO_PUBLIC_SUPPORT_EMAIL: "support@example.org" };
+
+test("Google beta uses public OAuth IDs and refuses malformed build configuration", () => {
+  const google = require("./android/google-beta.public.json");
+  const app = require("../apps/mobile/app.json").expo;
+  assert.equal(google.package, app.android.package);
+  assert.notEqual(google.webClientId, google.androidClientId);
+  assert.match(google.signingSha1, /^(?:[A-F0-9]{2}:){19}[A-F0-9]{2}$/);
+  validateReleaseEnvironment({ ...valid, EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: google.webClientId });
+  for (const value of ["secret", "123.apps.googleusercontent.com", " https://oauth.example.com", "123-abc.apps.googleusercontent.com "]) {
+    assert.throws(() => validateReleaseEnvironment({ ...valid, EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: value }), /GOOGLE_WEB_CLIENT_ID/);
+  }
+});
 test("distribution cannot silently use a local API or missing legal/support configuration", () => {
   validateReleaseEnvironment({ EXPO_PUBLIC_APP_ENV: "development" });
   validateReleaseEnvironment(valid);

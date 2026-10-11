@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import { Avatar, Button, Label, palette } from "../ui/Design";
 import { avatarColors } from "../../lib/people";
 import { modeWords } from "../../lib/groupMode";
+import { isEmojiMessage } from "../../lib/chatExpressions";
 import { centavosASoles, type ChatItem } from "../../types";
 
 const money = (cents: number) => `S/ ${centavosASoles(cents)}`;
@@ -130,7 +131,7 @@ export function ChatBubble({ item, meId, modo, showAuthor, onAnswer, busy, onDel
         <Bubble item={item} showAuthor={showAuthor} label={`${Who(item.autor)}: ${item.eliminado ? "mensaje eliminado" : item.texto}`} onPress={item.puedeEliminar ? () => onDelete(item.comentarioId) : undefined}>
           {item.eliminado
             ? <Label size={14} color={palette.muted} style={{ fontStyle: "italic" }}>Mensaje eliminado</Label>
-            : <Label size={15}>{item.texto}</Label>}
+            : <Label size={isEmojiMessage(item.texto) ? 34 : 15}>{item.texto}</Label>}
         </Bubble>
       );
   }

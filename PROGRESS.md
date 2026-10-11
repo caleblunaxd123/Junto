@@ -1,6 +1,17 @@
 # JUNTO — estado real
 
-Actualizado el 11 de octubre de 2026: beta 1.1.1 sincronizada con GitHub y desplegada; segunda ronda de validación endurece concurrencia, permisos y recordatorios. Antes, el 10 de octubre se añadieron grupos de cobranza/división, chat y fecha límite.
+Actualizado el 11 de octubre de 2026: código de la candidata 1.1.3 preparado para GitHub. La publicación del código no implica desplegar esta versión en Contabo ni habilitar la entrega push. Antes, el 10 de octubre se añadieron grupos de cobranza/división, chat y fecha límite.
+
+## Candidata 1.1.3: inicio, guía y chat
+
+- Inicio distingue los saldos de grupos de los importes pendientes en cuentas de un día. S/ 120 por cobrar no puede producir «Todo al día»; una consulta pendiente o fallida tampoco permite declarar que todo está resuelto.
+- Guía de cuatro pasos opcional, guardada por cuenta y repetible desde Inicio. Explica cobranza, invitaciones, pagos externos y confirmación; no crea gastos ni envía mensajes.
+- El permiso de notificaciones se solicita únicamente al elegir «Activar avisos». Se puede rechazar y seguir usando la app. Volver desde ajustes intenta registrar el dispositivo sin volver a pedir permiso automáticamente.
+- Chat con selector de emojis y respuestas rápidas editables, sin envío automático ni frases que confirmen pagos. Conserva emojis unidos y controles contra texto bidireccional oculto.
+- Google nativo probado por el propietario en la beta 1.1.2. La candidata 1.1.3 conserva el perfil público y el mismo firmante de beta; no sustituye una prueba física de esta versión. Accesos Google simultáneos protegidos con bloqueos y comprobaciones posteriores a la espera.
+- Proyecto Expo/EAS vinculado. Firebase mostró una confirmación inicial, pero al volver a abrirlo aparecieron errores de permisos/condiciones: no se considera completado. Faltan configuración Android verificada, credencial FCM en EAS y prueba real de recepción. El APK construido sin `-EnablePush` declara esa limitación; no anuncia entrega activa.
+- Validación local: 75 pruebas de dominio y 16 de inicio, notificaciones, chat, configuración y transporte; TypeScript, lint y build API. Chromium y WebKit recorrieron registro, verificación, recuperación, invitación, guía y reparto a seis anchos. SMTP de QA capturado localmente; no se contactó a amigos en esta ronda.
+- APK release 1.1.3/versionCode 5 compilado. La prueba nativa visual de esta candidata y su publicación HTTPS siguen pendientes. Archivos privados, artefactos APK y salidas de compilación se mantienen excluidos de Git.
 
 ## Validación adicional: concurrencia del libro y cuentas
 
@@ -32,7 +43,7 @@ Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = fu
 | Área | Estado | Evidencia |
 | --- | --- | --- |
 | Registro, verificación por código, login, recuperación, cerrar sesión | Hecho | `ops/test-redesign.cjs`, `ops/test-security-ux.cjs` (OTP de un solo uso, rotación de sesiones, límite de intentos) |
-| Continuar con Google | Parcial | Backend probado con claims (`ops/test-google-sign-in.cjs`); falta el inicio de sesión real en Android con la cuenta del propietario |
+| Continuar con Google | Probado en beta Android 1.1.2 | Inicio real confirmado por el propietario; pruebas de concurrencia en `ops/test-google-sign-in.cjs`. Firmante Play diferente requiere cliente Android propio |
 | Probar sin cuenta (sin servidor) | Hecho | Nombres opcionales, invitados por persona, propina; conservar el cálculo con consentimiento (`ops/test-mobile-ux.cjs`) |
 | Dos tipos de grupo: cobranza y división de gastos | Hecho | Cobranza: alguien pagó todo y le devuelven su parte. División: entre todos juntan un monto meta. Dos mosaicos en Inicio y en «Nuevo grupo», con ejemplo (`ops/test-bill-parts.cjs`) |
 | Cuenta en partes (S/ 500 en 5 partes de S/ 100) | Hecho | Se define al crear el grupo o después; las partes libres quedan con quien pagó y cada persona que se une ocupa una automáticamente (enlace o invitación, sin duplicar). Corregir total/partes; un reparto manual detiene la asignación automática (`apps/api/src/domain/billParts.test.ts`, `ops/test-bill-parts.cjs`) |
@@ -52,7 +63,7 @@ Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = fu
 | Correo abierto en Gmail/Outlook | Parcial | Android adjunta imagen; iOS HTML; web texto. Falta prueba en teléfonos con cuentas reales |
 | Correo HTML enviado desde la API | Hecho y probado en Gmail | SMTP Gmail en Contabo; verificación, bienvenida, recuperación e invitación recibidas en el buzón autorizado. Límites/deduplicación con SMTP local. Outlook real pendiente |
 | Recordatorios manuales y automáticos (cron diario) | Parcial | Rutas y job existen; notificaciones dependen de Firebase/EAS |
-| Notificaciones push | Pendiente externo | Código listo; requiere proyecto EAS y Firebase del propietario |
+| Notificaciones push | Pendiente externo | EAS vinculado; falta completar/verificar Firebase, configuración Android y credencial FCM, además de recepción real |
 | Eliminar cuenta (app y web) | Hecho | `ops/test-account-deletion.cjs` |
 | Cobros integrados (Culqi/Yape) | Retirado | JUNTO no cobra. Se quitó el webhook y el cobro heredados, que no estaban habilitados |
 | Comprobantes Yape/Plin leídos por OCR | Hecho en código | Lector probado con textos ficticios y con una captura ficticia vía API (`voucher.test.ts`, `ops/test-vouchers-comments.cjs`). Falta probar capturas reales de cada banco |

@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { prisma } from "../lib/prisma";
+import { Prisma } from "@prisma/client";
+import { transactionLock } from "../lib/transactionLock";
 import {
   sendOTPEmail,
   sendVerificationEmail,
@@ -454,52 +456,57 @@ export async function verifyGoogleIdToken(idToken: string): Promise<GoogleClaims
 
 /** Logs in, links or creates the account for an already verified Google identity. */
 export async function signInWithGoogleClaims(claims: GoogleClaims) {
-  const fields = { id: true, activo: true, emailVerificado: true, googleId: true } as const;
-  const [byGoogle, byEmail] = await Promise.all([
-    prisma.usuario.findUnique({ where: { googleId: claims.sub }, select: fields }),
-    prisma.usuario.findUnique({ where: { email: claims.email }, select: fields }),
-  ]);
-  const plan = googleSignInPlan(claims, byGoogle, byEmail);
-  if (plan.action === "reject") throw new UserError(plan.message, plan.status, "GOOGLE_RECHAZADO");
-  const picture = claims.picture && claims.picture.length <= 500 ? claims.picture : null;
-  let userId: string;
-  let nuevo = false;
-  if (plan.action === "create") {
-    const created = await prisma.usuario.create({
-      data: {
-        nombre: nameFromGoogle(claims),
-        email: claims.email,
-        passwordHash: `!google:${crypto.randomBytes(24).toString("hex")}`,
-        emailVerificado: true,
-        googleId: claims.sub,
-        fotoUrl: picture,
-      },
-      select: { id: true },
-    });
-    userId = created.id;
-    nuevo = true;
-  } else if (plan.action === "link") {
-    userId = plan.userId;
-    await prisma.$transaction(async (tx) => {
-      const current = await tx.usuario.findUniqueOrThrow({ where: { id: userId }, select: { fotoUrl: true } });
-      await tx.usuario.update({
-        where: { id: userId },
-        data: {
-          googleId: claims.sub,
-          emailVerificado: true,
-          ...(current.fotoUrl ? {} : { fotoUrl: picture }),
-          ...(plan.resetPassword
-            ? { passwordHash: `!google:${crypto.randomBytes(24).toString("hex")}`, otpCode: null, otpExpires: null, otpPurpose: null, otpAttempts: 0 }
-            : {}),
-        },
-      });
-      if (plan.resetPassword) await tx.refreshToken.updateMany({ where: { usuarioId: userId }, data: { revocado: true } });
-    });
-  } else userId = plan.userId;
-
-  const usuario = await prisma.usuario.findUniqueOrThrow({ where: { id: userId } });
+  const { usuario, nuevo } = await resolveGoogleAccount(claims);
   if (nuevo) sendWelcomeEmail(usuario.email, usuario.nombre).catch(() => console.error("[Email] Welcome delivery failed"));
-  return { usuario: await getMe(userId), nuevo, ...(await issueSession(usuario)) };
+  return { usuario: await getMe(usuario.id), nuevo, ...(await issueSession(usuario)) };
+}
+
+async function resolveGoogleAccount(claims: GoogleClaims) {
+  const fields = { id: true, activo: true, emailVerificado: true, googleId: true } as const;
+  const picture = claims.picture && claims.picture.length <= 500 ? claims.picture : null;
+  // Google requests share identity locks, including accounts that do not exist yet.
+  // Row locks also serialize with verification, password reset and deletion. Re-read
+  // the plan AFTER waiting: a stale link plan must never replace another Google ID.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        for (const key of [`google-email:${claims.email}`, `google-sub:${claims.sub}`].sort()) {
+          await transactionLock(tx, key);
+        }
+        await tx.$queryRaw`SELECT id FROM usuarios WHERE email = ${claims.email} OR google_id = ${claims.sub} ORDER BY id FOR UPDATE`;
+        const [byGoogle, byEmail] = await Promise.all([
+          tx.usuario.findUnique({ where: { googleId: claims.sub }, select: fields }),
+          tx.usuario.findUnique({ where: { email: claims.email }, select: fields }),
+        ]);
+        const plan = googleSignInPlan(claims, byGoogle, byEmail);
+        if (plan.action === "reject") throw new UserError(plan.message, plan.status, "GOOGLE_RECHAZADO");
+        if (plan.action === "create") {
+          const usuario = await tx.usuario.create({ data: {
+            nombre: nameFromGoogle(claims), email: claims.email,
+            passwordHash: `!google:${crypto.randomBytes(24).toString("hex")}`,
+            emailVerificado: true, googleId: claims.sub, fotoUrl: picture,
+          } });
+          return { usuario, nuevo: true };
+        }
+        if (plan.action === "link") {
+          const current = await tx.usuario.findUniqueOrThrow({ where: { id: plan.userId }, select: { fotoUrl: true } });
+          await tx.usuario.update({ where: { id: plan.userId }, data: {
+            googleId: claims.sub, emailVerificado: true,
+            ...(current.fotoUrl ? {} : { fotoUrl: picture }),
+            ...(plan.resetPassword ? { passwordHash: `!google:${crypto.randomBytes(24).toString("hex")}`, otpCode: null, otpExpires: null, otpPurpose: null, otpAttempts: 0 } : {}),
+          } });
+          if (plan.resetPassword) await tx.refreshToken.updateMany({ where: { usuarioId: plan.userId }, data: { revocado: true } });
+        }
+        return { usuario: await tx.usuario.findUniqueOrThrow({ where: { id: plan.userId } }), nuevo: false };
+      });
+    } catch (error) {
+      // Password sign-up does not take the Google locks. If it wins creation,
+      // retry once in a NEW transaction and apply the normal ownership checks.
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+      if (attempt === 1) throw new UserError("Tu cuenta cambió mientras entrabas. Intenta de nuevo con Google.", 409, "GOOGLE_REINTENTAR");
+    }
+  }
+  throw new UserError("No pudimos entrar con Google. Intenta de nuevo.", 409, "GOOGLE_REINTENTAR");
 }
 
 export async function loginWithGoogle(idToken: string) {

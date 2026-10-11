@@ -12,10 +12,10 @@ type NotificationsModule = typeof import("expo-notifications");
  * Expo Go (Android) cannot receive remote notifications and logs an error when the module loads,
  * so push is only wired in development/standalone builds that have an EAS project.
  */
-function pushSupported() {
+export function pushSupported() {
   if (Platform.OS === "web") return false;
   if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) return false;
-  return !!projectId();
+  return !!projectId() && Constants.expoConfig?.extra?.pushConfigured === true;
 }
 
 function projectId(): string | undefined {
@@ -44,14 +44,15 @@ export async function forgetPushRegistration(userId: string) {
 }
 
 /** Best effort: a denied permission or missing configuration must never block the app. */
-export async function registerForPush(userId: string, isCurrent: () => boolean, signal: AbortSignal) {
+export async function registerForPush(userId: string, isCurrent: () => boolean, signal: AbortSignal): Promise<"registered" | "unavailable" | "denied" | "cancelled" | "failed"> {
   try {
-    if (!pushSupported() || !isCurrent() || signal.aborted) return;
+    if (!pushSupported()) return "unavailable";
+    if (!isCurrent() || signal.aborted) return "cancelled";
     const Notifications: NotificationsModule = await import("expo-notifications");
-    if (!isCurrent() || signal.aborted) return;
+    if (!isCurrent() || signal.aborted) return "cancelled";
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
-        shouldPlaySound: false,
+        shouldPlaySound: true,
         shouldSetBadge: false,
         shouldShowBanner: true,
         shouldShowList: true,
@@ -60,24 +61,47 @@ export async function registerForPush(userId: string, isCurrent: () => boolean, 
     if (Platform.OS === "android") {
       await Notifications.setNotificationChannelAsync("default", {
         name: "Avisos de JUNTO",
-        importance: Notifications.AndroidImportance.DEFAULT,
+        importance: Notifications.AndroidImportance.HIGH,
+        sound: "default",
       });
     }
-    if (!isCurrent() || signal.aborted) return;
-    let { status } = await Notifications.getPermissionsAsync();
-    if (!isCurrent() || signal.aborted) return;
-    if (status !== "granted") ({ status } = await Notifications.requestPermissionsAsync());
-    if (status !== "granted" || !isCurrent() || signal.aborted) return;
+    if (!isCurrent() || signal.aborted) return "cancelled";
+    const { status } = await Notifications.getPermissionsAsync();
+    if (!isCurrent() || signal.aborted) return "cancelled";
+    // A permission dialog is shown only after the person chooses "Activar avisos".
+    if (status !== "granted") return "denied";
     const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId: projectId() });
-    if (!token || !isCurrent() || signal.aborted || (lastRegistration?.userId === userId && lastRegistration.token === token)) return;
+    if (!isCurrent() || signal.aborted) return "cancelled";
+    if (!token) return "failed";
+    if (lastRegistration?.userId === userId && lastRegistration.token === token) return "registered";
     // Remember the exact device before the request; logout can clean up even an in-flight PUT.
     await SecureStore.setItemAsync("pushRegistration", JSON.stringify({ userId, token }));
-    if (!isCurrent() || signal.aborted) return;
+    if (!isCurrent() || signal.aborted) return "cancelled";
     await api.put("/auth/push-token", { expoPushToken: token }, { signal });
-    if (isCurrent() && !signal.aborted) lastRegistration = { userId, token };
+    if (!isCurrent() || signal.aborted) return "cancelled";
+    lastRegistration = { userId, token };
+    return "registered";
   } catch {
     /* Notifications are an extra channel; payments and balances do not depend on them. */
+    return "failed";
   }
+}
+
+/** User-initiated only; permission and delivery configuration are different things. */
+export async function enableNotifications(userId: string, isCurrent: () => boolean, signal: AbortSignal) {
+  if (Platform.OS === "web" || Constants.executionEnvironment === ExecutionEnvironment.StoreClient) return "unsupported" as const;
+  try {
+    const Notifications: NotificationsModule = await import("expo-notifications");
+    if (!isCurrent() || signal.aborted) return "cancelled" as const;
+    if (Platform.OS === "android") await Notifications.setNotificationChannelAsync("default", { name: "Avisos de JUNTO", importance: Notifications.AndroidImportance.HIGH, sound: "default" });
+    if (!isCurrent() || signal.aborted) return "cancelled" as const;
+    let permission = await Notifications.getPermissionsAsync();
+    if (!isCurrent() || signal.aborted) return "cancelled" as const;
+    if (permission.status !== "granted" && permission.canAskAgain) permission = await Notifications.requestPermissionsAsync();
+    if (!isCurrent() || signal.aborted) return "cancelled" as const;
+    if (permission.status !== "granted") return permission.canAskAgain ? "denied" as const : "settings" as const;
+    return await registerForPush(userId, isCurrent, signal);
+  } catch { return "failed" as const; }
 }
 
 /** Opens what a notification is about (expense, payment or group). Returns a cleanup function. */
@@ -108,7 +132,7 @@ export function listenForNotificationTaps(router: Router, isCurrent: () => boole
       });
       const received = Notifications.addNotificationReceivedListener(() => {
         if (cancelled || !isCurrent()) return;
-        for (const key of ["pagos", "grupos", "actividad", "comentarios", "invitaciones", "notificaciones"]) void queryClient.invalidateQueries({ queryKey: [key] });
+        for (const key of ["pagos", "grupos", "chat", "actividad", "comentarios", "invitaciones", "notificaciones"]) void queryClient.invalidateQueries({ queryKey: [key] });
       });
       remove = () => { subscription.remove(); received.remove(); };
       const initial = await Notifications.getLastNotificationResponseAsync();

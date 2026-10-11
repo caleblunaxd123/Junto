@@ -2,7 +2,7 @@
   "expo": {
     "name": "JUNTO",
     "slug": "junto",
-    "version": "1.1.1",
+    "version": "1.1.3",
     "orientation": "portrait",
     "icon": "./assets/brand/icon-v2.png",
     "userInterfaceStyle": "light",
@@ -24,7 +24,7 @@
         "backgroundColor": "#FFFCF7"
       },
       "package": "com.junto.app",
-      "versionCode": 3
+      "versionCode": 5
     },
     "web": {
       "favicon": "./assets/brand/favicon-v2.png",
@@ -45,7 +45,9 @@
       [
         "expo-share-intent",
         {
-          "androidIntentFilters": ["image/*"],
+          "androidIntentFilters": [
+            "image/*"
+          ],
           "disableIOS": true
         }
       ]
@@ -53,6 +55,13 @@
     "scheme": "junto",
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "188be768-affc-4f07-979e-094b472f54f3"
+      }
+    },
+    "owner": "calebluna41"
   }
 }

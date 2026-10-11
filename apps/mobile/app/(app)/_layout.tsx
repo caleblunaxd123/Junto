@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { AppState } from "react-native";
 import { Redirect, Stack, useRouter } from "expo-router";
 import { useShareIntentContext } from "expo-share-intent";
 import { setSharedVoucher } from "../../src/lib/sharedVoucher";
@@ -19,8 +20,12 @@ export default function AppLayout() {
     const controller = new AbortController();
     const isCurrent = () => !controller.signal.aborted && !useAuthStore.getState().signingOut && useAuthStore.getState().isAuthenticated && useAuthStore.getState().usuario?.id === userId;
     void registerForPush(userId, isCurrent, controller.signal);
+    // Returning from system settings retries registration, never reopens a permission prompt.
+    const foreground = AppState.addEventListener("change", (state) => {
+      if (state === "active") void registerForPush(userId, isCurrent, controller.signal);
+    });
     const remove = listenForNotificationTaps(router, isCurrent);
-    return () => { controller.abort(); remove(); clearPushRegistration(userId); };
+    return () => { controller.abort(); foreground.remove(); remove(); clearPushRegistration(userId); };
   }, [isAuthenticated, userId, router]);
   // "Compartir → JUNTO" from WhatsApp, Yape or the gallery (Android): ask which group it is for.
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();

@@ -58,6 +58,12 @@ async function run(){
   await page.waitForURL(url=>!url.pathname.includes('verify-email'),{timeout:15000});
   assert.ok(await page.evaluate(()=>sessionStorage.getItem('junto.session.accessToken')));
   assert.equal(await page.evaluate(()=>localStorage.getItem('accessToken')),null);
+  await page.getByRole('button',{name:'Cerrar guía',exact:true}).waitFor();
+  await layoutCheck('first-steps',true);
+  for(let step=0;step<3;step++) await page.getByRole('button',{name:'Siguiente',exact:true}).click();
+  await page.getByRole('button',{name:'Activar avisos',exact:true}).click();
+  await page.getByText('En la web puedes revisar tus novedades dentro de JUNTO. Los avisos del celular requieren la app configurada.',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Empezar a usar JUNTO',exact:true}).click();
   // Responsive changes must not remount the navigator or erase a logged-in session.
   for(const width of [360,390,768,1024,1440,1920]){
    await page.setViewportSize({width,height:900});await page.waitForTimeout(250);
@@ -102,6 +108,7 @@ async function run(){
   await page.getByPlaceholder('Tu contraseña').filter({visible:true}).fill(password);
   await page.getByPlaceholder('Tu contraseña').filter({visible:true}).press('Enter');
   await page.waitForURL(url=>!url.pathname.includes('/login'));
+  assert.equal(await page.getByRole('button',{name:'Cerrar guía',exact:true}).count(),0,'Seen guide does not interrupt the next sign-in');
   await page.reload({waitUntil:'networkidle'});
   assert.ok(await page.evaluate(()=>sessionStorage.getItem('junto.session.accessToken')));
   if(viewportWidth>=1024){

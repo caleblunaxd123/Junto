@@ -27,7 +27,7 @@ test("push registration and taps stop when the account changes or the listener u
   let current = true; let permissionRequests = 0; let onTap; let initial = null;
   let permissions = async () => ({ status: "granted" });
   const notifications = {
-    AndroidImportance: { DEFAULT: 3 },
+    AndroidImportance: { DEFAULT: 3, HIGH: 4 },
     setNotificationHandler() {}, setNotificationChannelAsync: async () => {},
     getPermissionsAsync: () => permissions(),
     requestPermissionsAsync: async () => { permissionRequests++; return { status: "granted" }; },
@@ -39,7 +39,7 @@ test("push registration and taps stop when the account changes or the listener u
   Module._load = function(request, parent, ...rest) {
     if (parent?.filename.endsWith("push.ts")) {
       if (request === "react-native") return { Platform: { OS: "android" } };
-      if (request === "expo-constants") return { __esModule: true, default: { expoConfig: { extra: { eas: { projectId: "qa" } } } }, ExecutionEnvironment: { StoreClient: "store" } };
+      if (request === "expo-constants") return { __esModule: true, default: { expoConfig: { extra: { pushConfigured: true, eas: { projectId: "qa" } } } }, ExecutionEnvironment: { StoreClient: "store" } };
       if (request === "./tokenStorage") return { getItemAsync: async key => storage.get(key) || null, setItemAsync: async (key, value) => storage.set(key, value), deleteItemAsync: async key => storage.delete(key) };
       if (request === "./api") return { api: { put: async (...args) => puts.push(args) } };
       if (request === "./queryClient") return { queryClient: { invalidateQueries: async () => {} } };
@@ -63,6 +63,16 @@ test("push registration and taps stop when the account changes or the listener u
     await push.registerForPush("qa-user-c", active, new AbortController().signal);
     assert.equal(permissionRequests, 0, "no permission request after sign-out");
     assert.equal(puts.length, 2);
+
+    current = true;
+    permissions = async () => ({ status: "denied", canAskAgain: true });
+    assert.equal(await push.registerForPush("qa-user-c", active, new AbortController().signal), "denied");
+    assert.equal(permissionRequests, 0, "launch never opens a permission dialog without a user choice");
+    assert.equal(await push.enableNotifications("qa-user-c", active, new AbortController().signal), "denied");
+    assert.equal(permissionRequests, 1, "only the explicit action requests permission");
+    permissions = async () => ({ status: "denied", canAskAgain: false });
+    assert.equal(await push.enableNotifications("qa-user-c", active, new AbortController().signal), "settings");
+    assert.equal(permissionRequests, 1, "never repeatedly prompts after system denial");
 
     current = true;
     const response = name => ({ notification: { request: { identifier: name, content: { data: { grupoId: id } } } } });

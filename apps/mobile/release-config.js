@@ -35,6 +35,9 @@ function validateReleaseEnvironment(env) {
     if (url.protocol !== "https:" || url.username || url.password || !isPublicHost(url.hostname)) throw new Error(`JUNTO: ${field} debe ser una URL pública HTTPS sin credenciales.`);
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.EXPO_PUBLIC_SUPPORT_EMAIL || "")) throw new Error("JUNTO: configura EXPO_PUBLIC_SUPPORT_EMAIL.");
+  if (env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID && !/^\d+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID)) {
+    throw new Error("JUNTO: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID debe ser un ID OAuth de cliente web, no una clave o secreto.");
+  }
 }
 /** Host for Android App Links: the public web (or API) domain, only if it is https. */
 function appLinkHost(env) {

@@ -13,8 +13,25 @@ para el emulador. No es compatible con celulares exclusivamente ARM de 32 bits.
 No cargar dotenv privado en distribución: SMTP, JWT, DeepSeek y llaves SSH nunca
 van dentro de la aplicación. Esta beta usa el firmante de pruebas local existente,
 no una clave de publicación definitiva de Play Store. Nunca publicar el keystore.
-Login/registro/recuperación por correo; Google no se anuncia en esta compilación
-porque la configuración OAuth/certificado de distribución aún requiere validación.
+Login/registro/recuperación por correo. Google se mantiene apagado por defecto.
+Para generar una candidata con Google: `powershell -File ops/android/build-beta.ps1 -EnableGoogle`.
+El perfil `google-beta.public.json` solo contiene identificadores públicos y la huella
+del firmante local; el script rechaza un cambio de paquete o firma. No certifica que
+esa huella esté registrada en Cloud: contrastarla allí y completar un inicio de sesión
+real antes de anunciar Google como validado. Nunca usar el ID Android como webClientId.
+Una clave de publicación Play diferente requiere su propio cliente Android con SHA-1.
+
+La candidata 1.1.3/versionCode 5 añade guía opcional, resumen de cuentas pendientes
+y emojis en el chat. Google fue probado por el propietario en 1.1.2; volver a
+comprobarlo en cada APK que se entregue.
+
+Push requiere `credentials/google-services.json` del proyecto `junto-510905`,
+paquete `com.junto.app`, y credenciales FCM privadas cargadas en Expo/EAS.
+Cuando esté verificado: `powershell -File ops/android/build-beta.ps1 -EnableGoogle -EnablePush`.
+El script rechaza otro proyecto y archivos de cuenta de servicio. Nunca incluir
+la clave FCM privada en el APK. Sin `-EnablePush`, la app no promete entrega push;
+conceder el permiso del celular no equivale a tener configurado el servicio.
+La configuración Firebase y la entrega real siguen pendientes de verificación.
 
 Antes de entregar: verificar firma con `apksigner verify`, paquete/minSdk/ausencia de
 debug con `aapt dump badging`, bundle `assets/index.android.bundle` y arquitectura.

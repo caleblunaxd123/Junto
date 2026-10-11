@@ -1,6 +1,6 @@
 import { errorMessage } from "../../../src/lib/errorMessage";
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { View, Pressable, ActivityIndicator, Image, ScrollView, Modal, TextInput, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Pressable, ActivityIndicator, Image, ScrollView, Modal, TextInput, Keyboard, KeyboardAvoidingView, Platform } from "react-native";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,6 +23,8 @@ import { WhoPaid } from "../../../src/components/chat/WhoPaid";
 import { modeWords } from "../../../src/lib/groupMode";
 import { deadlineText } from "../../../src/lib/billForm";
 import { freeParts, groupProgress } from "../../../src/lib/groupProgress";
+import { ExpressionTray } from "../../../src/components/chat/ExpressionTray";
+import { appendExpression } from "../../../src/lib/chatExpressions";
 
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
 const systemTypes = new Set(["creado", "union", "recordatorio"]);
@@ -82,13 +84,14 @@ export default function Group() {
   const [error, setError] = useState("");
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const [expressions, setExpressions] = useState(false);
   const [shareMessage, setShareMessage] = useState<ShareMessage | null>(null);
   const feed = useRef<ScrollView>(null);
   const seen = useRef<string | null>(null);
   const nearBottom = useRef(true);
   const sendLock = useRef(false);
   const [newMessages, setNewMessages] = useState(false);
-  useEffect(() => { seen.current = null; nearBottom.current = true; setNewMessages(false); setText(""); }, [id]);
+  useEffect(() => { seen.current = null; nearBottom.current = true; setNewMessages(false); setText(""); setExpressions(false); }, [id]);
 
   const words = modeWords(group?.modo);
   const groupPayments = payments.filter((p) => p.grupoId === id && p.estado === "reportado");
@@ -172,6 +175,7 @@ export default function Group() {
       await api.post(`/grupos/${id}/mensajes`, { texto: value });
       // Do not erase a second message typed while the first one was being sent.
       setText((current) => current.trim() === value ? "" : current);
+      setExpressions(false);
       await refetchChat();
     } catch (err) {
       // The text stays in the box so nothing written is lost.
@@ -348,11 +352,18 @@ export default function Group() {
             <Chip highlight={!!cuenta?.libres} icon="person-add-outline" title="Invitar" onPress={goInvite} />
             <Chip icon="add" title="Otro gasto" onPress={goExpense} />
           </ScrollView>
+          {expressions && <ExpressionTray onClose={() => setExpressions(false)} onPick={(value) => {
+            const next = appendExpression(text, value);
+            if (next === text) setError("Tu mensaje llegó a 500 caracteres. Acórtalo antes de añadir un emoji.");
+            else { setText(next); setError(""); }
+          }} />}
           <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 12 }}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Emojis y respuestas rápidas" accessibilityState={{ expanded: expressions }} onPress={() => { Keyboard.dismiss(); setExpressions(!expressions); }} style={{ width: 44, height: 48, alignItems: "center", justifyContent: "center" }}><Ionicons name={expressions ? "close-circle-outline" : "happy-outline"} size={27} color={chatColors.header} /></Pressable>
             <TextInput
               accessibilityLabel="Escribe un mensaje al grupo"
               value={text}
               onChangeText={setText}
+              onFocus={() => setExpressions(false)}
               placeholder="Escribe un mensaje"
               placeholderTextColor="#8B98AE"
               multiline

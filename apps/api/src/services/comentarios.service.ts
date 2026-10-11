@@ -13,7 +13,8 @@ const first = (name: string) => name.trim().split(/\s+/)[0] || name;
 export function cleanComment(text: string) {
   return text
     .replace(/\r\n?/g, "\n")
-    .replace(/[\u0000-\u0009\u000B-\u001F\u007F​-‏‪-‮⁦-⁩]/g, "")
+    // Keep U+200D (ZWJ) for family/profession emoji; still remove hidden bidi controls.
+    .replace(/[\u0000-\u0009\u000B-\u001F\u007F\u200B\u200C\u200E\u200F\u202A-\u202E\u2066-\u2069]/g, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }

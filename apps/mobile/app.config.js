@@ -23,6 +23,7 @@ module.exports = ({ config }) => {
   if (process.env.GOOGLE_IOS_URL_SCHEME)
     plugins.push(["@react-native-google-signin/google-signin", { iosUrlScheme: process.env.GOOGLE_IOS_URL_SCHEME }]);
   const extra = { ...config.extra };
+  extra.pushConfigured = !!android.googleServicesFile;
   if (process.env.EAS_PROJECT_ID) extra.eas = { ...extra.eas, projectId: process.env.EAS_PROJECT_ID };
   const web = { ...config.web, output: "single" };
   const experiments = { ...config.experiments, ...(process.env.JUNTO_WEB_BASE_PATH === "/app" ? { baseUrl: "/app" } : {}) };

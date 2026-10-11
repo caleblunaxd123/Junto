@@ -27,7 +27,8 @@ import { Brand, SectionTitle } from "../../../src/components/ui/Reference";
 import { centavosASoles } from "../../../src/types";
 import { useQuickBills } from "../../../src/hooks/useQuickBills";
 import { art, groupCover } from "../../../src/components/ui/Artwork";
-import { homeState } from "../../../src/lib/homeState";
+import { homeState, pendingDayBills } from "../../../src/lib/homeState";
+import { FirstSteps } from "../../../src/components/FirstSteps";
 import { pendingActions } from "../../../src/lib/pending";
 import { PendingActions } from "../../../src/components/PendingActions";
 import { Invitations } from "../../../src/components/Invitations";
@@ -95,14 +96,15 @@ export default function Home() {
   }
   const actions = pendingActions(groups, payments.data ?? [], usuario?.id);
   const openBills = bills.data?.filter((bill) => !bill.archivada) ?? [];
+  const dayPending = pendingDayBills(openBills);
   const filtered = groups.filter((g) =>
     g.nombre.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
   );
-  const { empty, unavailable, canShowAllClear } = homeState(
+  const { empty, unavailable, canShowAllClear, canShowGroupsClear } = homeState(
     { loading: isLoading, error: isError, hasData: groupData !== undefined },
     { loading: payments.isLoading, error: payments.isError, hasData: payments.data !== undefined },
     { loading: bills.isLoading, error: bills.isError, hasData: bills.data !== undefined },
-    groups.length, openBills.length,
+    groups.length, openBills.length, dayPending.count,
   );
   const refreshing = isRefetching || payments.isRefetching || bills.isRefetching;
   return (
@@ -125,6 +127,7 @@ export default function Home() {
         <Label accessibilityRole="header" size={desktop ? 34 : 26} weight="extra">
           Hola, {usuario?.nombre.split(" ")[0] || "amigo"}
         </Label>
+        {usuario && <FirstSteps userId={usuario.id} />}
         {desktop && <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
           <View style={{ flex: 1, minWidth: 200 }}><Label size={15} color={palette.muted}>Todo lo compartido, en un solo lugar.</Label></View>
           <Button compact title="Dividir una cuenta de hoy" onPress={() => router.push("/(app)/cuentas/rapida")} />
@@ -175,6 +178,19 @@ export default function Home() {
           </Card>
         ) : (
           <>
+            {dayPending.count > 0 && !bills.isError && (
+              <Pressable accessibilityRole="button" accessibilityLabel={`Por cobrar ${money(dayPending.cents)} en ${dayPending.count} cuentas de un día. Revisar cuentas`} onPress={() => router.push("/(app)/cuentas/rapidas")}>
+                <Card style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", gap: 8 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    <Ionicons name="receipt-outline" size={26} color="#8A5A00" />
+                    <Label weight="bold" style={{ flex: 1 }}>Por cobrar en cuentas de un día</Label>
+                    <Ionicons name="chevron-forward" size={20} color="#8A5A00" />
+                  </View>
+                  <Label size={28} weight="extra">{money(dayPending.cents)}</Label>
+                  <Label size={13} color={palette.muted}>{dayPending.count} {dayPending.count === 1 ? "cuenta pendiente" : "cuentas pendientes"} · Revisa quién ya te pagó.</Label>
+                </Card>
+              </Pressable>
+            )}
             {payments.isError && (
               <>
                 <ErrorBox message="No pudimos revisar tus pagos pendientes. Puede haber pagos por confirmar." />
@@ -193,12 +209,12 @@ export default function Home() {
                   </Pressable>
                 )}
               </>
-            ) : canShowAllClear ? (
+            ) : canShowGroupsClear ? (
               <Card style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, backgroundColor: palette.mint, borderColor: "#BDEBD9" }}>
                 <Ionicons name="checkmark-circle" size={28} color="#007B60" />
                 <View style={{ flex: 1 }}>
-                  <Label weight="bold">Nada pendiente</Label>
-                  <Label size={12} color={palette.muted}>No debes ni te deben en tus grupos.</Label>
+                  <Label weight="bold">{canShowAllClear ? "Todo al día" : "Tus grupos están al día"}</Label>
+                  <Label size={12} color={palette.muted}>{canShowAllClear ? "Sin pendientes en tus grupos ni en tus cuentas de un día." : "Sin deudas en grupos. Las cuentas de un día se revisan aparte."}</Label>
                 </View>
               </Card>
             ) : null}

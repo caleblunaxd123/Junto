@@ -68,6 +68,55 @@ async function run() {
   // Signing in with that Google account again starts a fresh, empty account.
   const fresh = await signInWithGoogleClaims({ sub: `sub-${suffix}`, email, emailVerified: true, name: "Rosa" });
   assert.notEqual(fresh.usuario.id, created.usuario.id);
+
+  // Simultaneous first logins all obtain the SAME account, rather than three P2002 errors.
+  const simultaneousEmail = `google-race-${suffix}@example.invalid`;
+  const simultaneous = await Promise.all(Array.from({ length: 4 }, () => signInWithGoogleClaims({
+    sub: `sub-race-${suffix}`, email: simultaneousEmail, emailVerified: true, name: "Google Race QA",
+  })));
+  assert.equal(new Set(simultaneous.map(value => value.usuario.id)).size, 1);
+  assert.equal(simultaneous.filter(value => value.nuevo).length, 1);
+  assert.equal(await prisma.usuario.count({ where: { email: simultaneousEmail } }), 1);
+  for (const session of simultaneous) await request("/auth/me", session.accessToken);
+
+  // Two different Google identities cannot both link an existing password account.
+  const contested = `google-contested-${suffix}@example.invalid`;
+  await request("/auth/register", null, "POST", { nombre: "Google Link Race QA", email: contested, password: "Clave2026x" }, 201);
+  const contenders = [`sub-left-${suffix}`, `sub-right-${suffix}`];
+  const linking = await Promise.allSettled(contenders.map(sub => signInWithGoogleClaims({ sub, email: contested, emailVerified: true })));
+  assert.equal(linking.filter(value => value.status === "fulfilled").length, 1);
+  const rejection = linking.find(value => value.status === "rejected");
+  assert.match(rejection.reason.message, /otra cuenta de Google/);
+  const stored = await prisma.usuario.findUniqueOrThrow({ where: { email: contested } });
+  const winner = linking.findIndex(value => value.status === "fulfilled");
+  assert.equal(stored.googleId, contenders[winner]);
+  await request("/auth/me", linking[winner].value.accessToken);
+
+  // If verification wins while Google waits on the account row, preserve the
+  // now-proven password rather than applying a stale unverified-account plan.
+  const waitingEmail = `google-waiting-${suffix}@example.invalid`;
+  await request("/auth/register", null, "POST", { nombre: "Google Waiting QA", email: waitingEmail, password: "Clave2026x" }, 201);
+  const before = await prisma.usuario.findUniqueOrThrow({ where: { email: waitingEmail } });
+  let entered, release;
+  const ready = new Promise(resolve => { entered = resolve; });
+  const held = new Promise(resolve => { release = resolve; });
+  const blocker = prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM usuarios WHERE id = ${before.id}::uuid FOR UPDATE`;
+    entered(); await held;
+    await tx.usuario.update({ where: { id: before.id }, data: { emailVerificado: true, otpCode: null, otpPurpose: null, otpExpires: null } });
+  }, { timeout: 10000 });
+  await ready;
+  let settled = false;
+  const waiting = signInWithGoogleClaims({ sub: `sub-waiting-${suffix}`, email: waitingEmail, emailVerified: true }).finally(() => { settled = true; });
+  try {
+    await new Promise(resolve => setTimeout(resolve, 150));
+    assert.equal(settled, false, "Google must wait for verification/password changes");
+  } finally { release(); await blocker; }
+  const after = await waiting;
+  assert.equal(after.usuario.tienePassword, true);
+  assert.equal((await prisma.usuario.findUniqueOrThrow({ where: { id: before.id } })).passwordHash, before.passwordHash);
+  await request("/auth/login", null, "POST", { email: waitingEmail, password: "Clave2026x" });
+
   console.log("Google sign-in QA passed");
 }
 run().finally(() => prisma.$disconnect()).catch((error) => { console.error(error); process.exit(1); });
