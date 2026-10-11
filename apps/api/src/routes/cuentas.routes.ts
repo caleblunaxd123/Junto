@@ -7,6 +7,7 @@ import { authMiddleware } from "../middleware/auth";
 import { UserError } from "../domain/errors";
 import { readReceipt } from "../services/receipt.service";
 import { quickBillReadSchema as inputSchema, quickBillWriteSchema } from "../schemas/quickBill.schema";
+import { historicalImportSchema, importHistorical } from "../services/groupImport.service";
 
 const router = Router();
 router.use(authMiddleware);
@@ -27,7 +28,7 @@ function view(row: CuentaRapida) {
   const recibidos = row.recibidos as string[];
   const resultado = calculateQuickBill(datos);
   const progress = quickBillProgress(datos, row.aportes as Record<string, number>, recibidos);
-  return { id: row.id, datos, resultado, ...progress, archivada: row.archivada, historial: row.historial, version: row.version, fechaCreacion: row.fechaCreacion, fechaActualizacion: row.fechaActualizacion, mensaje: quickBillMessage(datos, progress.recibidos), mensajeBreve: quickBillBrief(datos, progress.aportes) };
+  return { id: row.id, grupoId: row.grupoId, datos, resultado, ...progress, archivada: row.archivada, historial: row.historial, version: row.version, fechaCreacion: row.fechaCreacion, fechaActualizacion: row.fechaActualizacion, mensaje: quickBillMessage(datos, progress.recibidos), mensajeBreve: quickBillBrief(datos, progress.aportes) };
 }
 function history(row: CuentaRapida, evento: string, extra: Record<string, string | number | boolean> = {}) {
   return [...(row.historial as object[]), { evento, fecha: new Date().toISOString(), ...extra }];
@@ -39,7 +40,7 @@ async function owned(id: unknown, userId: string) {
 }
 async function setContribution(id: unknown, userId: string, input: { participanteId: string; version: number; monto?: number; recibido?: boolean }) {
   const row = await owned(id, userId);
-  if (row.version !== input.version || row.archivada) throw new UserError("La cuenta cambió o está archivada. Actualiza antes de confirmar el aporte.", 409);
+  if (row.grupoId || row.version !== input.version || row.archivada) throw new UserError("La cuenta cambió, está archivada o ya pasó a grupo. Actualiza antes de confirmar el aporte.", 409);
   const current = view(row);
   const part = current.resultado.partes.find((p) => p.id === input.participanteId);
   if (!part || part.total <= 0) throw new UserError("Esta persona no tiene un aporte pendiente.");
@@ -48,7 +49,7 @@ async function setContribution(id: unknown, userId: string, input: { participant
   const previous = current.aportes[part.id] || 0;
   if (previous === amount) return current;
   const progress = quickBillProgress(current.datos, { ...current.aportes, [part.id]: amount });
-  const changed = await prisma.cuentaRapida.updateMany({ where: { id: row.id, creadoPor: userId, version: input.version }, data: { aportes: progress.aportes, recibidos: progress.recibidos, historial: history(row, "aporte", { persona: part.nombre, anterior: previous, monto: amount }), version: { increment: 1 } } });
+  const changed = await prisma.cuentaRapida.updateMany({ where: { id: row.id, creadoPor: userId, version: input.version, grupoId: null }, data: { aportes: progress.aportes, recibidos: progress.recibidos, historial: history(row, "aporte", { persona: part.nombre, anterior: previous, monto: amount }), version: { increment: 1 } } });
   if (!changed.count) throw new UserError("La cuenta cambió. Actualiza antes de confirmar el aporte.", 409);
   return view(await prisma.cuentaRapida.findUniqueOrThrow({ where: { id: row.id } }));
 }
@@ -94,9 +95,10 @@ router.put("/:id", async (req, res, next) => {
     const { version, ...datos } = quickBillWriteSchema.extend({ version: z.number().int().positive() }).parse(req.body);
     try { calculateQuickBill(datos); } catch (error) { throw new UserError((error as Error).message); }
     const current = await owned(req.params.id, req.user!.userId);
+    if (current.grupoId) throw new UserError("Esta cuenta ya pasó a grupo. Los cambios se hacen desde el grupo; el historial anterior se conserva.", 409);
     if (current.version === version + 1 && JSON.stringify(inputSchema.parse(current.datos)) === JSON.stringify(datos) && (current.historial as { evento: string }[]).at(-1)?.evento === "corregida") { res.json(view(current)); return; }
     if (view(current).cobrado > 0 || current.archivada) throw new UserError("Primero corrige los aportes confirmados o reactiva la cuenta. No cambiamos las partes después de recibir dinero.", 409);
-    const changed = await prisma.cuentaRapida.updateMany({ where: { id: current.id, creadoPor: req.user!.userId, version }, data: { nombre: datos.nombre, datos, aportes: {}, recibidos: [], historial: history(current, "corregida", { anterior: calculateQuickBill(inputSchema.parse(current.datos)).montoTotal, monto: calculateQuickBill(datos).montoTotal }), version: { increment: 1 } } });
+    const changed = await prisma.cuentaRapida.updateMany({ where: { id: current.id, creadoPor: req.user!.userId, version, grupoId: null }, data: { nombre: datos.nombre, datos, aportes: {}, recibidos: [], historial: history(current, "corregida", { anterior: calculateQuickBill(inputSchema.parse(current.datos)).montoTotal, monto: calculateQuickBill(datos).montoTotal }), version: { increment: 1 } } });
     if (!changed.count) throw new UserError("No se guardó: la cuenta cambió o ya tiene pagos recibidos. Actualízala antes de continuar.", 409);
     const row = await prisma.cuentaRapida.findUniqueOrThrow({ where: { id: req.params.id } });
     res.json(view(row));
@@ -118,10 +120,15 @@ router.post("/:id/archivo", async (req, res, next) => {
   try {
     const input = z.object({ archivada: z.boolean(), version: z.number().int().positive() }).strict().parse(req.body);
     const row = await owned(req.params.id, req.user!.userId);
+    if (row.grupoId) throw new UserError("Esta cuenta ya pasó a grupo. Conservamos su historial sin cambios.", 409);
     if (input.archivada && view(row).pendiente > 0) throw new UserError("Todavía hay aportes pendientes. Completa la cuenta antes de archivarla.", 409);
-    const changed = await prisma.cuentaRapida.updateMany({ where: { id: row.id, creadoPor: req.user!.userId, version: input.version }, data: { archivada: input.archivada, historial: history(row, input.archivada ? "archivada" : "reactivada"), version: { increment: 1 } } });
+    const changed = await prisma.cuentaRapida.updateMany({ where: { id: row.id, creadoPor: req.user!.userId, version: input.version, grupoId: null }, data: { archivada: input.archivada, historial: history(row, input.archivada ? "archivada" : "reactivada"), version: { increment: 1 } } });
     if (!changed.count) throw new UserError("La cuenta cambió. Actualízala antes de continuar.", 409);
     res.json(view(await prisma.cuentaRapida.findUniqueOrThrow({ where: { id: row.id } })));
   } catch (error) { next(error); }
+});
+router.post("/:id/pasar-a-grupo", async (req, res, next) => {
+  try { res.status(201).json(await importHistorical(req.user!.userId, z.string().uuid().parse(req.params.id), historicalImportSchema.parse(req.body))); }
+  catch (error) { next(error); }
 });
 export default router;

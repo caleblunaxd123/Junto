@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QuickBillInput, QuickBillResult, QuickBillProgress } from "@junto/shared/quickBill";
 import { api } from "../lib/api";
 export interface QuickBill extends QuickBillProgress {
-  id: string; datos: QuickBillInput; resultado: QuickBillResult; recibidos: string[];
+  id: string; grupoId?: string | null; datos: QuickBillInput; resultado: QuickBillResult; recibidos: string[];
   cobrado: number; pendiente: number; version: number; fechaCreacion: string; fechaActualizacion: string; mensaje: string;
   mensajeBreve: string; archivada: boolean; historial: { evento: string; fecha: string; persona?: string; anterior?: number; monto?: number }[];
 }

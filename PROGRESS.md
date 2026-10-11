@@ -38,6 +38,14 @@ Actualizado el 11 de octubre de 2026: código de la candidata 1.1.3 preparado pa
 
 Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = funciona con límites conocidos · **Pendiente** = no existe o necesita algo externo.
 
+## Validación local: pasar cálculos y cuentas anteriores a grupos (11/oct/2026)
+
+- «Probar sin cuenta» continúa en un grupo con el mismo reparto e integrantes por nombre; antes de crear se elige explícitamente el nombre propio y quién adelantó el dinero. No se deduce identidad por nombres coincidentes.
+- «Cuentas anteriores» ofrece «Pasar a grupo» y conserva datos, aportes parciales, invitados e historial. Los pagos confirmados se copian una sola vez, sin pagos a sí mismo; la cuenta anterior queda como referencia de solo lectura y se excluye de pendientes para no duplicarlos.
+- Migración aditiva `20261015000000_group_imports`; reconstrucción y desfase comprobados únicamente en PostgreSQL local QA. Reintentos simultáneos, versión antigua, permisos y errores dejan los datos intactos o devuelven el mismo grupo.
+- Pasaron 75 pruebas de dominio, 15 de UX móvil, 5 de Inicio, TypeScript/lint y la integración de importaciones. Chromium y WebKit recorrieron el cálculo → grupo en 390 y 1440 px, con cumpleaños y saldo exacto. Sin correos externos ni cambios en producción.
+- Monedas por grupo y sugerencia según país del viaje: en preparación, todavía no habilitadas. No se cambian monedas de cuentas existentes ni se mezclan/convierten saldos automáticamente.
+
 ## Producto
 
 | Área | Estado | Evidencia |

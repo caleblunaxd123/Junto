@@ -200,15 +200,12 @@ test("try-without-account accepts names and per-person guests with the same exac
   assert.match(previewTryBillPeople("100", [{ nombre: "Ana", invitado: true }], 0).error, /no pueden ser todos invitados/);
   assert.equal(previewTryBillPeople("187.50", people, 10).extras, 1875);
 });
-test("a kept trial calculation becomes a reviewable draft with the same total, people and tip", () => {
-  const { tryBillToDraft } = require("../apps/mobile/src/lib/tryBillHandoff.ts");
-  const { validateQuickBillDraft } = require("../apps/mobile/src/lib/quickBillValidation.ts");
-  const draft = tryBillToDraft({ total: 18750, tip: 10, extras: 1875, people: [{ nombre: "Jaime", invitado: true }, { nombre: "Ana", invitado: false }, { nombre: "", invitado: false }], savedAt: Date.now() }, "Camila");
-  assert.equal(draft.billTotal, "187.50");
-  assert.equal(draft.extras, "18.75");
-  assert.equal(draft.step, 1, "opens at the people step: the total was already reviewed");
-  const check = validateQuickBillDraft({ ...draft, name: "Cuenta QA" });
-  assert.equal(check.valid, true);
-  assert.equal(check.result.montoTotal, 20625);
-  assert.deepEqual(check.result.partes.map((p) => p.total), [0, 10313, 10312]);
+test("a kept trial becomes a group import with the same cents, people and tip", () => {
+  const { tryBillToGroup } = require("../apps/mobile/src/lib/tryBillHandoff.ts");
+  const { calculateQuickBill } = require("../packages/shared/quickBill.js");
+  const input = tryBillToGroup({ total: 18750, tip: 10, extras: 1875, people: [{ nombre: "Jaime", invitado: true }, { nombre: "Ana", invitado: false }, { nombre: "", invitado: false }], savedAt: Date.now() });
+  assert.equal(input.totalCuenta, 18750);
+  assert.equal(input.extras, 1875);
+  assert.equal(calculateQuickBill(input).montoTotal, 20625);
+  assert.deepEqual(calculateQuickBill(input).partes.map((p) => p.total), [0, 10313, 10312]);
 });

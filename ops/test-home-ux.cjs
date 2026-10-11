@@ -38,3 +38,7 @@ test("S/120 in a day bill remains pending even when groups have no debt", () => 
   assert.deepEqual(pendingDayBills([]), { count: 0, cents: 0 });
   assert.deepEqual(pendingDayBills([{ archivada: false, pendiente: 1 }, { archivada: false, pendiente: 2 }]), { count: 2, cents: 3 });
 });
+
+test("a converted bill is historical, never a second pending debt", () => {
+  assert.deepEqual(pendingDayBills([{ archivada: false, pendiente: 12000, grupoId: 'created-group' }]), { count: 0, cents: 0 });
+});

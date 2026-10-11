@@ -44,7 +44,7 @@ export default function QuickBillDetail() {
   // One object for preview, text and e-mail: all from the same server snapshot (same version).
   const shareMessage: ShareMessage | null = bill ? { ...quickBillShareMessage(bill.datos, bill.aportes), body: bill.mensajeBreve, resource: { tipo: "cuenta_rapida", id: bill.id } } : null;
   const next = part ? nextContribution(mode, paid, part.total, entered) : { total: null, error: "" };
-  const disabled = mutation.isPending || query.isError || !!bill?.archivada;
+  const disabled = mutation.isPending || query.isError || !!bill?.archivada || !!bill?.grupoId;
   async function record(participanteId: string, monto: number) {
     if (!bill || disabled) return;
     try { setError(""); await mutation.mutateAsync({ participanteId, monto, version: bill.version }); setSelected(undefined); }
@@ -83,6 +83,7 @@ export default function QuickBillDetail() {
       {query.isError && <><ErrorBox message="No pudimos actualizar. Este es el último desglose consultado; actualiza antes de confirmar o compartir." /><Button title="Actualizar cuenta" secondary onPress={() => refetch()} /></>}
       <Card style={{ backgroundColor: palette.mint }}><Label weight="extra" size={22}>{bill.datos.nombre}</Label><Label weight="extra" size={32}>{money(bill.resultado.montoTotal)}</Label><Label size={13}>{bill.resultado.partes.length} personas · {bill.resultado.cantidadPagadores} aportan · {bill.archivada ? "Archivada" : bill.estado === "completada" ? "Completada" : bill.estado === "parcial" ? "Aportes parciales" : "Abierta"}</Label></Card>
       <View style={design.row}><Card style={{ flex: 1 }}><Label size={12}>Ya cobrado</Label><Label weight="extra" size={20}>{money(bill.cobrado)}</Label></Card><Card style={{ flex: 1, backgroundColor: palette.lilac }}><Label size={12}>Falta cobrar</Label><Label weight="extra" size={20}>{money(bill.pendiente)}</Label></Card></View>
+      <Card style={{ backgroundColor: palette.lilac }}><Label weight="extra">{bill.grupoId ? "Conservada como referencia" : "Continúa con tu grupo"}</Label><Label size={13}>{bill.grupoId ? "Este es el reparto anterior. Los saldos actuales y nuevos pagos están en el grupo; aquí conservamos el historial sin cambios." : "Conserva los nombres, las partes y los aportes confirmados. Revisa quién adelantó el dinero antes de crear el grupo."}</Label><Button title={bill.grupoId ? "Abrir grupo" : "Pasar a grupo"} disabled={query.isError} onPress={() => bill.grupoId ? router.push({ pathname: "/(app)/grupos/[id]", params: { id: bill.grupoId } }) : router.push({ pathname: "/(app)/cuentas/pasar-a-grupo", params: { id } })} /></Card>
       <Button title="Revisar y compartir reparto" disabled={query.isError} onPress={() => { setPage(0); setImageReady(false); setPreview(true); }} />
       <Label size={12} color={palette.muted}>No es saldo bancario ni una deuda de tus grupos. Solo tú confirmas los aportes después de comprobarlos.</Label>
       {bill.resultado.partes.map((p) => {
@@ -97,8 +98,8 @@ export default function QuickBillDetail() {
       {!!error && <ErrorBox message={error} />}
       <Button title={history ? "Ocultar historial" : "Ver historial de cambios"} secondary onPress={() => setHistory(!history)} />
       {history && <Card>{bill.historial.length ? [...bill.historial].reverse().map((entry, index) => <View key={`${entry.fecha}-${index}`} style={{ gap: 3 }}><Label size={13} weight="bold">{entry.evento === "aporte" ? `${entry.persona}: ${money(entry.anterior || 0)} → ${money(entry.monto || 0)}` : entry.evento === "corregida" ? `Reparto corregido: ${money(entry.anterior || 0)} → ${money(entry.monto || 0)}` : `Cuenta ${entry.evento}`}</Label><Label size={11} color={palette.muted}>{new Date(entry.fecha).toLocaleString("es-PE")}</Label></View>) : <Label size={13}>Cuenta anterior al historial. Sus aportes confirmados siguen conservados.</Label>}</Card>}
-      {!bill.cobrado && !bill.archivada && <Button title="Corregir personas o montos" secondary disabled={query.isError} onPress={() => router.push({ pathname: "/(app)/cuentas/rapida", params: { id } })} />}
-      {(bill.archivada || !bill.pendiente) && <Button title={bill.archivada ? "Reactivar cuenta" : "Archivar cuenta completada"} secondary disabled={mutation.isPending || query.isError} onPress={archive} />}
+      {!bill.grupoId && !bill.cobrado && !bill.archivada && <Button title="Corregir personas o montos" secondary disabled={query.isError} onPress={() => router.push({ pathname: "/(app)/cuentas/rapida", params: { id } })} />}
+      {!bill.grupoId && (bill.archivada || !bill.pendiente) && <Button title={bill.archivada ? "Reactivar cuenta" : "Archivar cuenta completada"} secondary disabled={mutation.isPending || query.isError} onPress={archive} />}
       <Button title="Ver mis cuentas" secondary onPress={() => router.replace("/(app)/cuentas/rapidas")} />
       <Modal transparent visible={!!part} animationType="slide" onRequestClose={() => !mutation.isPending && setSelected(undefined)}><ModalSurface><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 16 }}>
         <Label accessibilityRole="header" size={25} weight="extra">Aporte de {part?.nombre}</Label>

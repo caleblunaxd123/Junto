@@ -1,7 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { z } from "zod";
-import { centavosASoles } from "../types";
-import type { BillDraft } from "../hooks/useBillDraft";
+import type { QuickBillInput } from "@junto/shared/quickBill";
 
 /**
  * "Probar sin cuenta" → registration. Only with the person's explicit consent, the calculation is
@@ -27,7 +26,7 @@ export async function loadTryBill(now = Date.now()): Promise<SavedTryBill | null
   if (!raw) return null;
   try {
     const parsed = schema.safeParse(JSON.parse(raw));
-    if (parsed.success && now - parsed.data.savedAt < TTL_MS) return parsed.data;
+    if (parsed.success && now >= parsed.data.savedAt && now - parsed.data.savedAt < TTL_MS) return parsed.data;
   } catch {
     /* damaged value: discard below */
   }
@@ -39,21 +38,15 @@ export async function clearTryBill() {
   await AsyncStorage.removeItem(KEY).catch(() => undefined);
 }
 
-/** Same amounts, as a one-off bill draft the person reviews and saves (step 2 of 3). */
-export function tryBillToDraft(saved: SavedTryBill, organizer: string): BillDraft {
-  const stamp = Date.now().toString(36);
+/** Same cents and exclusions, reviewed before creating an ordinary group and expense. */
+export function tryBillToGroup(saved: SavedTryBill): QuickBillInput {
   return {
-    step: 1,
-    name: "",
-    people: saved.people.map((p, i) => ({ id: `p${stamp}${i}`, nombre: p.nombre.trim() || `Persona ${i + 1}`, consumo: "", invitado: p.invitado })),
-    extras: centavosASoles(saved.extras),
-    recipient: organizer,
-    instructions: "",
-    names: "",
-    commonAmount: "",
+    nombre: "Nuestro primer gasto",
+    participantes: saved.people.map((p, i) => ({ id: `p${i}`, nombre: p.nombre.trim() || `Persona ${i + 1}`, consumo: 0, invitado: p.invitado })),
+    extras: saved.extras,
+    cobrarA: "",
+    instrucciones: "",
     division: "igual",
-    billTotal: centavosASoles(saved.total),
-    scanApproved: true,
-    requestId: `bill_${stamp}_${Math.random().toString(36).slice(2)}`,
+    totalCuenta: saved.total,
   };
 }

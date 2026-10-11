@@ -83,6 +83,9 @@ model CuentaRapida {
   archivada      Boolean  @default(false)
   solicitudId    String?  @map("solicitud_id") @db.VarChar(80)
   version        Int      @default(1)
+  // Converted accounts stay readable but immutable; balances live only in this group.
+  grupoId        String?  @unique @map("grupo_id") @db.Uuid
+  grupo          Grupo?   @relation(fields: [grupoId], references: [id], onDelete: Restrict)
   fechaCreacion  DateTime @default(now()) @map("fecha_creacion")
   fechaActualizacion DateTime @default(now()) @updatedAt @map("fecha_actualizacion")
   creador        Usuario  @relation(fields: [creadoPor], references: [id])
@@ -109,6 +112,9 @@ model Grupo {
   modo            String?   @db.VarChar(12)
   // Deadline to pay: people who still owe get automatic reminders as it approaches and after.
   fechaLimite     DateTime? @map("fecha_limite")
+  // Idempotent imports from anonymous calculations or historical accounts.
+  solicitudImportacion String? @map("solicitud_importacion") @db.VarChar(80)
+  importacionHuella String? @map("importacion_huella") @db.Char(64)
 
   // Relations
   creador         Usuario           @relation("GrupoCreador", fields: [creadoPor], references: [id])
@@ -121,7 +127,9 @@ model Grupo {
   comentarios     Comentario[]
   invitaciones    Invitacion[]
   avisos          AvisoGrupo[]
+  cuentaAnterior  CuentaRapida?
 
+  @@unique([creadoPor, solicitudImportacion])
   @@index([fechaLimite])
   @@map("grupos")
 }

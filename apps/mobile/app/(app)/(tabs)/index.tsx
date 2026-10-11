@@ -34,9 +34,7 @@ import { PendingActions } from "../../../src/components/PendingActions";
 import { Invitations } from "../../../src/components/Invitations";
 import { GroupNotices } from "../../../src/components/GroupNotices";
 import { AddButton, CreateSheet } from "../../../src/components/CreateSheet";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
-import { clearTryBill, loadTryBill, tryBillToDraft, type SavedTryBill } from "../../../src/lib/tryBillHandoff";
+import { clearTryBill, loadTryBill, type SavedTryBill } from "../../../src/lib/tryBillHandoff";
 import { useResponsiveLayout } from "../../../src/components/ui/responsive";
 
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
@@ -78,22 +76,10 @@ export default function Home() {
   useFocusEffect(useCallback(() => { loadTryBill().then(setTrial).catch(() => setTrial(null)); }, []));
   async function continueTrial() {
     if (!trial || !usuario) return;
-    const key = `junto.billDraft.v1.${usuario.id}.new`;
-    const write = async () => {
-      await AsyncStorage.setItem(key, JSON.stringify(tryBillToDraft(trial, usuario.nombre)));
-      await clearTryBill();
-      setTrial(null);
-      router.push("/(app)/cuentas/rapida");
-    };
-    if (await AsyncStorage.getItem(key).catch(() => null))
-      Alert.alert("Ya tienes una cuenta sin terminar", "Si continúas con el cálculo de prueba, reemplazará ese borrador. Ninguna cuenta guardada se modifica.", [
-        { text: "Cancelar", style: "cancel" },
-        { text: "Reemplazar borrador", onPress: () => { void write(); } },
-      ]);
-    else await write();
+    router.push({ pathname: "/(app)/cuentas/pasar-a-grupo", params: { prueba: "1" } });
   }
   const actions = pendingActions(groups, payments.data ?? [], usuario?.id);
-  const openBills = bills.data?.filter((bill) => !bill.archivada) ?? [];
+  const openBills = bills.data?.filter((bill) => !bill.archivada && !bill.grupoId) ?? [];
   const dayPending = pendingDayBills(openBills);
   const filtered = groups.filter((g) =>
     g.nombre.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
@@ -152,7 +138,7 @@ export default function Home() {
           <Card style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", gap: 8 }}>
             <Label weight="bold">Tu cálculo de prueba sigue aquí</Label>
             <Label size={13}>
-              S/ {centavosASoles(trial.total + trial.extras)} entre {trial.people.length} {trial.people.length === 1 ? "persona" : "personas"}. Revísalo y guárdalo como cuenta de un día para marcar quién ya pagó.
+              S/ {centavosASoles(trial.total + trial.extras)} entre {trial.people.length} {trial.people.length === 1 ? "persona" : "personas"}. Revísalo y crea un grupo con el gasto ya anotado.
             </Label>
             <View style={{ flexDirection: "row", gap: 8 }}>
               <View style={{ flex: 1 }}><Button compact title="Continuar" onPress={() => { void continueTrial(); }} /></View>
@@ -193,7 +179,7 @@ export default function Home() {
                 <Card style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", gap: 8 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                     <Ionicons name="receipt-outline" size={26} color="#8A5A00" />
-                    <Label weight="bold" style={{ flex: 1 }}>Por cobrar en cuentas de un día</Label>
+                    <Label weight="bold" style={{ flex: 1 }}>Por cobrar en cuentas anteriores</Label>
                     <Ionicons name="chevron-forward" size={20} color="#8A5A00" />
                   </View>
                   <Label size={28} weight="extra">{money(dayPending.cents)}</Label>

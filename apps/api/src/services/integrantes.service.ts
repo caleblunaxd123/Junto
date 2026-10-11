@@ -22,13 +22,13 @@ export function nombreIntegrante(value: string) {
 }
 
 /** Inside the group's lock. Unusable e-mail and password: this row can never sign in. */
-export async function crearSinCuenta(tx: Tx, grupoId: string, nombres: string[]) {
+export async function crearSinCuenta(tx: Tx, grupoId: string, nombres: string[], historical = false) {
   const existentes = await tx.grupoMiembro.findMany({ where: { grupoId, activo: true }, select: { usuario: { select: { nombre: true, sinCuenta: true } } } });
   if (existentes.filter((m) => m.usuario.sinCuenta).length + nombres.length > MAX_SIN_CUENTA)
     throw new Error(`Un grupo puede tener hasta ${MAX_SIN_CUENTA} personas agregadas por nombre.`);
-  const usados = new Set(existentes.map((m) => m.usuario.nombre.toLocaleLowerCase("es")));
+  const usados = new Set(existentes.filter((m) => !historical || m.usuario.sinCuenta).map((m) => m.usuario.nombre.toLocaleLowerCase("es")));
   const creados = [];
-  for (const nombre of nombres.map(nombreIntegrante)) {
+  for (const nombre of nombres.map((n) => historical ? n.trim().replace(/\s+/g, " ") : nombreIntegrante(n))) {
     const clave = nombre.toLocaleLowerCase("es");
     if (usados.has(clave)) throw new Error(`Ya hay alguien llamado «${nombre}» en el grupo. Usa otro nombre, por ejemplo con su apellido.`, 409);
     usados.add(clave);

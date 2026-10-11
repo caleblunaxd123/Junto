@@ -7,10 +7,15 @@ import { z } from "zod";
 import { getGroupChat } from "../services/groupChat.service";
 import { createComment } from "../services/comentarios.service";
 import { agregarIntegrantes, quitarIntegrante, unirIntegrante } from "../services/integrantes.service";
+import { draftImportSchema, importDraft } from "../services/groupImport.service";
 
 const router = Router();
 
 router.use(authMiddleware);
+router.post("/desde-reparto", async (req, res, next) => {
+  try { res.status(201).json(await importDraft(req.user!.userId, draftImportSchema.parse(req.body))); }
+  catch (error) { next(error); }
+});
 
 router.post("/", gruposController.crearGrupo);
 router.get("/", gruposController.getGrupos);

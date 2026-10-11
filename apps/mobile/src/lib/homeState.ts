@@ -12,7 +12,7 @@ export function homeState(groups: QueryState, payments: QueryState, bills: Query
 }
 
 /** Organizer-only bills stay separate from group debts: never add both ledgers together. */
-export function pendingDayBills(bills: readonly { archivada: boolean; pendiente: number }[]) {
-  const pending = bills.filter((bill) => !bill.archivada && Number.isSafeInteger(bill.pendiente) && bill.pendiente > 0);
+export function pendingDayBills(bills: readonly { archivada: boolean; pendiente: number; grupoId?: string | null }[]) {
+  const pending = bills.filter((bill) => !bill.archivada && !bill.grupoId && Number.isSafeInteger(bill.pendiente) && bill.pendiente > 0);
   return { count: pending.length, cents: pending.reduce((sum, bill) => sum + bill.pendiente, 0) };
 }
