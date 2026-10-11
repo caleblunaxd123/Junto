@@ -9,58 +9,47 @@ import {
   allocatePercentages,
 } from "../domain/money";
 import { allocateParts } from "../domain/billParts";
+import type { Prisma } from "@prisma/client";
 
 export async function crearGasto(
   grupoId: string,
   input: CrearGastoInput,
   creadoPor: string,
 ) {
-  // Verify creator is a group member
-  const miembro = await prisma.grupoMiembro.findFirst({
-    where: { grupoId, usuarioId: creadoPor, activo: true },
-  });
-  if (!miembro) throw new Error("No perteneces a este grupo");
-
-  await validarMiembros(
-    grupoId,
-    input.pagadoPor,
-    input.participantes.map((p) => p.usuarioId),
-  );
-
   const participanteData = calcularParticipantes(input);
-
-  // Same key again (double tap, retry after a timeout): return what was already saved, never a copy.
-  const previo = await gastoPorSolicitud(grupoId, input, creadoPor);
-  if (previo) return { gasto: previo, repetido: true };
-
-  let gasto;
+  let result;
   try {
-  gasto = await prisma.gasto.create({
-    data: {
-      solicitudId: input.solicitudId,
-      grupoId,
-      descripcion: input.descripcion,
-      montoTotal: input.montoTotal,
-      pagadoPor: input.pagadoPor,
-      categoria: input.categoria,
-      partes: input.partes,
-      creadoPor,
-      notas: input.notas,
-      fecha: input.fecha ? new Date(input.fecha) : new Date(),
-      participantes: {
-        create: participanteData,
-      },
-    },
-    include: {
-      participantes: {
-        include: {
-          usuario: { select: { id: true, nombre: true, fotoUrl: true } },
+    result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${grupoId}::uuid FOR UPDATE`;
+      const miembro = await tx.grupoMiembro.findFirst({ where: { grupoId, usuarioId: creadoPor, activo: true, grupo: { activo: true } } });
+      if (!miembro) throw new Error("No perteneces a este grupo");
+      await validarMiembros(grupoId, input.pagadoPor, input.participantes.map((p) => p.usuarioId), tx);
+      const previo = await gastoPorSolicitud(grupoId, input, creadoPor, tx);
+      if (previo) return { gasto: previo, repetido: true };
+      const gasto = await tx.gasto.create({
+        data: {
+          solicitudId: input.solicitudId,
+          grupoId,
+          descripcion: input.descripcion,
+          montoTotal: input.montoTotal,
+          pagadoPor: input.pagadoPor,
+          categoria: input.categoria,
+          partes: input.partes,
+          creadoPor,
+          notas: input.notas,
+          fecha: input.fecha ? new Date(input.fecha) : new Date(),
+          participantes: { create: participanteData },
         },
-      },
-      pagador: { select: { id: true, nombre: true, fotoUrl: true } },
-      creador: { select: { id: true, nombre: true } },
-    },
-  });
+        include: {
+          participantes: {
+            include: { usuario: { select: { id: true, nombre: true, fotoUrl: true } } },
+          },
+          pagador: { select: { id: true, nombre: true, fotoUrl: true } },
+          creador: { select: { id: true, nombre: true } },
+        },
+      });
+      return { gasto, repetido: false };
+    });
   } catch (error) {
     // Two identical requests raced: the unique key let only one in.
     const ganador = (error as { code?: string }).code === "P2002" ? await gastoPorSolicitud(grupoId, input, creadoPor) : null;
@@ -69,16 +58,15 @@ export async function crearGasto(
   }
 
   // Send notifications to participants (non-blocking)
-  notificarParticipantes(gasto, creadoPor).catch((err) =>
+  if (!result.repetido) notificarParticipantes(result.gasto, creadoPor).catch((err) =>
     console.error("[Notification] Failed to notify participants:", describeError(err)),
   );
-
-  return { gasto, repetido: false };
+  return result;
 }
 
-async function gastoPorSolicitud(grupoId: string, input: CrearGastoInput, creadoPor: string) {
+async function gastoPorSolicitud(grupoId: string, input: CrearGastoInput, creadoPor: string, db: Prisma.TransactionClient = prisma) {
   if (!input.solicitudId) return null;
-  const previo = await prisma.gasto.findUnique({
+  const previo = await db.gasto.findUnique({
     where: { creadoPor_solicitudId: { creadoPor, solicitudId: input.solicitudId } },
     include: {
       participantes: { include: { usuario: { select: { id: true, nombre: true, fotoUrl: true } } } },
@@ -142,10 +130,11 @@ async function validarMiembros(
   grupoId: string,
   pagadoPor: string,
   participanteIds: string[],
+  db: Prisma.TransactionClient = prisma,
 ) {
   const ids = [...new Set([pagadoPor, ...participanteIds])];
-  const miembros = await prisma.grupoMiembro.findMany({
-    where: { grupoId, usuarioId: { in: ids }, activo: true },
+  const miembros = await db.grupoMiembro.findMany({
+    where: { grupoId, usuarioId: { in: ids }, activo: true, usuario: { activo: true }, grupo: { activo: true } },
     select: { usuarioId: true },
   });
   const activos = new Set(miembros.map((miembro) => miembro.usuarioId));
@@ -234,8 +223,8 @@ export async function getGastosGrupo(
   };
 }
 
-export async function getGastoDetalle(gastoId: string, usuarioId: string) {
-  const gasto = await prisma.gasto.findUnique({
+export async function getGastoDetalle(gastoId: string, usuarioId: string, db: Prisma.TransactionClient = prisma) {
+  const gasto = await db.gasto.findUnique({
     where: { id: gastoId },
     include: {
       participantes: {
@@ -252,8 +241,8 @@ export async function getGastoDetalle(gastoId: string, usuarioId: string) {
 
   if (!gasto || !gasto.activo) throw new Error("Gasto no encontrado");
 
-  const miembro = await prisma.grupoMiembro.findFirst({
-    where: { grupoId: gasto.grupoId, usuarioId, activo: true },
+  const miembro = await db.grupoMiembro.findFirst({
+    where: { grupoId: gasto.grupoId, usuarioId, activo: true, grupo: { activo: true } },
   });
   if (!miembro) throw new Error("No tienes acceso a este gasto");
 
@@ -264,10 +253,10 @@ export async function getGastoDetalle(gastoId: string, usuarioId: string) {
  * True when someone in this expense (who paid or who shares it) is no longer an active member.
  * Changing its money would move debts that person can no longer see or settle.
  */
-async function involvesFormerMembers(gasto: { id: string; grupoId: string; pagadoPor: string }) {
-  const participantes = await prisma.gastoParticipante.findMany({ where: { gastoId: gasto.id }, select: { usuarioId: true } });
+async function involvesFormerMembers(gasto: { id: string; grupoId: string; pagadoPor: string }, tx: Prisma.TransactionClient) {
+  const participantes = await tx.gastoParticipante.findMany({ where: { gastoId: gasto.id }, select: { usuarioId: true } });
   const ids = [...new Set([gasto.pagadoPor, ...participantes.map((p) => p.usuarioId)])];
-  const activos = await prisma.grupoMiembro.count({ where: { grupoId: gasto.grupoId, usuarioId: { in: ids }, activo: true } });
+  const activos = await tx.grupoMiembro.count({ where: { grupoId: gasto.grupoId, usuarioId: { in: ids }, activo: true, usuario: { activo: true } } });
   return activos !== ids.length;
 }
 const FORMER_MEMBER = "Este gasto incluye a alguien que ya no está en el grupo: cambiar su monto, quién pagó o eliminarlo movería deudas que esa persona ya no puede saldar. Puedes corregir la descripción, la categoría, la fecha o la nota.";
@@ -277,47 +266,50 @@ export async function editarGasto(
   input: Partial<CrearGastoInput>,
   usuarioId: string,
 ) {
-  const gasto = await prisma.gasto.findUnique({ where: { id: gastoId } });
-  if (!gasto || !gasto.activo) throw new Error("Gasto no encontrado");
+  const target = await prisma.gasto.findUnique({ where: { id: gastoId }, select: { grupoId: true } });
+  if (!target) throw new Error("Gasto no encontrado");
+  return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${target.grupoId}::uuid FOR UPDATE`;
+    const gasto = await tx.gasto.findUnique({ where: { id: gastoId } });
+    if (!gasto || !gasto.activo) throw new Error("Gasto no encontrado");
+    const miembro = await tx.grupoMiembro.findFirst({
+      where: { grupoId: gasto.grupoId, usuarioId, activo: true, grupo: { activo: true } },
+    });
+    const esCreador = gasto.creadoPor === usuarioId;
+    const esAdmin = miembro?.rol === "admin";
 
-  const miembro = await prisma.grupoMiembro.findFirst({
-    where: { grupoId: gasto.grupoId, usuarioId, activo: true },
-  });
-  const esCreador = gasto.creadoPor === usuarioId;
-  const esAdmin = miembro?.rol === "admin";
+    if (!miembro || (!esCreador && !esAdmin))
+      throw new Error("No tienes permisos para editar este gasto");
 
-  if (!miembro || (!esCreador && !esAdmin))
-    throw new Error("No tienes permisos para editar este gasto");
+    const cambiaDivision =
+      input.montoTotal !== undefined ||
+      input.participantes !== undefined ||
+      input.tipoDivision !== undefined ||
+      input.partes !== undefined;
+    if (
+      cambiaDivision &&
+      (!input.montoTotal || !input.participantes || !input.tipoDivision)
+    ) {
+      throw new Error(
+        "Para cambiar el monto o la división, envía el monto total, el tipo y todas las personas",
+      );
+    }
 
-  const cambiaDivision =
-    input.montoTotal !== undefined ||
-    input.participantes !== undefined ||
-    input.tipoDivision !== undefined ||
-    input.partes !== undefined;
-  if (
-    cambiaDivision &&
-    (!input.montoTotal || !input.participantes || !input.tipoDivision)
-  ) {
-    throw new Error(
-      "Para cambiar el monto o la división, envía el monto total, el tipo y todas las personas",
-    );
-  }
+    if ((cambiaDivision || (input.pagadoPor && input.pagadoPor !== gasto.pagadoPor)) && (await involvesFormerMembers(gasto, tx)))
+      throw new Error(FORMER_MEMBER, 409);
 
-  if ((cambiaDivision || (input.pagadoPor && input.pagadoPor !== gasto.pagadoPor)) && (await involvesFormerMembers(gasto)))
-    throw new Error(FORMER_MEMBER, 409);
+    if (input.pagadoPor || input.participantes) {
+      await validarMiembros(
+        gasto.grupoId,
+        input.pagadoPor ?? gasto.pagadoPor,
+        input.participantes?.map((participante) => participante.usuarioId) ?? [],
+        tx,
+      );
+    }
 
-  if (input.pagadoPor || input.participantes) {
-    await validarMiembros(
-      gasto.grupoId,
-      input.pagadoPor ?? gasto.pagadoPor,
-      input.participantes?.map((participante) => participante.usuarioId) ?? [],
-    );
-  }
-
-  const participanteData = cambiaDivision
-    ? calcularParticipantes({ ...input, pagadoPor: input.pagadoPor ?? gasto.pagadoPor } as CrearGastoInput)
-    : null;
-  await prisma.$transaction(async (tx) => {
+    const participanteData = cambiaDivision
+      ? calcularParticipantes({ ...input, pagadoPor: input.pagadoPor ?? gasto.pagadoPor } as CrearGastoInput)
+      : null;
     await tx.gasto.update({
       where: { id: gastoId },
       data: {
@@ -340,27 +332,30 @@ export async function editarGasto(
         })),
       });
     }
+    return getGastoDetalle(gastoId, usuarioId, tx);
   });
-
-  return getGastoDetalle(gastoId, usuarioId);
 }
 
 export async function eliminarGasto(gastoId: string, usuarioId: string) {
-  const gasto = await prisma.gasto.findUnique({ where: { id: gastoId } });
-  if (!gasto || !gasto.activo) throw new Error("Gasto no encontrado");
+  const target = await prisma.gasto.findUnique({ where: { id: gastoId }, select: { grupoId: true } });
+  if (!target) throw new Error("Gasto no encontrado");
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${target.grupoId}::uuid FOR UPDATE`;
+    const gasto = await tx.gasto.findUnique({ where: { id: gastoId } });
+    if (!gasto || !gasto.activo) throw new Error("Gasto no encontrado");
+    const miembro = await tx.grupoMiembro.findFirst({
+      where: { grupoId: gasto.grupoId, usuarioId, activo: true, grupo: { activo: true } },
+    });
+    const esCreador = gasto.creadoPor === usuarioId;
+    const esAdmin = miembro?.rol === "admin";
 
-  const miembro = await prisma.grupoMiembro.findFirst({
-    where: { grupoId: gasto.grupoId, usuarioId, activo: true },
-  });
-  const esCreador = gasto.creadoPor === usuarioId;
-  const esAdmin = miembro?.rol === "admin";
+    if (!miembro || (!esCreador && !esAdmin))
+      throw new Error("No tienes permisos para eliminar este gasto");
+    if (await involvesFormerMembers(gasto, tx)) throw new Error(FORMER_MEMBER, 409);
 
-  if (!miembro || (!esCreador && !esAdmin))
-    throw new Error("No tienes permisos para eliminar este gasto");
-  if (await involvesFormerMembers(gasto)) throw new Error(FORMER_MEMBER, 409);
-
-  await prisma.gasto.update({
-    where: { id: gastoId },
-    data: { activo: false },
+    await tx.gasto.update({
+      where: { id: gastoId },
+      data: { activo: false },
+    });
   });
 }

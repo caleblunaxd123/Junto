@@ -7,6 +7,7 @@ import { saveJoinNotices, pushJoinNotice } from './groupNotices.service';
 import { takeFreeParts } from './billParts.service';
 import { allocateParts, nextPart, partsSummary } from '../domain/billParts';
 import { unreadInGroup } from './groupChat.service';
+import { transactionLock } from '../lib/transactionLock';
 
 function generateLinkInvitacion(): string {
   return randomBytes(12).toString('base64url');
@@ -16,6 +17,8 @@ export async function crearGrupo(input: CrearGrupoInput, creadoPor: string) {
   const { cuenta, ...datos } = input;
   // Group and bill together: never a group with half a bill.
   return prisma.$transaction(async (tx) => {
+    await transactionLock(tx, `account-membership:${creadoPor}`);
+    if (!(await tx.usuario.count({ where: { id: creadoPor, activo: true } }))) throw new Error('Tu cuenta ya no está activa. Inicia sesión nuevamente.', 401);
     const grupo = await tx.grupo.create({
       data: {
         nombre: datos.nombre,
@@ -137,15 +140,16 @@ export async function getGruposUsuario(usuarioId: string) {
 }
 
 export async function editarGrupo(grupoId: string, input: EditarGrupoInput, usuarioId: string) {
-  const updated = await prisma.grupo.updateMany({
-    where: {
-      id: grupoId,
-      activo: true,
-      miembros: { some: { usuarioId, activo: true, rol: 'admin' } },
-    },
-    data: { ...input, fechaLimite: input.fechaLimite === undefined ? undefined : input.fechaLimite && new Date(input.fechaLimite) },
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${grupoId}::uuid FOR UPDATE`;
+    // Relation filters on UPDATE may have been evaluated before waiting for a row lock.
+    const admin = await tx.grupoMiembro.findFirst({ where: { grupoId, usuarioId, activo: true, rol: 'admin', usuario: { activo: true }, grupo: { activo: true } }, select: { id: true } });
+    if (!admin) throw new Error('Solo un administrador activo puede editar este grupo.', 403);
+    await tx.grupo.update({
+      where: { id: grupoId },
+      data: { ...input, fechaLimite: input.fechaLimite === undefined ? undefined : input.fechaLimite && new Date(input.fechaLimite) },
+    });
   });
-  if (!updated.count) throw new Error('Solo un administrador activo puede editar este grupo.', 403);
   return getGrupoDetalle(grupoId, usuarioId);
 }
 
@@ -182,7 +186,9 @@ export async function unirseConLink(linkInvitacion: string, usuarioId: string) {
   if (!grupo) throw new Error('Link de invitación inválido');
 
   const joined = await prisma.$transaction(async (tx) => {
+    await transactionLock(tx, `account-membership:${usuarioId}`);
     await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${grupo.id}::uuid FOR UPDATE`;
+    if (!(await tx.usuario.count({ where: { id: usuarioId, activo: true } }))) throw new Error('Tu cuenta ya no está activa. Inicia sesión nuevamente.', 401);
     const current = await tx.grupo.findFirst({ where: { id: grupo.id, linkInvitacion, activo: true } });
     if (!current) throw new Error('Link de invitación inválido');
     const invitation = await tx.invitacion.findFirst({ where: { grupoId: grupo.id, invitadoId: usuarioId, estado: 'pendiente' }, select: { invitadoPor: true } });

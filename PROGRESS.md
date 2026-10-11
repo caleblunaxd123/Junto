@@ -1,6 +1,17 @@
 # JUNTO — estado real
 
-Actualizado el 11 de octubre de 2026: beta 1.1.1 sincronizada con GitHub y desplegada, con correcciones de céntimos, invitaciones y actualización del chat. Antes, el 10 de octubre se añadieron grupos de cobranza/división, chat y fecha límite.
+Actualizado el 11 de octubre de 2026: beta 1.1.1 sincronizada con GitHub y desplegada; segunda ronda de validación endurece concurrencia, permisos y recordatorios. Antes, el 10 de octubre se añadieron grupos de cobranza/división, chat y fecha límite.
+
+## Validación adicional: concurrencia del libro y cuentas
+
+- Confirmar/rechazar pagos y crear/editar/eliminar gastos toman el mismo bloqueo del grupo que unirse/salir. Los permisos, integrantes y saldos se vuelven a consultar después de esperar: otra sesión no puede reabrir artificialmente un importe disponible ni asignar deudas a quien acaba de salir.
+- La edición del grupo comprueba el rol después del bloqueo; una petición iniciada antes de perder la administración no puede modificar el nombre, la fecha ni las reglas de aprobación.
+- Recordatorios manuales, diarios y por fecha recalculan lo pendiente dentro de la transacción; las configuraciones desactivadas y fechas movidas/canceladas dejan de producir avisos de candidatos antiguos. No se hacen llamadas SMTP/push mientras se retienen bloqueos de base de datos.
+- Cada aviso de fecha identifica su fecha límite exacta, con restricción única por grupo/personas/etapa/fecha. Se mantiene un intervalo mínimo de 12 horas entre recordatorios de la misma pareja, también al mover la fecha. Los avisos históricos conservan referencia nula: no se reconstruye retrospectivamente su fecha original; podrían volver a avisar tras el intervalo de protección.
+- Crear/unirse a grupos y eliminar la cuenta comparten un bloqueo por usuario. La eliminación bloquea sus grupos en orden estable antes de anonimizarlo; no se puede adquirir un grupo nuevo durante la eliminación ni usar una confirmación anterior a un cambio de credenciales. Los gastos compartidos siguen intactos.
+- Nueva prueba PostgreSQL real `ops/test-ledger-concurrency.cjs`: reproduce carreras de permisos, saldos, salida de integrantes, dos cron simultáneos, fechas movidas, configuración desactivada y eliminación/unión/cambio de credenciales. Integrada en CI. Pasa tanto en la base QA existente como en una base vacía construida con las once migraciones; sin desfase de esquema.
+- Pasaron 75 pruebas de dominio, 15 de UX móvil, 3 de distribución, TypeScript/lint móvil y build API. Integración local adicional: sesiones/OTP, eliminación, seguridad, cuentas puntuales, gastos idempotentes, comprobantes/comentarios, reparto, avisos de unión y SMTP. Chromium y WebKit: registro, verificación, recuperación, invitación, validación de S/ 500 y seis anchos; SMTP de QA en loopback, no correos a amigos.
+- API publicada: `junto-api:20261011-locks`; web y APK continúan en 1.1.1. Chromium/WebKit por HTTPS: login/logout de la cuenta QA existente, seis anchos, grupo y preparación de correo; sin nuevos envíos. Respaldo, activación y rollback en `ops/web/DEPLOY-20261011-LOCKS.md`. No es una validación nativa ni de entrega push real; siguen pendientes las pruebas físicas y los requisitos de tiendas.
 
 ## Última validación: beta 1.1.1
 

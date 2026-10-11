@@ -83,3 +83,4 @@ jobs:
           node ops/test-groups-ledger.cjs || (cat api.log && exit 1)
           node ops/test-group-join-notices.cjs || (cat api.log && exit 1)
           node ops/test-bill-parts.cjs || (cat api.log && exit 1)
+          node ops/test-ledger-concurrency.cjs || (cat api.log && exit 1)

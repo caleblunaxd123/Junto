@@ -249,6 +249,8 @@ model Recordatorio {
   leido         Boolean   @default(false)
   fechaEnvio    DateTime  @default(now()) @map("fecha_envio")
   fechaLectura  DateTime? @map("fecha_lectura")
+  // Exact deadline this stage belongs to; manual/legacy reminders leave it null.
+  limiteReferencia DateTime? @map("limite_referencia")
 
   // Relations
   enviador      Usuario   @relation("RecordatorioEnviador", fields: [enviadoPor], references: [id])
@@ -256,6 +258,7 @@ model Recordatorio {
   grupo         Grupo     @relation(fields: [grupoId], references: [id])
 
   @@index([enviadoA])
+  @@unique([grupoId, enviadoA, enviadoPor, tipo, limiteReferencia], map: "recordatorios_etapa_limite_key")
   @@map("recordatorios")
 }
 

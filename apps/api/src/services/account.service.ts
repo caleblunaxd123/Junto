@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma";
 import { UserError } from "../domain/errors";
 import { resumenCuentasGrupo } from "./balance.service";
 import { hasPassword } from "./auth.service";
+import { transactionLock } from "../lib/transactionLock";
 
 /** What the person should know before deleting: open balances stay recorded for the others. */
 export async function deletionSummary(userId: string) {
@@ -44,7 +45,15 @@ export async function deleteAccount(userId: string, confirmation: { password?: s
   }
 
   await prisma.$transaction(async (tx) => {
+    // Joining/creating cannot add memberships while this list is locked. Take groups in a
+    // stable order BEFORE the user row, matching ledger mutations and avoiding lock cycles.
+    await transactionLock(tx, `account-membership:${userId}`);
+    const groups = await tx.grupoMiembro.findMany({ where: { usuarioId: userId, activo: true }, select: { grupoId: true }, orderBy: { grupoId: "asc" } });
+    for (const { grupoId } of groups) await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${grupoId}::uuid FOR UPDATE`;
     await tx.$queryRaw`SELECT id FROM usuarios WHERE id = ${userId}::uuid FOR UPDATE`;
+    const current = await tx.usuario.findUnique({ where: { id: userId }, select: { activo: true, passwordHash: true } });
+    if (!current?.activo) throw new UserError("Esta cuenta ya no está activa.", 404);
+    if (current.passwordHash !== usuario.passwordHash) throw new UserError("Tu cuenta cambió. Inicia sesión de nuevo antes de eliminarla.", 409);
     const memberships = await tx.grupoMiembro.findMany({ where: { usuarioId: userId, activo: true } });
     for (const membership of memberships) {
       const others = await tx.grupoMiembro.findMany({

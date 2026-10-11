@@ -35,7 +35,7 @@ async function run() {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.getByRole('button', { name: /Prueba ficticia · JUNTO Beta/ }).click();
     await page.getByRole('button', { name: 'Opciones del grupo', exact: true }).waitFor();
-    await page.getByRole('button', { name: 'Invitar a mi grupo', exact: true }).click();
+    await page.getByRole('button', { name: 'Invitar personas', exact: true }).click();
     await page.getByLabel('Correo o celular para invitar').fill(state.email);
     await page.getByRole('button', { name: 'Preparar', exact: true }).click();
     const recipient = page.getByPlaceholder('nombre@correo.com').filter({ visible: true });

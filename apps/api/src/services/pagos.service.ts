@@ -6,6 +6,7 @@ import { sendPushNotification } from "../lib/firebase";
 import { voucherInUse } from "./vouchers.service";
 import { transactionLock } from "../lib/transactionLock";
 import type { ReportarPagoInput } from "../schemas/pagos.schema";
+import type { Prisma } from "@prisma/client";
 
 const person = { select: { id: true, nombre: true, fotoUrl: true } } as const;
 const pagoInclude = {
@@ -64,6 +65,8 @@ export async function reportarPago(
       where: {
         grupoId: input.grupoId,
         activo: true,
+        grupo: { activo: true },
+        usuario: { activo: true },
         usuarioId: { in: [pagadorId, input.receptorId] },
       },
     });
@@ -145,9 +148,9 @@ export async function reportarPago(
   return pago;
 }
 
-async function loadForDecision(pagoId: string, userId: string) {
-  const pago = await prisma.pago.findUnique({ where: { id: pagoId }, include: pagoInclude });
-  const member = pago && await prisma.grupoMiembro.findFirst({ where: { grupoId: pago.grupoId, usuarioId: userId, activo: true }, select: { rol: true } });
+async function loadForDecision(pagoId: string, userId: string, tx: Prisma.TransactionClient) {
+  const pago = await tx.pago.findUnique({ where: { id: pagoId }, include: pagoInclude });
+  const member = pago && await tx.grupoMiembro.findFirst({ where: { grupoId: pago.grupoId, usuarioId: userId, activo: true, grupo: { activo: true } }, select: { rol: true } });
   if (!pago || !member) throw new Error("Este pago ya fue resuelto o no existe");
   return { pago, permisos: paymentPermissions(pago, userId, member.rol === "admin") };
 }
@@ -157,28 +160,34 @@ export async function resolverPago(
   userId: string,
   confirmar: boolean,
 ) {
-  const { pago, permisos } = await loadForDecision(pagoId, userId);
-  if (!confirmar && pago.estado === "exitoso" && permisos.marcarNoRecibido) return marcarNoRecibido(pago, userId);
-  if (pago.estado !== "reportado")
-    throw new Error("Este pago ya fue resuelto o no existe");
-  if (!permisos.aprobar)
-    throw new Error(
-      pago.pagadorId === userId
-        ? "No puedes aprobar tu propio pago."
+  // Only locate the lock here. Permissions and current state must be read after taking it:
+  // another device may have changed the approval rule, membership or ledger meanwhile.
+  const target = await prisma.pago.findUnique({ where: { id: pagoId }, select: { grupoId: true } });
+  if (!target) throw new Error("Este pago ya fue resuelto o no existe");
+  const { pago, resuelto, reverted } = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${target.grupoId}::uuid FOR UPDATE`;
+    const { pago, permisos } = await loadForDecision(pagoId, userId, tx);
+    const reverted = !confirmar && pago.estado === "exitoso" && permisos.marcarNoRecibido;
+    if (!reverted && pago.estado !== "reportado") throw new Error("Este pago ya fue resuelto o no existe");
+    if (!reverted && !permisos.aprobar) throw new Error(
+      pago.pagadorId === userId ? "No puedes aprobar tu propio pago."
         : "Solo quien recibe el dinero (o el administrador, si el grupo lo permite) puede confirmar el pago",
     );
-
-  const result = await prisma.pago.updateMany({
-    where: { id: pagoId, estado: "reportado" },
-    data: {
-      estado: confirmar ? "exitoso" : "rechazado",
-      fechaResolucion: new Date(),
-      resueltoPor: userId,
-    },
+    const result = await tx.pago.updateMany({
+      where: { id: pagoId, estado: reverted ? "exitoso" : "reportado" },
+      data: { estado: confirmar ? "exitoso" : "rechazado", fechaResolucion: new Date(), resueltoPor: userId },
+    });
+    if (result.count !== 1) throw new Error("Este pago ya fue resuelto. Actualiza el grupo.");
+    return { pago, reverted, resuelto: await tx.pago.findUniqueOrThrow({ where: { id: pagoId }, include: pagoInclude }) };
   });
-  if (result.count !== 1)
-    throw new Error("Este pago ya fue resuelto. Actualiza el grupo.");
-  const resuelto = await prisma.pago.findUniqueOrThrow({ where: { id: pagoId }, include: pagoInclude });
+  if (reverted) {
+    void notify(
+      [pago.pagadorId, ...(pago.resueltoPor ? [pago.resueltoPor] : [])], "Pago no recibido",
+      `${first(pago.receptor.nombre)} indicó que no recibió el pago de ${money(pago.monto)} en ${pago.grupo.nombre}. La deuda vuelve a estar pendiente.`,
+      { grupoId: pago.grupoId, pagoId: pago.id, type: "pago_rechazado" },
+    );
+    return resuelto;
+  }
 
   // Tell the payer (and the receiver, if an admin decided) so nobody is left guessing.
   const amount = money(pago.monto);
@@ -204,22 +213,6 @@ export async function resolverPago(
       data,
     );
   return resuelto;
-}
-
-/** The receiver says an admin-approved payment never arrived: the debt is pending again. */
-async function marcarNoRecibido(pago: { id: string; grupoId: string; pagadorId: string; receptorId: string; monto: number; resueltoPor: string | null; receptor: { nombre: string }; grupo: { nombre: string } }, userId: string) {
-  const result = await prisma.pago.updateMany({
-    where: { id: pago.id, estado: "exitoso", receptorId: userId, resueltoPor: { not: userId } },
-    data: { estado: "rechazado", fechaResolucion: new Date(), resueltoPor: userId },
-  });
-  if (result.count !== 1) throw new Error("Este pago cambió. Actualiza el grupo.", 409);
-  void notify(
-    [pago.pagadorId, ...(pago.resueltoPor ? [pago.resueltoPor] : [])],
-    "Pago no recibido",
-    `${first(pago.receptor.nombre)} indicó que no recibió el pago de ${money(pago.monto)} en ${pago.grupo.nombre}. La deuda vuelve a estar pendiente.`,
-    { grupoId: pago.grupoId, pagoId: pago.id, type: "pago_rechazado" },
-  );
-  return prisma.pago.findUniqueOrThrow({ where: { id: pago.id }, include: pagoInclude });
 }
 
 function withRules<T extends Rules>(pago: T, userId: string, adminGroups: Set<string>, grupoId: string) {

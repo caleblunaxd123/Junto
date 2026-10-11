@@ -87,9 +87,11 @@ export async function myInvitations(userId: string) {
 
 export async function answerInvitation(userId: string, id: string, accept: boolean) {
   const result = await prisma.$transaction(async (tx) => {
+    await transactionLock(tx, `account-membership:${userId}`);
     const invitation = await tx.invitacion.findFirst({ where: { id, invitadoId: userId }, include: { grupo: { select: { id: true, nombre: true, activo: true } } } });
     if (!invitation || !invitation.grupo.activo) throw new UserError("Esta invitación ya no está disponible.", 404);
     await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${invitation.grupoId}::uuid FOR UPDATE`;
+    if (!(await tx.usuario.count({ where: { id: userId, activo: true } }))) throw new UserError("Tu cuenta ya no está activa. Inicia sesión nuevamente.", 401);
     const current = await tx.invitacion.findUnique({ where: { id }, include: { grupo: { select: { activo: true } } } });
     if (!current?.grupo.activo) throw new UserError("Esta invitación ya no está disponible.", 404);
     if (current.estado !== "pendiente") throw new UserError("Ya respondiste esta invitación.", 409);
