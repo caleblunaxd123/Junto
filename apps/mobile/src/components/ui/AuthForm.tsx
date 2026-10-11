@@ -39,6 +39,8 @@ export function AuthForm({ register = false }: { register?: boolean }) {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // The account was created with Google and this screen has no Google button (the web beta).
+  const [googleOnly, setGoogleOnly] = useState("");
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const gate = useRef(false);
   const errors = {email: emailError(email), name: register ? nameError(name) : "", password: register ? passwordError(password) : !password ? "Escribe tu contraseña para entrar." : ""};
@@ -46,6 +48,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
   async function submit() {
     if (gate.current || google.busy) return;
     setError("");
+    setGoogleOnly("");
     setTouched({email: true, name: true, password: true});
     const address = email.trim().toLowerCase();
     if (Object.values(errors).some(Boolean)) {
@@ -85,7 +88,11 @@ export function AuthForm({ register = false }: { register?: boolean }) {
           pathname: "/(auth)/verify-email",
           params: { email: address },
         });
-      else
+      else if (e.response?.data?.code === "USA_GOOGLE") {
+        // With a Google button here, use it; without one (the web), offer to create a password.
+        if (googleConfigured) setError("Esta cuenta se creó con Google. Toca «Continuar con Google» arriba.");
+        else setGoogleOnly(address);
+      } else
         setError(errorMessage(err, register ? "No sabemos si se creó tu cuenta. Revisa tu correo; si ya tienes un código, entra y verifica tu cuenta antes de registrarte otra vez." : "No pudimos iniciar sesión. Revisa tu conexión y vuelve a intentar."));
     } finally {
       setBusy(false);
@@ -197,7 +204,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
             hint={register ? "Gmail, Outlook u otro correo. Recibirás un código para verificar tu cuenta; no usamos SMS." : undefined}
             icon="mail-outline"
             value={email}
-            onChangeText={value => { setEmail(value); setError(""); }}
+            onChangeText={value => { setEmail(value); setError(""); setGoogleOnly(""); }}
             onBlur={() => touch("email")}
             error={touched.email ? errors.email : undefined}
             editable={!busy && !google.busy}
@@ -305,6 +312,18 @@ export function AuthForm({ register = false }: { register?: boolean }) {
             </Pressable>
           )}
           {!!error && <ErrorBox message={error} />}
+          {!!googleOnly && (
+            <View accessibilityRole="alert" style={{ gap: 10, padding: 14, borderRadius: 16, backgroundColor: palette.yellow }}>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <Ionicons name="logo-google" size={20} color="#8A5B05" />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Label weight="bold">Tu cuenta se creó con Google</Label>
+                  <Label size={13}>Aquí no está «Continuar con Google». Crea una contraseña con un código que te enviamos a {googleOnly}: tu cuenta, tus grupos{auth.pendingInvitation ? " y tu invitación" : ""} siguen igual.</Label>
+                </View>
+              </View>
+              <Button title="Crear una contraseña" onPress={() => router.push({ pathname: "/(auth)/forgot-password", params: { email: googleOnly, crear: "1" } })} />
+            </View>
+          )}
           <Button
             title={register ? "Crear cuenta →" : "Iniciar sesión →"}
             onPress={submit}

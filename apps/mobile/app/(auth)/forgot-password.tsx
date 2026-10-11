@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { api } from "../../src/lib/api";
 import { emailError, passwordError, codeError, confirmationError } from "../../src/lib/authValidation";
 import { errorMessage } from "../../src/lib/errorMessage";
@@ -14,7 +14,10 @@ import {
   FeedbackBox,
 } from "../../src/components/ui/Design";
 export default function Recovery() {
-  const [email, setEmail] = useState("");
+  // From the login form: the e-mail already typed, and whether this account only had Google.
+  const params = useLocalSearchParams<{ email?: string; crear?: string }>();
+  const create = params.crear === "1";
+  const [email, setEmail] = useState(typeof params.email === "string" ? params.email : "");
   const [sent, setSent] = useState(false);
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
@@ -89,13 +92,13 @@ export default function Recovery() {
   }
   return (
     <Screen
-      title="Recupera tu acceso"
-      subtitle="Un código por correo. Una contraseña nueva."
+      title={create ? "Crea tu contraseña" : "Recupera tu acceso"}
+      subtitle={create ? "Tu cuenta se creó con Google. Con una contraseña también entras desde la web." : "Un código por correo. Una contraseña nueva."}
       back
     >
       {done ? (
         <Card>
-          <FeedbackBox title="Contraseña actualizada" tone="success" message="Ya puedes entrar con tu nueva contraseña. Cerramos las sesiones anteriores para proteger tu cuenta." />
+          <FeedbackBox title={create ? "Contraseña creada" : "Contraseña actualizada"} tone="success" message={create ? "Listo: entra con tu correo y esta contraseña. Google sigue funcionando en la app." : "Ya puedes entrar con tu nueva contraseña. Cerramos las sesiones anteriores para proteger tu cuenta."} />
           <Button
             title="Ir a iniciar sesión"
             onPress={() => router.replace("/(auth)/login")}
