@@ -47,7 +47,7 @@ Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = fu
 | Logs sin claves, OTP ni montos | Hecho (`apps/api/src/domain/logSafe.test.ts`) |
 | Sentry en la API | Opcional, requiere DSN |
 | Build Android (APK/AAB) firmada | Pendiente externo (EAS + Play Console) |
-| Despliegue HTTPS con dominio | Hecho: API y beta web en `https://junto.lunalav.pe/app/`, Contabo/Caddy, base privada |
+| Despliegue HTTPS con dominio | Hecho: API y beta web en `https://junto.lunalav.pe/app/`, Contabo/Caddy, base privada. Versión 1.1.0 (cobranza, chat, fecha límite) publicada el 11/oct/2026, APK `JUNTO-beta-20261011.apk`; ver `ops/web/DEPLOY-20261011.md` |
 | Beta iPhone/Android sin instalación | Hecho en navegadores de prueba: Chromium/WebKit. Falta validación física en Safari iPhone y Chrome Android |
 | Web de escritorio y tamaños adaptativos | Publicado en web beta3 y probado localmente/HTTPS en Chromium y WebKit a seis anchos: bienvenida/auth, lateral, inicio en columnas, formularios y ventanas acotadas; ver `ops/web/RESPONSIVE-20261010.md`. Dispositivos y accesibilidad física pendientes |
 
