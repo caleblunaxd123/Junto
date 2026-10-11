@@ -85,6 +85,7 @@ export interface GrupoConBalance extends Grupo {
   rolUsuario: MiembroRol;
   /** The group's bill in equal parts: free parts stay with whoever paid until someone joins. */
   cuenta?: CuentaPorPartes | null;
+  cuentasPorPartes?: CuentaPorPartes[];
   /** Chat items from others since the viewer last opened the group (Home badge). */
   noLeidos?: number;
 }
@@ -99,7 +100,12 @@ export interface CuentaPorPartes {
   partes: number;
   parte: number;
   libres: number;
+  montosLibres?: number[];
+  montoLibre?: number;
+  siguienteParte?: number | null;
 }
+
+export type PartesAlUnirse = { total: number; cuentas: { descripcion: string; parte: number; pagadorNombre: string }[] };
 
 // ─── Group chat ───────────────────────────────────────────────────────────────
 

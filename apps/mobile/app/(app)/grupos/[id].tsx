@@ -1,5 +1,5 @@
 import { errorMessage } from "../../../src/lib/errorMessage";
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { View, Pressable, ActivityIndicator, Image, ScrollView, Modal, TextInput, KeyboardAvoidingView, Platform } from "react-native";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
@@ -22,6 +22,7 @@ import { ChatBubble, DaySeparator, chatColors } from "../../../src/components/ch
 import { WhoPaid } from "../../../src/components/chat/WhoPaid";
 import { modeWords } from "../../../src/lib/groupMode";
 import { deadlineText } from "../../../src/lib/billForm";
+import { freeParts, groupProgress } from "../../../src/lib/groupProgress";
 
 const money = (value: number) => `S/ ${centavosASoles(value)}`;
 const systemTypes = new Set(["creado", "union", "recordatorio"]);
@@ -54,7 +55,7 @@ export default function Group() {
   const chat = useQuery<ChatItem[]>({
     queryKey: ["chat", id],
     queryFn: () => api.get(`/grupos/${id}/chat`).then((r) => r.data),
-    enabled: !!id,
+    enabled: !!id && focused,
     // Close to live while the conversation is open; push notifications cover the rest.
     refetchInterval: focused ? 4_000 : false,
   });
@@ -65,6 +66,15 @@ export default function Group() {
     refetchChat();
   }, [refetch, refetchPayments, refetchChat]);
   useFocusEffect(refreshAll);
+  // A join or payment changes the ledger too, not just its bubble. Structural sharing
+  // keeps unchanged polling responses from triggering extra balance/history requests.
+  useEffect(() => {
+    if (focused && chat.data) {
+      void refetch();
+      void refetchPayments();
+      void qc.invalidateQueries({ queryKey: ["notificaciones"] });
+    }
+  }, [chat.data, focused, refetch, refetchPayments, qc]);
   const resolve = useResolverPago();
   const [menu, setMenu] = useState(false);
   const [whoPaid, setWhoPaid] = useState(false);
@@ -74,7 +84,11 @@ export default function Group() {
   const [sending, setSending] = useState(false);
   const [shareMessage, setShareMessage] = useState<ShareMessage | null>(null);
   const feed = useRef<ScrollView>(null);
-  const seen = useRef(0);
+  const seen = useRef<string | null>(null);
+  const nearBottom = useRef(true);
+  const sendLock = useRef(false);
+  const [newMessages, setNewMessages] = useState(false);
+  useEffect(() => { seen.current = null; nearBottom.current = true; setNewMessages(false); setText(""); }, [id]);
 
   const words = modeWords(group?.modo);
   const groupPayments = payments.filter((p) => p.grupoId === id && p.estado === "reportado");
@@ -150,17 +164,20 @@ export default function Group() {
 
   async function send() {
     const value = text.trim();
-    if (!value || sending) return;
+    if (!value || sendLock.current) return;
+    sendLock.current = true;
     try {
       setSending(true);
       setError("");
       await api.post(`/grupos/${id}/mensajes`, { texto: value });
-      setText("");
+      // Do not erase a second message typed while the first one was being sent.
+      setText((current) => current.trim() === value ? "" : current);
       await refetchChat();
     } catch (err) {
       // The text stays in the box so nothing written is lost.
       setError(errorMessage(err, "No pudimos enviar tu mensaje. Revisa tu conexión y reintenta."));
     } finally {
+      sendLock.current = false;
       setSending(false);
     }
   }
@@ -181,17 +198,11 @@ export default function Group() {
 
   // The pinned summary: how far the money has come back (cobranza) or come in (división).
   const cuenta = group.cuenta;
-  const total = cuenta?.montoTotal ?? group.resumen.totalGastado;
-  const pending = group.resumen.cuentas.reduce((sum, a) => sum + Math.max(0, -a.neto), 0);
-  const freeValue = cuenta ? cuenta.libres * cuenta.parte : 0;
-  // División: what is already in (the organizer's own part counts). Cobranza: confirmed payments back.
-  const returned = group.resumen.cuentas.reduce((sum, a) => sum + a.pagosEnviados, 0);
-  const goal = words.division ? total : returned + pending + freeValue;
-  const done = words.division ? Math.max(0, total - pending - freeValue) : returned;
-  const progress = goal > 0 ? Math.min(1, done / goal) : 0;
+  const { total, goal, done, progress } = groupProgress(group);
   const me = group.resumen.cuentas.find((a) => a.usuarioId === user?.id);
   // "Te devolvieron" when the money comes back to you: you paid the bill, or (older groups) you are owed.
   const holder = cuenta ? cuenta.pagadoPor === user?.id : group.balanceUsuario.teDeben > 0;
+  const personalReturn = holder && group.resumen.cuentas.filter((a) => a.pagaste > a.tuParte).every((a) => a.usuarioId === user?.id);
   const canDefine = group.rolUsuario === "admin";
   const status = group.balanceUsuario.debes > 0
     ? { text: `Te falta ${words.division ? "aportar" : "pagar"} ${money(group.balanceUsuario.debes)}`, color: palette.coral }
@@ -238,8 +249,8 @@ export default function Group() {
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                 <Ionicons name="pin" size={14} color="#007B60" />
                 <Label size={14} weight="extra" style={{ flex: 1 }}>
-                  {cuenta ? `${words.bill}: ${money(total)}` : `Total del grupo: ${money(total)}`}
-                  {cuenta && <Label size={12} color={palette.muted}>{`  ${cuenta.partes} ${words.parts} de ${money(cuenta.parte)}`}</Label>}
+                  {cuenta && group.resumen.cantidadGastos === 1 ? `${words.bill}: ${money(total)}` : `Total del grupo: ${money(total)}`}
+                  {cuenta && group.resumen.cantidadGastos === 1 && <Label size={12} color={palette.muted}>{`  ${cuenta.partes} ${words.parts} ${cuenta.montoTotal % cuenta.partes ? "desde" : "de"} ${money(Math.floor(cuenta.montoTotal / cuenta.partes))}`}</Label>}
                 </Label>
                 <Label size={12} weight="bold" color={palette.purple}>¿Quién pagó? ›</Label>
               </View>
@@ -247,7 +258,7 @@ export default function Group() {
                 <View style={{ height: "100%", width: `${progress * 100}%`, backgroundColor: palette.primary }} />
               </View>
               <View style={{ flexDirection: "row", flexWrap: "wrap", columnGap: 10 }}>
-                <Label size={12} color={palette.muted}>{words.division ? "Juntado" : holder ? "Te devolvieron" : "Devuelto"} {money(done)} de {money(goal)}{cuenta?.libres ? ` · ${cuenta.libres} ${cuenta.libres === 1 ? (words.division ? "aporte libre" : "parte libre") : (words.division ? "aportes libres" : "partes libres")}` : ""}</Label>
+                <Label size={12} color={palette.muted}>{words.division ? "Juntado" : personalReturn ? "Te devolvieron" : "Devuelto"} {money(done)} de {money(goal)}{cuenta?.libres ? ` · ${cuenta.libres} ${cuenta.libres === 1 ? (words.division ? "aporte libre" : "parte libre") : (words.division ? "aportes libres" : "partes libres")}` : ""}</Label>
                 {status && <Label size={12} weight="bold" color={status.color}>{status.text}</Label>}
               </View>
               {!!group.fechaLimite && (() => {
@@ -276,15 +287,22 @@ export default function Group() {
           style={{ flex: 1, backgroundColor: chatColors.feed }}
           contentContainerStyle={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", padding: 12, gap: 8, flexGrow: 1, justifyContent: "flex-end" }}
           keyboardShouldPersistTaps="handled"
+          scrollEventThrottle={100}
+          onScroll={({ nativeEvent: { contentOffset, contentSize, layoutMeasurement } }) => {
+            nearBottom.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 80;
+            if (nearBottom.current) setNewMessages(false);
+          }}
           onContentSizeChange={() => {
-            // Jump to the newest message when the chat opens or something new arrives.
-            if (items.length !== seen.current) {
-              feed.current?.scrollToEnd({ animated: seen.current > 0 });
-              seen.current = items.length;
+            const latest = items.at(-1);
+            if (latest && latest.id !== seen.current) {
+              if (seen.current === null || nearBottom.current || latest.mio) {
+                feed.current?.scrollToEnd({ animated: seen.current !== null });
+              } else setNewMessages(true);
+              seen.current = latest.id;
             }
           }}
         >
-          {(isRefetchError || chat.isError || paymentsError) && <ErrorBox message="No pudimos actualizar el chat. Ves lo último que cargó; desliza o vuelve a entrar para reintentar." />}
+          {(isRefetchError || chat.isError || paymentsError) && <View style={{ gap: 8 }}><ErrorBox message="Sin conexión: ves lo último que cargó. Los saldos podrían haber cambiado." /><Button compact secondary title="Actualizar chat y saldos" onPress={refreshAll} /></View>}
           {chat.isLoading && <ActivityIndicator color={palette.primary} />}
           {items.map((item, index) => {
             const previous = items[index - 1];
@@ -311,7 +329,7 @@ export default function Group() {
           {!chat.isLoading && !!cuenta?.libres && holder && (
             <View style={{ alignSelf: "center", maxWidth: 360, padding: 14, gap: 8, borderRadius: 16, backgroundColor: palette.lilac, borderWidth: 1, borderColor: "#C9B8FF" }}>
               <Label weight="bold">{cuenta.libres === 1 ? "Falta 1 persona" : `Faltan ${cuenta.libres} personas`}</Label>
-              <Label size={13} color={palette.muted}>Comparte el enlace. Quien se una tendrá {words.division ? "un aporte" : "una parte"} de {money(cuenta.parte)} y te avisaremos aquí.</Label>
+              <Label size={13} color={palette.muted}>Comparte el enlace. La siguiente persona tendrá {words.division ? "un aporte" : "una parte"} de {money(freeParts(cuenta)[0])} y te avisaremos aquí.</Label>
               <Button compact title="Invitar por WhatsApp" onPress={goInvite} />
             </View>
           )}
@@ -321,6 +339,7 @@ export default function Group() {
         {/* Quick actions and the message box. */}
         <View style={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", gap: 8, paddingTop: 8, paddingBottom: 8 + insets.bottom, backgroundColor: chatColors.feed }}>
           {!!error && <View style={{ paddingHorizontal: 12 }}><ErrorBox message={error} /></View>}
+          {newMessages && <View style={{ paddingHorizontal: 12 }}><Button compact secondary title="Ver mensajes nuevos ↓" onPress={() => { nearBottom.current = true; setNewMessages(false); feed.current?.scrollToEnd({ animated: true }); }} /></View>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 8, paddingHorizontal: 12 }}>
             {group.balanceUsuario.debes > 0 && <Chip primary icon="cash-outline" title={`${words.pay} ${money(group.balanceUsuario.debes)}`} onPress={goPay} />}
             {!cuenta && !group.resumen.cantidadGastos && canDefine && <Chip primary icon="receipt-outline" title={`Definir ${words.bill.toLowerCase()}`} onPress={goBill} />}

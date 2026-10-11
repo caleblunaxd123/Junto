@@ -68,9 +68,9 @@ async function run(){
    if(width>=1024)assert.equal(await page.getByRole('tab',{name:/Inicio/}).isVisible(),false);
   }
   await page.setViewportSize({width:viewportWidth,height:900});
-  await page.goto(WEB+'/app/grupos/crear');
+  await page.goto(WEB+'/app/grupos/crear?modo=cobranza');
   await page.getByLabel('Nombre del grupo').fill('Cartagena Beta QA');
-  await page.getByRole('button',{name:'Crear grupo',exact:true}).last().click();
+  await page.getByRole('button',{name:'Crear grupo e invitar',exact:true}).click();
   await page.getByText('¡Grupo creado!',{exact:true}).waitFor();
   await page.getByLabel('Correo o celular para invitar').fill('incorrecto');
   await page.getByRole('button',{name:'Preparar',exact:true}).click();

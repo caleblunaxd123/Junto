@@ -6,7 +6,8 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useAuthStore } from "../../src/store/auth.store";
 import { api } from "../../src/lib/api";
 import { queryClient } from "../../src/lib/queryClient";
-import { centavosASoles } from "../../src/types";
+import { centavosASoles, type PartesAlUnirse } from "../../src/types";
+import { JoinParts } from "../../src/components/JoinParts";
 import { modeWords } from "../../src/lib/groupMode";
 import {
   Screen,
@@ -20,7 +21,7 @@ export default function Join() {
   const auth = useAuthStore((s) => s.isAuthenticated);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const preview = useQuery<{ nombre: string; tipo: string; modo?: string | null; miembros: number; cuenta?: { descripcion: string; montoTotal: number; partes: number; parte: number; libres: number; pagadorNombre: string } | null }>({
+  const preview = useQuery<{ nombre: string; tipo: string; modo?: string | null; miembros: number; partesAlUnirse?: PartesAlUnirse; cuenta?: { descripcion: string; montoTotal: number; partes: number; parte: number; libres: number; pagadorNombre: string } | null }>({
     queryKey: ["invitacion", code],
     queryFn: () => api.get(`/grupos/invitacion/${code}`).then((r) => r.data),
     enabled: auth && validInvitationCode(code),
@@ -75,7 +76,7 @@ export default function Join() {
                   <Label size={22} weight="extra">
                     {preview.data.nombre}
                   </Label>
-                  {preview.data.cuenta ? (
+                  {preview.data.partesAlUnirse ? <JoinParts parts={preview.data.partesAlUnirse} division={modeWords(preview.data.modo).division} /> : preview.data.cuenta ? (
                     <Card style={{ backgroundColor: "#E7FBF3", gap: 4 }}>
                       <Label size={13} weight="bold" color="#007B60">{modeWords(preview.data.modo).division ? "TU APORTE" : "TU PARTE"}</Label>
                       <Label size={28} weight="extra">S/ {centavosASoles(preview.data.cuenta.parte)}</Label>

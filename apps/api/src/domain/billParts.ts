@@ -36,5 +36,12 @@ export function nextPart(total: number, partes: number, payerId: string, partici
 
 export function partsSummary(total: number, partes: number, payerId: string, participants: Participant[]) {
   const holders = participants.filter((p) => p.usuarioId !== payerId).length + 1;
-  return { partes, parte: partAmounts(total, partes)[0], libres: Math.max(0, partes - holders) };
+  const amounts = partAmounts(total, partes);
+  return {
+    partes, parte: amounts[0], libres: Math.max(0, partes - holders),
+    // Remainder cents belong to specific parts, not to every vacant seat.
+    montosLibres: amounts.slice(holders),
+    montoLibre: amounts.slice(holders).reduce((sum, amount) => sum + amount, 0),
+    siguienteParte: amounts[holders] ?? null,
+  };
 }

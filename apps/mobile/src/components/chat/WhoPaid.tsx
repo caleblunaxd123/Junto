@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Avatar, Button, Label, palette } from "../ui/Design";
 import { useResponsiveLayout } from "../ui/responsive";
 import { groupContribution } from "../../lib/groupContribution";
+import { freeParts, heldParts } from "../../lib/groupProgress";
 import { meFirst } from "../../lib/people";
 import { centavosASoles, type GrupoConBalance } from "../../types";
 
@@ -28,7 +29,7 @@ export function WhoPaid({ group, userId, visible, onClose, onInvite, onPay }: {
           </View>
           {group.cuenta ? (
             <Label size={13} color={palette.muted}>
-              {group.cuenta.descripcion}: {money(group.cuenta.montoTotal)} en {group.cuenta.partes} partes de {money(group.cuenta.parte)}. {group.cuenta.pagadoPor === userId ? "Lo pagaste tú." : `Lo pagó ${group.cuenta.pagadorNombre.split(" ")[0]}.`}
+              Total del grupo: {money(group.resumen.totalGastado)}. {group.cuenta.descripcion}: {group.cuenta.partes} partes {group.cuenta.montoTotal % group.cuenta.partes ? "desde" : "de"} {money(Math.floor(group.cuenta.montoTotal / group.cuenta.partes))}. {group.cuenta.pagadoPor === userId ? "Lo pagaste tú." : `Lo pagó ${group.cuenta.pagadorNombre.split(" ")[0]}.`}
             </Label>
           ) : (
             <Label size={13} color={palette.muted}>Total del grupo {money(group.resumen.totalGastado)}.</Label>
@@ -36,7 +37,7 @@ export function WhoPaid({ group, userId, visible, onClose, onInvite, onPay }: {
           <ScrollView contentContainerStyle={{ gap: 8 }}>
             {accounts.map((account) => {
               // Whoever paid also holds the free parts until someone joins: show only their own part.
-              const held = group.cuenta && account.usuarioId === group.cuenta.pagadoPor ? group.cuenta.libres * group.cuenta.parte : 0;
+              const held = heldParts(group, account.usuarioId);
               const base = groupContribution(account);
               const row = held ? { ...base, parte: base.parte - held, cubierto: Math.max(0, base.cubierto - held), progreso: base.parte - held > 0 ? Math.min(1, Math.max(0, base.cubierto - held) / (base.parte - held)) : 0 } : base;
               const member = group.miembros.find((m) => m.usuarioId === account.usuarioId)!;
@@ -68,13 +69,13 @@ export function WhoPaid({ group, userId, visible, onClose, onInvite, onPay }: {
                 </View>
               );
             })}
-            {Array.from({ length: free }, (_, i) => (
+            {(group.cuenta ? freeParts(group.cuenta) : []).map((amount, i) => (
               <View key={`libre-${i}`} style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 16, borderWidth: 1.5, borderStyle: "dashed", borderColor: "#C9B8FF" }}>
                 <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: palette.lilac, alignItems: "center", justifyContent: "center" }}>
                   <Ionicons name="person-add-outline" size={20} color={palette.purple} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Label weight="bold" size={14}>Parte libre · {money(group.cuenta!.parte)}</Label>
+                  <Label weight="bold" size={14}>Parte libre · {money(amount)}</Label>
                   <Label size={12} color={palette.muted}>La ocupa quien se una al grupo.</Label>
                 </View>
               </View>

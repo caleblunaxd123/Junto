@@ -141,7 +141,9 @@ async function run() {
     outside.accessToken,
   );
   // What joining means (mode and, if a bill in parts exists, the part) is shown; nothing about members.
-  assert.deepEqual(Object.keys(preview).sort(), ["cuenta", "miembros", "modo", "nombre", "tipo"]);
+  assert.deepEqual(Object.keys(preview).sort(), ["cuenta", "miembros", "modo", "nombre", "partesAlUnirse", "tipo"]);
+  assert.deepEqual(Object.keys(preview.partesAlUnirse).sort(), ["cuentas", "total"]);
+  assert.ok(preview.partesAlUnirse.cuentas.every(bill => JSON.stringify(Object.keys(bill).sort()) === JSON.stringify(["descripcion", "pagadorNombre", "parte"])));
   if (preview.cuenta) assert.deepEqual(Object.keys(preview.cuenta).sort(), ["descripcion", "libres", "montoTotal", "pagadorNombre", "parte", "partes"]);
   assert.equal(preview.nombre, group.nombre);
   assert.equal(preview.miembros, 3);

@@ -6,7 +6,7 @@ import { calculateAccounts } from './accounts';
 test('S/ 500 in 5 parts: the organizer holds the 4 free parts until people join', () => {
   const parts = allocateParts(50000, 5, 'caleb', ['caleb']);
   assert.deepEqual(parts, [{ usuarioId: 'caleb', montoAsignado: 50000 }]);
-  assert.deepEqual(partsSummary(50000, 5, 'caleb', parts), { partes: 5, parte: 10000, libres: 4 });
+  assert.deepEqual(partsSummary(50000, 5, 'caleb', parts), { partes: 5, parte: 10000, libres: 4, montoLibre: 40000, montosLibres: [10000, 10000, 10000, 10000], siguienteParte: 10000 });
   // Nobody owes anything yet: the organizer paid and holds every part.
   const accounts = calculateAccounts([{ id: 'caleb', nombre: 'Caleb' }], [{ montoTotal: 50000, pagadoPor: 'caleb', participantes: parts }], []);
   assert.equal(accounts.cuentas[0].neto, 0);
@@ -38,6 +38,11 @@ test('cents that do not divide evenly still add up exactly', () => {
   const parts = allocateParts(50000, 3, 'caleb', ['ana', 'caleb', 'luis']);
   assert.equal(parts.reduce((sum, p) => sum + p.montoAsignado, 0), 50000);
   assert.deepEqual(parts.map((p) => p.usuarioId), ['caleb', 'ana', 'luis']);
+  const summary = partsSummary(10000, 3, 'caleb', allocateParts(10000, 3, 'caleb', ['caleb']));
+  assert.equal(summary.parte, 3334);
+  assert.equal(summary.siguienteParte, 3333);
+  assert.equal(summary.montoLibre, 6666);
+  assert.deepEqual(summary.montosLibres, [3333, 3333]);
 });
 
 test('more people than parts, too many parts, or a split changed by hand are rejected or skipped', () => {

@@ -84,7 +84,7 @@ export function ChatBubble({ item, meId, modo, showAuthor, onAnswer, busy, onDel
           <Label weight="bold" size={15}>{item.descripcion}</Label>
           <Label weight="extra" size={22}>{money(item.monto)}</Label>
           {bill && item.partes ? (
-            <Label size={13} color={palette.muted}>{item.partes} {words.parts} de {money(item.parte!)} · {words.holder(who(item.pagador))}</Label>
+            <Label size={13} color={palette.muted}>{item.partes} {words.parts} {item.monto % item.partes ? "desde" : "de"} {money(Math.floor(item.monto / item.partes))} · {words.holder(who(item.pagador))}</Label>
           ) : (
             <Label size={13} color={palette.muted}>Pagó {who(item.pagador)}</Label>
           )}

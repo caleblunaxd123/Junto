@@ -5,7 +5,7 @@ import { calcularSaldosGrupo, resumenCuentasGrupo } from './balance.service';
 import type { CrearGrupoInput, EditarGrupoInput } from '../schemas/grupos.schema';
 import { saveJoinNotices, pushJoinNotice } from './groupNotices.service';
 import { takeFreeParts } from './billParts.service';
-import { allocateParts, partsSummary } from '../domain/billParts';
+import { allocateParts, nextPart, partsSummary } from '../domain/billParts';
 import { unreadInGroup } from './groupChat.service';
 
 function generateLinkInvitacion(): string {
@@ -58,13 +58,16 @@ export async function crearGrupo(input: CrearGrupoInput, creadoPor: string) {
 
 /** The group's bill in parts (the oldest one), with how many parts are still free. */
 export async function cuentaPorPartes(grupoId: string) {
-  const bill = await prisma.gasto.findFirst({
+  return (await cuentasPorPartes(grupoId))[0] ?? null;
+}
+
+export async function cuentasPorPartes(grupoId: string) {
+  const bills = await prisma.gasto.findMany({
     where: { grupoId, activo: true, partes: { not: null } },
     orderBy: { fecha: 'asc' },
     include: { participantes: { select: { usuarioId: true, montoAsignado: true } }, pagador: { select: { nombre: true } } },
   });
-  if (!bill) return null;
-  return {
+  return bills.map((bill) => ({
     id: bill.id,
     descripcion: bill.descripcion,
     montoTotal: bill.montoTotal,
@@ -72,7 +75,19 @@ export async function cuentaPorPartes(grupoId: string) {
     pagadorNombre: bill.pagador.nombre,
     participantes: bill.participantes,
     ...partsSummary(bill.montoTotal, bill.partes!, bill.pagadoPor, bill.participantes),
-  };
+  }));
+}
+
+/** Only the cost of joining is disclosed, never other members' allocations or balances. */
+export async function partesAlUnirse(grupoId: string, usuarioId: string) {
+  const bills = await cuentasPorPartes(grupoId);
+  const payers = await prisma.grupoMiembro.findMany({ where: { grupoId, activo: true, usuarioId: { in: bills.map((bill) => bill.pagadoPor) } }, select: { usuarioId: true } });
+  const active = new Set(payers.map((payer) => payer.usuarioId));
+  const cuentas = bills.flatMap((bill) => {
+    const parte = active.has(bill.pagadoPor) ? nextPart(bill.montoTotal, bill.partes, bill.pagadoPor, bill.participantes, usuarioId) : null;
+    return parte === null ? [] : [{ descripcion: bill.descripcion, parte, pagadorNombre: bill.pagadorNombre.trim().split(/\s+/)[0] }];
+  });
+  return { total: cuentas.reduce((sum, bill) => sum + bill.parte, 0), cuentas };
 }
 
 export async function getGruposUsuario(usuarioId: string) {
@@ -158,8 +173,8 @@ export async function getGrupoDetalle(grupoId: string, usuarioId: string) {
   const resumen = await resumenCuentasGrupo(grupoId);
   const neto = resumen.cuentas.find((account) => account.usuarioId === usuarioId)?.neto || 0;
   // Every payment waiting for confirmation in the group, not only the viewer's: shared summaries cite it.
-  const [pagosPorConfirmar, cuenta] = await Promise.all([prisma.pago.count({ where: { grupoId, estado: 'reportado' } }), cuentaPorPartes(grupoId)]);
-  return { ...grupo, resumen, saldos: resumen.saldos, pagosPorConfirmar, cuenta, balanceUsuario: { neto, teDeben: Math.max(neto, 0), debes: Math.max(-neto, 0) }, rolUsuario: miembro.rol };
+  const [pagosPorConfirmar, cuentasPorPartesDelGrupo] = await Promise.all([prisma.pago.count({ where: { grupoId, estado: 'reportado' } }), cuentasPorPartes(grupoId)]);
+  return { ...grupo, resumen, saldos: resumen.saldos, pagosPorConfirmar, cuenta: cuentasPorPartesDelGrupo[0] ?? null, cuentasPorPartes: cuentasPorPartesDelGrupo, balanceUsuario: { neto, teDeben: Math.max(neto, 0), debes: Math.max(-neto, 0) }, rolUsuario: miembro.rol };
 }
 
 export async function unirseConLink(linkInvitacion: string, usuarioId: string) {

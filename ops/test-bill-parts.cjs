@@ -125,6 +125,14 @@ async function run() {
     const waiting = await call('/pagos/reportar', luis, 'POST', { grupoId: group.id, receptorId: owner.usuario.id, monto: 5000, metodo: 'plin' }, 201);
     assert.equal((await call(`/grupos/${group.id}/chat`, owner)).find((i) => i.pagoId === waiting.id).apruebaComo, 'receptor');
     assert.equal((await call(`/grupos/${group.id}/chat`, luis)).find((i) => i.pagoId === waiting.id).apruebaComo, null);
+    // An acknowledgement from someone else must also alert the person who reported the payment.
+    assert.equal((await call('/grupos', luis)).find((g) => g.id === group.id).noLeidos, 0);
+    await call(`/pagos/${waiting.id}/rechazar`, owner, 'POST');
+    assert.equal((await call('/grupos', luis)).find((g) => g.id === group.id).noLeidos, 1);
+    await call(`/grupos/${group.id}/chat`, luis);
+    assert.equal((await call('/grupos', luis)).find((g) => g.id === group.id).noLeidos, 0);
+    // Restore the pending amount used by the reminder checks below.
+    await call('/pagos/reportar', luis, 'POST', { grupoId: group.id, receptorId: owner.usuario.id, monto: 5000, metodo: 'plin' }, 201);
     // Unread badge: opening the chat reads it; what others do afterwards counts, your own actions never.
     await call(`/grupos/${group.id}/chat`, owner);
     const unread = async (user) => (await call('/grupos', user)).find((g) => g.id === group.id).noLeidos;
@@ -163,6 +171,28 @@ async function run() {
     assert.deepEqual(reminders.map((r) => r.aviso), ['limite-d1', 'limite-d0']);
     await call(`/grupos/${group.id}`, owner, 'PUT', { fechaLimite: null });
     assert.equal(await runDeadlines(new Date('2026-12-22T15:00:00Z')), 0, 'removing the deadline stops reminders');
+
+    // Uneven cents: an invitation quotes the next seat, not the payer's rounded-up share.
+    const uneven = await call('/grupos', owner, 'POST', { nombre: `Centimos ${suffix}`, cuenta: { montoTotal: 10000, partes: 3 } }, 201);
+    const centsPreview = await call(`/grupos/invitacion/${uneven.linkInvitacion}`, ana);
+    assert.equal(centsPreview.cuenta.parte, 3333);
+    detail = await call(`/grupos/${uneven.id}`, owner);
+    assert.deepEqual(detail.cuenta.montosLibres, [3333, 3333]);
+    assert.equal(detail.cuenta.montoLibre, 6666);
+    assert.equal((await call('/grupos/unirse', ana, 'POST', { link: uneven.linkInvitacion })).parte, centsPreview.cuenta.parte);
+    detail = await call(`/grupos/${uneven.id}`, owner);
+    assert.equal(share(detail, owner).tuParte - detail.cuenta.montoLibre, 3334);
+    assert.equal(detail.cuentasPorPartes.length, 1);
+    // More than one automatic bill: disclose their combined cost, including exact cents.
+    await call(`/grupos/${uneven.id}/gastos`, owner, 'POST', { descripcion: 'Taxi adicional', montoTotal: 2000, pagadoPor: owner.usuario.id, partes: 3, participantes: [owner, ana].map(p => ({ usuarioId: p.usuario.id })) }, 201);
+    const combinedPreview = await call(`/grupos/invitacion/${uneven.linkInvitacion}`, luis);
+    assert.equal(combinedPreview.partesAlUnirse.total, 3999);
+    assert.deepEqual(combinedPreview.partesAlUnirse.cuentas.map(b => b.parte), [3333, 666]);
+    assert.ok(combinedPreview.partesAlUnirse.cuentas.every(b => !('participantes' in b) && !('pagadoPor' in b)));
+    await call(`/grupos/${uneven.id}/invitar`, owner, 'POST', { identificador: luis.email });
+    const multiInvite = (await call('/invitaciones', luis)).find(i => i.grupo.id === uneven.id);
+    assert.equal(multiInvite.partesAlUnirse.total, 3999);
+    assert.equal((await call(`/invitaciones/${multiInvite.id}/aceptar`, luis, 'POST')).parte, 3999);
 
     console.log('PASS: bill in parts at creation, invitation shows the part, link/accept/rejoin take exactly one part, sixth person none, notices carry the part, Yape confirmed without growing the total, later bill and corrections. No external sends.');
   } finally { server.child.kill(); smtp.close(); await db.$disconnect(); }

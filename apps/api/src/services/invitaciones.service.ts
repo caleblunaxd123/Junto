@@ -4,7 +4,7 @@ import { sendPushNotification } from "../lib/firebase";
 import { transactionLock } from "../lib/transactionLock";
 import { saveJoinNotices, pushJoinNotice } from "./groupNotices.service";
 import { takeFreeParts } from "./billParts.service";
-import { cuentaPorPartes } from "./grupos.service";
+import { cuentaPorPartes, partesAlUnirse } from "./grupos.service";
 
 export const INVITE_LIMITS = { perDay: 40, quietDaysAfterRejection: 7 };
 // Same answer whether or not the e-mail/phone has an account: inviting must not reveal who uses JUNTO.
@@ -79,7 +79,8 @@ export async function myInvitations(userId: string) {
       fechaCreacion: row.fechaCreacion,
       invitadoPor: first(row.anfitrion.nombre),
       grupo: { id: row.grupo.id, nombre: row.grupo.nombre, tipo: row.grupo.tipo, modo: row.grupo.modo, miembros: row.grupo._count.miembros },
-      cuenta: cuenta && { montoTotal: cuenta.montoTotal, partes: cuenta.partes, parte: cuenta.parte, libres: cuenta.libres },
+      partesAlUnirse: await partesAlUnirse(row.grupo.id, userId),
+      cuenta: cuenta && { montoTotal: cuenta.montoTotal, partes: cuenta.partes, parte: cuenta.siguienteParte ?? 0, libres: cuenta.libres },
     };
   }));
 }

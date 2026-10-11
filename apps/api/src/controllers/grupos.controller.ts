@@ -157,8 +157,9 @@ export async function invitacion(
       tipo: grupo.tipo,
       modo: grupo.modo,
       miembros: grupo._count.miembros,
+      partesAlUnirse: await gruposService.partesAlUnirse(grupo.id, req.user!.userId),
       // Only the first name of whoever paid: enough to know who to pay back, nothing more.
-      cuenta: cuenta && { descripcion: cuenta.descripcion, montoTotal: cuenta.montoTotal, partes: cuenta.partes, parte: cuenta.parte, libres: cuenta.libres, pagadorNombre: cuenta.pagadorNombre.trim().split(/\s+/)[0] },
+      cuenta: cuenta && { descripcion: cuenta.descripcion, montoTotal: cuenta.montoTotal, partes: cuenta.partes, parte: cuenta.siguienteParte ?? 0, libres: cuenta.libres, pagadorNombre: cuenta.pagadorNombre.trim().split(/\s+/)[0] },
     });
   } catch (error) {
     next(error);
