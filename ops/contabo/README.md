@@ -38,6 +38,10 @@ Nunca imprimir `docker compose config` completo, `docker inspect` con el entorno
 
 Respaldar con `sh /opt/junto/backup.sh`. Probar la restauración en una base **nueva de ensayo**,
 nunca encima de `junto`. Mantener una copia externa cifrada y un plan de recuperación.
+`restore-check.sh /opt/junto/backups/junto-<fecha>.dump <cantidad-revisada-de-migraciones>`
+crea una base de nombre único, comprueba la historia restaurada y la elimina solo al pasar.
+No usa una cantidad antigua fija. Para una actualización, ejecutar `verify-database.cjs --existing`:
+conserva cuentas existentes y verifica privilegios CRUD en todas las tablas nuevas.
 Construir/auditar una imagen con etiqueta nueva, conservar la anterior para rollback.
 Con la imagen elegida en `compose.env`, aplicar `run --rm --no-deps migrate`, después `up -d --wait api`.
 No usar `db push`, `migrate dev`, `down -v` ni modificar bases de otras apps.
