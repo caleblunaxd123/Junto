@@ -1,6 +1,18 @@
 # JUNTO — estado real
 
-Actualizado el 10 de octubre de 2026 (grupos de cobranza/división, chat y fecha límite); antes el 8 de octubre de 2026 contrastando el código de `main` + esta rama, no el plan original por semanas (que estaba desactualizado: marcaba como pendiente casi todo lo que ya existe). Comprobantes, aprobación y comentarios se añadieron en la ronda siguiente.
+Actualizado el 11 de octubre de 2026: beta 1.1.1 sincronizada con GitHub y desplegada, con correcciones de céntimos, invitaciones y actualización del chat. Antes, el 10 de octubre se añadieron grupos de cobranza/división, chat y fecha límite.
+
+## Última validación: beta 1.1.1
+
+- Partes libres exactas: S/ 100 entre tres conserva 33.34 + 33.33 + 33.33; la invitación muestra el importe de la siguiente parte, y la suma completa cuando hay varias cuentas automáticas. No expone participantes ni saldos a quien aún no pertenece.
+- El chat actualiza también los saldos y «¿Quién pagó?» cuando llega un pago/confirmación desde otra sesión. Progreso calculado con todo el grupo y pagos netos, no solo la primera cuenta ni la suma bruta de transferencias.
+- Se conserva el siguiente mensaje escrito mientras se envía el anterior. Mensajes nuevos no desplazan al lector si está revisando mensajes antiguos; hay botón de reintento explícito sin conexión.
+- La confirmación/rechazo cuenta como novedad para quien pagó. El cursor de lectura no adelanta eventos llegados durante la petición ni retrocede por peticiones concurrentes.
+- Pasaron 75 pruebas de dominio, 6 de contribución/progreso, 2 de cursor/chat, 15 de UX móvil, 3 de configuración de distribución y 56 de validaciones, correos, compartir y patrones UI; TypeScript, lint y build API. Integración local: reparto, avisos de unión, SMTP, seguridad/sesiones y libro de pagos.
+- Chromium móvil/escritorio y WebKit: registro, verificación SMTP local, login, recuperación, invitación, borrador WhatsApp, revisión S/ 500 vs S/ 380 y seis anchos. Chat probado en cinco anchos con pago/confirmación remotos y preservación del texto durante el envío. Correos de QA capturados en loopback: no se contactó a amigos ni se comprobó la bandeja de Gmail en esta ronda.
+- Web: https://junto.lunalav.pe/app/ · APK: https://junto.lunalav.pe/app/descargas/JUNTO-beta-20261011-polish.apk. APK release 1.1.1/versionCode 3, misma firma de beta, instalado sobre la versión anterior en el emulador. Esta ronda no acredita una prueba nativa visual completa ni una prueba en teléfonos físicos.
+- API/web saludables tras desplegar; descarga HTTPS coincide con SHA-256 local. Sin nuevas migraciones pendientes. Detalles y rollback: `ops/web/DEPLOY-20261011-POLISH.md`.
+- Sigue siendo beta: push con la app cerrada, Google OAuth nativo real, usuarios invitados sin cuenta, dos teléfonos físicos y requisitos de publicación en tiendas siguen pendientes. No se activaron SMS, cobros automáticos ni cambios de IA.
 
 Leyenda: **Hecho** = implementado y con pruebas automáticas · **Parcial** = funciona con límites conocidos · **Pendiente** = no existe o necesita algo externo.
 
