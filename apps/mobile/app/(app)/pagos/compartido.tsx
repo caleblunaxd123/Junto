@@ -6,9 +6,8 @@ import { useGrupos } from "../../../src/hooks/useGrupos";
 import { peekSharedVoucher, setSharedVoucher } from "../../../src/lib/sharedVoucher";
 import { Screen, Card, Label, Button, ErrorBox, palette, design } from "../../../src/components/ui/Design";
 import { groupCover } from "../../../src/components/ui/Artwork";
-import { centavosASoles } from "../../../src/types";
+import { formatMoney as money } from "@junto/shared/currency";
 
-const money = (value: number) => `S/ ${centavosASoles(value)}`;
 
 /** An image shared to JUNTO from WhatsApp, Yape or the gallery: which group is this payment for? */
 export default function SharedVoucher() {
@@ -61,14 +60,14 @@ export default function SharedVoucher() {
             <Pressable
               key={group.id}
               accessibilityRole="button"
-              accessibilityLabel={`${group.nombre}. ${owes ? `Debes ${money(owes)}` : "No debes nada"}`}
+              accessibilityLabel={`${group.nombre}. ${owes ? `Debes ${money(owes, group.moneda)}` : "No debes nada"}`}
               onPress={() => router.replace(`/(app)/pagos/pagar?grupoId=${group.id}&compartido=1`)}
               style={[design.card, { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, opacity: owes ? 1 : 0.7 }]}
             >
               <Image source={groupCover(group.tipo)} style={{ width: 54, height: 46, borderRadius: 10 }} resizeMode="cover" />
               <View style={{ flex: 1 }}>
                 <Label weight="bold" numberOfLines={1}>{group.nombre}</Label>
-                <Label size={12} color={owes ? palette.coral : palette.muted}>{owes ? `Debes ${money(owes)}` : "No debes nada aquí"}</Label>
+                <Label size={12} color={owes ? palette.coral : palette.muted}>{owes ? `Debes ${money(owes, group.moneda)}` : "No debes nada aquí"}</Label>
               </View>
               <Ionicons name="chevron-forward" size={20} color={palette.muted} />
             </Pressable>

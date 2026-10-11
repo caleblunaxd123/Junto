@@ -37,7 +37,7 @@ import { AddButton, CreateSheet } from "../../../src/components/CreateSheet";
 import { clearTryBill, loadTryBill, type SavedTryBill } from "../../../src/lib/tryBillHandoff";
 import { useResponsiveLayout } from "../../../src/components/ui/responsive";
 
-const money = (value: number) => `S/ ${centavosASoles(value)}`;
+import { formatMoney as money } from "@junto/shared/currency";
 
 export default function Home() {
   const { usuario } = useAuthStore();
@@ -246,7 +246,7 @@ export default function Home() {
                 )}
                 {filtered.map((g) => {
                   const net = g.balanceUsuario.neto;
-                  const status = net === 0 ? "Estás al día" : net > 0 ? `Te deben ${money(net)}` : `Debes ${money(-net)}`;
+                  const status = net === 0 ? "Estás al día" : net > 0 ? `Te deben ${money(net, g.moneda)}` : `Debes ${money(-net, g.moneda)}`;
                   const waiting = (payments.data ?? []).filter((p) => p.grupoId === g.id && p.estado === "reportado" && p.receptorId === usuario?.id).length;
                   return (
                     <Pressable

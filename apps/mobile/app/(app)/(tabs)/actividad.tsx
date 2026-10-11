@@ -15,9 +15,9 @@ import {
   palette,
 } from "../../../src/components/ui/Design";
 import { useResolverPago } from "../../../src/hooks/useGrupos";
-import { centavosASoles, type ActividadEvento } from "../../../src/types";
+import { type ActividadEvento } from "../../../src/types";
 
-const money = (value: number) => `S/ ${centavosASoles(value)}`;
+import { formatMoney as money } from "@junto/shared/currency";
 const when = (date: string) =>
   new Date(date).toLocaleString("es-PE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const time = (date: string) => new Date(date).toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
@@ -34,9 +34,9 @@ function dayLabel(date: string) {
 
 function impact(e: ActividadEvento) {
   if (e.tipo !== "gasto") return null;
-  if (e.pagaste && e.tuParte != null) return { text: `Pagaste · tu parte ${money(e.tuParte)}`, color: "#007B60" };
+  if (e.pagaste && e.tuParte != null) return { text: `Pagaste · tu parte ${money(e.tuParte, e.moneda)}`, color: "#007B60" };
   if (e.pagaste) return { text: "Pagaste · no participas", color: "#007B60" };
-  if (e.tuParte) return { text: `Tu parte ${money(e.tuParte)}`, color: palette.coral };
+  if (e.tuParte) return { text: `Tu parte ${money(e.tuParte, e.moneda)}`, color: palette.coral };
   return { text: "No participas", color: palette.muted };
 }
 
@@ -63,7 +63,7 @@ export default function Activity() {
     Alert.alert(
       received ? "¿Ya tienes el dinero?" : "¿No te llegó este pago?",
       received
-        ? `Confirma solo si ya ves ${money(event.monto)} en tu cuenta o lo recibiste en efectivo.`
+        ? `Confirma solo si ya ves ${money(event.monto, event.moneda)} en tu cuenta o lo recibiste en efectivo.`
         : "La deuda seguirá igual y la otra persona verá que no lo confirmaste.",
       [
         { text: "Cancelar", style: "cancel" },
@@ -110,14 +110,14 @@ export default function Activity() {
           {!!error && <ErrorBox message={error} />}
           {toAnswer.map((e) => e.apruebaComo === "administrador" ? (
             <Card key={e.id} style={{ backgroundColor: palette.lilac, borderColor: "#DCD0FF", padding: 14, gap: 8 }}>
-              <Label weight="bold" size={15}>{e.titulo} de {money(e.monto)}. ¿Lo apruebas?</Label>
+              <Label weight="bold" size={15}>{e.titulo} de {money(e.monto, e.moneda)}. ¿Lo apruebas?</Label>
               <Label size={12} color={palette.muted}>{e.detalle.split(" · ")[0]} · {when(e.fecha)}</Label>
               <Button compact title="Revisar comprobante" onPress={() => open(e)} />
             </Card>
           ) : (
             <Card key={e.id} style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", padding: 14, gap: 8 }}>
               <Label weight="bold" size={15}>
-                {e.titulo} {money(e.monto)}. ¿Lo recibiste?
+                {e.titulo} {money(e.monto, e.moneda)}. ¿Lo recibiste?
               </Label>
               <Label size={12} color={palette.muted}>{e.detalle.split(" · ")[0]} · {when(e.fecha)}</Label>
               <Pressable accessibilityRole="button" onPress={() => open(e)} style={{ minHeight: 44, justifyContent: "center" }}>
@@ -138,7 +138,7 @@ export default function Activity() {
             )}
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`${e.titulo}. ${money(e.monto)}. ${impact(e)?.text ?? ""}. ${e.detalle}. ${when(e.fecha)}`}
+              accessibilityLabel={`${e.titulo}. ${money(e.monto, e.moneda)}. ${impact(e)?.text ?? ""}. ${e.detalle}. ${when(e.fecha)}`}
               onPress={() => open(e)}
             >
               <Card style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14 }}>
@@ -151,7 +151,7 @@ export default function Activity() {
                   {impact(e) && <Label size={12} weight="bold" color={impact(e)!.color}>{impact(e)!.text}</Label>}
                   {e.tipo === "pago" && e.detalle.includes(" · ") && <Label size={12} color={palette.muted}>{e.detalle.split(" · ").slice(1).join(" · ")}</Label>}
                 </View>
-                <Label weight="extra" size={15}>{money(e.monto)}</Label>
+                <Label weight="extra" size={15}>{money(e.monto, e.moneda)}</Label>
               </Card>
             </Pressable>
             </React.Fragment>

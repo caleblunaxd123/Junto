@@ -1,3 +1,4 @@
+import { formatMoney } from "@junto/shared/currency";
 import { prisma } from "../lib/prisma";
 import { UserError } from "../domain/errors";
 import { sendPushNotification } from "../lib/firebase";
@@ -30,8 +31,8 @@ async function resolveTarget(userId: string, target: CommentTarget) {
     const gasto = await prisma.gasto.findUnique({ where: { id: target.gastoId }, select: { grupoId: true, activo: true, descripcion: true, creadoPor: true, pagadoPor: true } });
     if (gasto?.activo) found = { grupoId: gasto.grupoId, titulo: `«${gasto.descripcion}»`, involucrados: [gasto.creadoPor, gasto.pagadoPor] };
   } else {
-    const pago = await prisma.pago.findUnique({ where: { id: target.pagoId }, select: { grupoId: true, monto: true, pagadorId: true, receptorId: true } });
-    if (pago) found = { grupoId: pago.grupoId, titulo: `el pago de S/ ${(pago.monto / 100).toFixed(2)}`, involucrados: [pago.pagadorId, pago.receptorId] };
+    const pago = await prisma.pago.findUnique({ where: { id: target.pagoId }, select: { grupoId: true, monto: true, pagadorId: true, receptorId: true, grupo: { select: { moneda: true } } } });
+    if (pago) found = { grupoId: pago.grupoId, titulo: `el pago de ${formatMoney(pago.monto, pago.grupo.moneda)}`, involucrados: [pago.pagadorId, pago.receptorId] };
   }
   const member = found && await prisma.grupoMiembro.findFirst({ where: { grupoId: found.grupoId, usuarioId: userId, activo: true, grupo: { activo: true } }, select: { rol: true } });
   if (!found || !member) throw new UserError(target.grupoId ? "No encontramos este grupo." : target.gastoId ? "No encontramos este gasto." : "No encontramos este pago.", 404);

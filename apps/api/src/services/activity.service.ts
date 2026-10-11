@@ -57,8 +57,8 @@ export async function getActivity(userId: string, grupoId?: string) {
   const groupIds = memberships.map((member) => member.grupoId);
   const person = { select: { id: true, nombre: true } } as const;
   const [expenses, payments] = await Promise.all([
-    prisma.gasto.findMany({ where: { grupoId: { in: groupIds }, activo: true }, include: { creador: person, grupo: { select: { nombre: true } }, participantes: { where: { usuarioId: userId }, select: { montoAsignado: true } } }, orderBy: { fecha: 'desc' }, take: 80 }),
-    prisma.pago.findMany({ where: { grupoId: { in: groupIds } }, include: { pagador: person, receptor: person, resolutor: person, grupo: { select: { nombre: true } } }, orderBy: { fechaPago: 'desc' }, take: 80 }),
+    prisma.gasto.findMany({ where: { grupoId: { in: groupIds }, activo: true }, include: { creador: person, grupo: { select: { nombre: true, moneda: true } }, participantes: { where: { usuarioId: userId }, select: { montoAsignado: true } } }, orderBy: { fecha: 'desc' }, take: 80 }),
+    prisma.pago.findMany({ where: { grupoId: { in: groupIds } }, include: { pagador: person, receptor: person, resolutor: person, grupo: { select: { nombre: true, moneda: true } } }, orderBy: { fechaPago: 'desc' }, take: 80 }),
   ]);
   return [
     ...expenses.map((e) => ({
@@ -67,6 +67,7 @@ export async function getActivity(userId: string, grupoId?: string) {
       titulo: e.creadoPor === userId ? `Agregaste “${e.descripcion}”` : `${first(e.creador)} agregó “${e.descripcion}”`,
       detalle: e.grupo.nombre,
       monto: e.montoTotal,
+      moneda: e.grupo.moneda,
       fecha: e.fecha,
       grupoId: e.grupoId,
       gastoId: e.id,
@@ -83,6 +84,7 @@ export async function getActivity(userId: string, grupoId?: string) {
       // As who the viewer decides a waiting payment; null when it is not theirs to decide.
       apruebaComo: p.estado !== 'reportado' || p.pagadorId === userId ? null : p.receptorId === userId ? 'receptor' : approves.has(p.grupoId) ? 'administrador' : null,
       monto: p.monto,
+      moneda: p.grupo.moneda,
       fecha: p.fechaResolucion || p.fechaPago,
       grupoId: p.grupoId,
       gastoId: null,

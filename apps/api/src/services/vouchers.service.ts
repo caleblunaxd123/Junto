@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { transactionLock } from "../lib/transactionLock";
 import { UserError } from "../domain/errors";
-import { matchRecipient, readVoucher, type VoucherReading } from "../domain/voucher";
+import { matchRecipient, readPaymentVoucher, type VoucherReading } from "../domain/voucher";
 import { decodeImage, recognizeText, PSM } from "./ocr.service";
 
 export const VOUCHER_LIMITS = { per10Minutes: 10, perDay: 40, maxBytes: 3 * 1024 * 1024, draftHours: 24, keepImageDays: 180 };
@@ -46,11 +46,11 @@ async function read(buffer: Buffer): Promise<{ reading: VoucherReading | null; a
       failed: "No pudimos leer la imagen.",
     };
     const first = await recognizeText(buffer, [PSM.AUTO], messages);
-    let reading = readVoucher(first.texts[0]);
+    let reading = readPaymentVoucher(first.texts[0]);
     // Large amounts in colored headers sometimes need a second, sparse pass.
-    if (reading.monto === null && reading.moneda !== "USD") {
-      const second = readVoucher((await recognizeText(buffer, [PSM.SPARSE_TEXT], messages)).texts[0]);
-      if (second.monto !== null) {
+    if (reading.monto === null && !reading.candidatos.length && !reading.advertencias.some((a) => a.includes("distintas monedas"))) {
+      const second = readPaymentVoucher((await recognizeText(buffer, [PSM.SPARSE_TEXT], messages)).texts[0]);
+      if (second.monto !== null && (!reading.moneda || reading.moneda === second.moneda)) {
         reading = {
           ...second,
           app: reading.app ?? second.app,
@@ -76,7 +76,7 @@ async function read(buffer: Buffer): Promise<{ reading: VoucherReading | null; a
 export async function uploadVoucher(userId: string, input: { grupoId: string; imagen: string }) {
   const member = await prisma.grupoMiembro.findFirst({
     where: { grupoId: input.grupoId, usuarioId: userId, activo: true, grupo: { activo: true } },
-    select: { id: true },
+    select: { id: true, grupo: { select: { moneda: true } } },
   });
   if (!member) throw new UserError("No perteneces a este grupo.", 403);
 
@@ -115,6 +115,7 @@ export async function uploadVoucher(userId: string, input: { grupoId: string; im
     data: {
       app: reading?.app ?? null,
       montoLeido: reading?.monto ?? null,
+      monedaLeida: reading?.moneda ?? null,
       operacion: reading?.operacion ?? null,
       destinatarioLeido: reading?.destinatario ?? null,
       fechaLeida: reading?.fecha ? new Date(`${reading.fecha}T00:00:00Z`) : null,
@@ -127,6 +128,7 @@ export async function uploadVoucher(userId: string, input: { grupoId: string; im
     leido: !!reading,
     app: reading?.app ?? null,
     monto: reading?.monto ?? null,
+    moneda: reading?.moneda ?? null,
     candidatos: reading?.candidatos ?? [],
     operacion: reading?.operacion ?? null,
     destinatario: reading?.destinatario ?? null,

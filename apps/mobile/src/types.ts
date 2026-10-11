@@ -1,5 +1,7 @@
 // ─── Users ────────────────────────────────────────────────────────────────────
 
+import type { CurrencyCode, CountryCode } from "@junto/shared/currency";
+
 export interface Usuario {
   id: string;
   nombre: string;
@@ -51,6 +53,8 @@ export interface Grupo {
   nombre: string;
   descripcion?: string | null;
   tipo: GrupoTipo;
+  moneda?: CurrencyCode;
+  pais?: CountryCode | null;
   aprobacionPagos?: AprobacionPagos;
   /** "cobranza": someone paid and the rest pay back. "division": everyone puts in toward a goal. */
   modo?: "cobranza" | "division" | null;
@@ -117,7 +121,7 @@ export type ChatItem = ChatBase & (
   | { tipo: "creado" }
   | { tipo: "union"; parte: number | null; activo: boolean; sinCuenta?: boolean }
   | { tipo: "cuenta" | "gasto"; gastoId: string; descripcion: string; monto: number; pagador: ChatPersona; comentarios: number; tuParte: number | null; partes?: number; parte?: number; libres?: number }
-  | { tipo: "pago"; pagoId: string; monto: number; metodo: string | null; estado: string; receptor: ChatPersona; resolutor: ChatPersona | null; fechaResolucion: string | null; comentarios: number; apruebaComo: "receptor" | "administrador" | null }
+  | { tipo: "pago"; pagoId: string; monto: number; monedaOrigen?: CurrencyCode | null; montoOrigen?: number | null; tipoCambio?: string | null; metodo: string | null; estado: string; receptor: ChatPersona; resolutor: ChatPersona | null; fechaResolucion: string | null; comentarios: number; apruebaComo: "receptor" | "administrador" | null }
   | { tipo: "recordatorio"; para: ChatPersona; monto: number | null; aviso: string | null }
   | { tipo: "mensaje"; comentarioId: string; texto: string; eliminado: boolean; puedeEliminar: boolean }
 );
@@ -145,6 +149,7 @@ export interface GastoParticipante {
 }
 
 export interface Gasto {
+  grupo?: { moneda: CurrencyCode };
   id: string;
   grupoId: string;
   descripcion: string;
@@ -190,6 +195,11 @@ export type MetodoPago = "yape" | "plin" | "transferencia" | "efectivo";
 export type EstadoPago = "reportado" | "exitoso" | "rechazado" | "fallido" | "cancelado";
 
 export interface Pago {
+  fechaEfectiva?: string | null;
+  referenciaCambio?: { origen: CurrencyCode; destino: CurrencyCode; tasa: string; fecha: string; fuente: string } | null;
+  monedaOrigen?: CurrencyCode | null;
+  montoOrigen?: number | null;
+  tipoCambio?: string | null;
   nota?: string | null;
   fechaResolucion?: string | null;
   id: string;
@@ -204,7 +214,7 @@ export interface Pago {
   fechaPago: string;
   pagador: Pick<Usuario, "id" | "nombre" | "fotoUrl">;
   receptor: Pick<Usuario, "id" | "nombre" | "fotoUrl">;
-  grupo: Pick<Grupo, "id" | "nombre" | "aprobacionPagos">;
+  grupo: Pick<Grupo, "id" | "nombre" | "aprobacionPagos" | "moneda">;
   /** Who approved or rejected it (the receiver or an admin). */
   resueltoPor?: string | null;
   resolutor?: Pick<Usuario, "id" | "nombre"> | null;
@@ -228,6 +238,7 @@ export interface PagoDetalle extends Omit<Pago, "comprobante"> {
     id: string;
     app: string | null;
     montoLeido: number | null;
+    monedaLeida?: CurrencyCode | null;
     imagenDisponible: boolean;
     operacion?: string | null;
     destinatarioLeido?: string | null;
@@ -238,6 +249,7 @@ export interface PagoDetalle extends Omit<Pago, "comprobante"> {
 
 /** What JUNTO read from a Yape/Plin/transfer screenshot. Always a proposal to review. */
 export interface LecturaComprobante {
+  moneda?: CurrencyCode | null;
   comprobanteId: string;
   leido: boolean;
   app: MetodoPago | null;
@@ -285,6 +297,7 @@ export interface Recordatorio {
 // ─── Activity ─────────────────────────────────────────────────────────────────
 
 export interface ActividadEvento {
+  moneda?: CurrencyCode;
   id: string;
   tipo: "gasto" | "pago";
   titulo: string;

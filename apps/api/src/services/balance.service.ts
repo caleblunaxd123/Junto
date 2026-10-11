@@ -20,9 +20,18 @@ export async function resumenCuentasGrupo(grupoId: string, tx?: Prisma.Transacti
 }
 export async function calcularSaldosGrupo(grupoId: string, tx?: Prisma.TransactionClient): Promise<Saldo[]> { return (await resumenCuentasGrupo(grupoId, tx)).saldos; }
 export async function balancePersonal(usuarioId: string) {
-  const memberships = await prisma.grupoMiembro.findMany({ where: { usuarioId, activo: true, grupo: { activo: true } }, select: { grupoId: true } });
-  const balances = await Promise.all(memberships.map(({ grupoId }) => calcularSaldosGrupo(grupoId)));
-  const teDeben = balances.flat().filter((s) => s.acreedorId === usuarioId).reduce((sum, s) => sum + s.monto, 0);
-  const debes = balances.flat().filter((s) => s.deudorId === usuarioId).reduce((sum, s) => sum + s.monto, 0);
-  return { total: teDeben - debes, teDeben, debes };
+  const memberships = await prisma.grupoMiembro.findMany({ where: { usuarioId, activo: true, grupo: { activo: true } }, select: { grupoId: true, grupo: { select: { moneda: true } } } });
+  const balances = await Promise.all(memberships.map(async ({ grupoId, grupo }) => ({ moneda: grupo.moneda, saldos: await calcularSaldosGrupo(grupoId) })));
+  // Never add minor units from different currencies into a personal total.
+  const buckets = new Map<string, { moneda: string; teDeben: number; debes: number; total: number }>();
+  for (const { moneda, saldos } of balances) {
+    const bucket = buckets.get(moneda) ?? { moneda, teDeben: 0, debes: 0, total: 0 };
+    bucket.teDeben += saldos.filter((s) => s.acreedorId === usuarioId).reduce((sum, s) => sum + s.monto, 0);
+    bucket.debes += saldos.filter((s) => s.deudorId === usuarioId).reduce((sum, s) => sum + s.monto, 0);
+    bucket.total = bucket.teDeben - bucket.debes;
+    buckets.set(moneda, bucket);
+  }
+  const porMoneda = [...buckets.values()];
+  const single = porMoneda.length <= 1 ? porMoneda[0] ?? { moneda: 'PEN', total: 0, teDeben: 0, debes: 0 } : null;
+  return { porMoneda, moneda: single?.moneda ?? null, total: single?.total ?? null, teDeben: single?.teDeben ?? null, debes: single?.debes ?? null };
 }

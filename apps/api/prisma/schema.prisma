@@ -100,6 +100,9 @@ model Grupo {
   nombre          String    @db.VarChar(100)
   descripcion     String?   @db.Text
   tipo            String    @default("amigos") @db.VarChar(20)
+  // One immutable currency per ledger. Existing groups retain soles; their country is unknown.
+  moneda          String    @default("PEN") @db.Char(3)
+  pais            String?   @db.VarChar(5)
   creadoPor       String    @map("creado_por") @db.Uuid
   linkInvitacion  String?   @unique @map("link_invitacion") @db.VarChar(50)
   fechaCreacion   DateTime  @default(now()) @map("fecha_creacion")
@@ -164,11 +167,15 @@ model AvisoGrupo {
   fecha        DateTime @default(now())
   leido        Boolean  @default(false)
   parte        Int? // cents of the free part the newcomer took, if any
+  tipo         String   @default("integrante_unido") @db.VarChar(24)
+  pagoId       String?  @map("pago_id") @db.Uuid
+  pago         Pago?    @relation(fields: [pagoId], references: [id], onDelete: Cascade)
   grupo        Grupo    @relation(fields: [grupoId], references: [id], onDelete: Cascade)
   usuario      Usuario  @relation("AvisoDestinatario", fields: [usuarioId], references: [id], onDelete: Cascade)
   integrante   Usuario  @relation("AvisoIntegrante", fields: [integranteId], references: [id], onDelete: Cascade)
 
   @@index([usuarioId, leido, fecha])
+  @@unique([pagoId, usuarioId, tipo])
   @@map("avisos_grupo")
 }
 
@@ -225,6 +232,13 @@ model Pago {
   pagadorId       String    @map("pagador_id") @db.Uuid
   receptorId      String    @map("receptor_id") @db.Uuid
   monto           Int       // en centavos
+  // Evidence of an agreed conversion; only `monto` in the group's currency affects the ledger.
+  monedaOrigen    String?   @map("moneda_origen") @db.Char(3)
+  montoOrigen     Int?      @map("monto_origen")
+  tipoCambio      String?   @map("tipo_cambio") @db.VarChar(20)
+  fechaEfectiva   DateTime? @map("fecha_efectiva") @db.Date
+  referenciaCambioId String? @map("referencia_cambio_id") @db.Uuid
+  referenciaCambio CotizacionCambio? @relation(fields: [referenciaCambioId], references: [id])
   feejunto        Int?      @map("fee_junto") // en centavos
   metodo          String?   @db.VarChar(20)
   culqiChargeId   String?   @map("culqi_charge_id") @db.VarChar(100)
@@ -242,12 +256,28 @@ model Pago {
   resolutor       Usuario?  @relation("PagoResolutor", fields: [resueltoPor], references: [id])
   comprobante     Comprobante?
   comentarios     Comentario[]
+  avisos          AvisoGrupo[]
 
   @@index([pagadorId])
   // The ledger reads every payment of a group; approvers look up payments addressed to them.
   @@index([grupoId])
   @@index([receptorId])
   @@map("pagos")
+}
+
+// Immutable snapshots: refreshing a daily reference must never rewrite a past payment.
+model CotizacionCambio {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clave      String   @unique @db.VarChar(64)
+  origen     String   @db.Char(3)
+  destino    String   @db.Char(3)
+  fecha      DateTime @db.Date
+  tasa       String   @db.VarChar(20)
+  fuente     String   @db.VarChar(100)
+  consultada DateTime @default(now())
+  pagos      Pago[]
+
+  @@map("cotizaciones_cambio")
 }
 
 model Recordatorio {
@@ -340,6 +370,7 @@ model Comprobante {
   // What OCR read; the reported payment keeps the values the payer confirmed.
   app               String?   @db.VarChar(20)
   montoLeido        Int?      @map("monto_leido") // en centavos
+  monedaLeida       String?   @map("moneda_leida") @db.Char(3)
   operacion         String?   @db.VarChar(24)
   destinatarioLeido String?   @map("destinatario_leido") @db.VarChar(80)
   fechaLeida        DateTime? @map("fecha_leida") @db.Date

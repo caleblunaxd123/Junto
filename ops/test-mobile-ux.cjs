@@ -54,12 +54,14 @@ test("debts and receivables in different groups are not disguised as a single ba
     { grupoId: "foreign", estado: "reportado" },
   ];
   assert.deepEqual(accountSummary(groups, payments), {
+    byCurrency: [{ moneda: "PEN", owed: 6000, owes: 5000 }],
     owed: 6000,
     owes: 5000,
     current: 1,
     pending: [payments[0]],
   });
   assert.deepEqual(accountSummary([]), {
+    byCurrency: [{ moneda: "PEN", owed: 0, owes: 0 }],
     owed: 0,
     owes: 0,
     current: 0,

@@ -1,9 +1,9 @@
+import { formatMoney } from "@junto/shared/currency";
 import type { ShareMessage } from "./shareMessage";
 import { invitationUrl } from "./invitation";
-import { centavosASoles, type GrupoConBalance } from "../types";
+import { type GrupoConBalance } from "../types";
 
 type Member = GrupoConBalance["miembros"][number];
-const money = (cents: number) => `S/ ${centavosASoles(cents)}`;
 export const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 
 /** Added by name only: no JUNTO account yet. */
@@ -14,6 +14,7 @@ export const sinCuenta = (member: Pick<Member, "usuario">) => !!member.usuario.s
  * link, which lets them join as themselves and see the detail.
  */
 export function personalInvite(group: GrupoConBalance, member: Member, senderName: string): ShareMessage {
+  const money = (value: number) => formatMoney(value, group.moneda);
   const url = member.codigoPersonal ? invitationUrl(member.codigoPersonal) : "";
   const name = firstName(member.usuario.nombre);
   const owes = (group.resumen.saldos ?? []).filter((s) => s.deudorId === member.usuarioId);

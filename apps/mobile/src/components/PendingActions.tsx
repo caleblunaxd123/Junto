@@ -5,11 +5,10 @@ import { router } from "expo-router";
 import { AppDialog as Alert } from "./ui/AppDialog";
 import { Button, Card, Label, ErrorBox, palette } from "./ui/Design";
 import { useEnviarRecordatorio, useResolverPago } from "../hooks/useGrupos";
-import { centavosASoles } from "../types";
+import { formatMoney as money } from "@junto/shared/currency";
 import type { PendingAction } from "../lib/pending";
 import { errorMessage as serverMessage } from "../lib/errorMessage";
 
-const money = (value: number) => `S/ ${centavosASoles(value)}`;
 // The server explains what happened ("ya fue resuelto", "ya le recordaste hace poco"); a generic
 // connection message only when there is no answer at all.
 const methods: Record<string, string> = { yape: "Yape", plin: "Plin", transferencia: "transferencia", efectivo: "efectivo" };
@@ -25,7 +24,7 @@ export function PendingActions({ actions, showGroup = true }: { actions: Pending
     Alert.alert(
       received ? "¿Ya tienes el dinero?" : "¿No te llegó este pago?",
       received
-        ? `Confirma solo si ya ves ${money(action.monto)} en tu cuenta o lo recibiste en efectivo. La deuda bajará por ese monto.`
+        ? `Confirma solo si ya ves ${money(action.monto, action.moneda)} en tu cuenta o lo recibiste en efectivo. La deuda bajará por ese monto.`
         : `${action.persona} verá que no lo confirmaste y la deuda seguirá igual.`,
       [
         { text: "Cancelar", style: "cancel" },
@@ -45,7 +44,7 @@ export function PendingActions({ actions, showGroup = true }: { actions: Pending
   }
 
   function nudge(action: Extract<PendingAction, { kind: "cobrar" }>) {
-    Alert.alert("Recordar pago", `Le enviaremos a ${action.persona} un aviso amable por ${money(action.monto)}.`, [
+    Alert.alert("Recordar pago", `Le enviaremos a ${action.persona} un aviso amable por ${money(action.monto, action.moneda)}.`, [
       { text: "Cancelar", style: "cancel" },
       {
         text: "Enviar",
@@ -71,7 +70,7 @@ export function PendingActions({ actions, showGroup = true }: { actions: Pending
           return (
             <Card key={action.key} style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", padding: 14, gap: 8 }}>
               <Label weight="bold" size={15}>
-                {action.persona} dice que te pagó {money(action.monto)}
+                {action.persona} dice que te pagó {money(action.monto, action.moneda)}
                 {action.metodo ? ` por ${methods[action.metodo] ?? action.metodo}` : ""}. ¿Lo recibiste?
               </Label>
               {where}
@@ -91,7 +90,7 @@ export function PendingActions({ actions, showGroup = true }: { actions: Pending
           return (
             <Card key={action.key} style={{ backgroundColor: palette.lilac, borderColor: "#DCD0FF", padding: 14, gap: 8 }}>
               <Label weight="bold" size={15}>
-                {action.persona} registró un pago de {money(action.monto)} a {action.receptor}{action.conComprobante ? " con comprobante" : ""}. ¿Lo apruebas?
+                {action.persona} registró un pago de {money(action.monto, action.moneda)} a {action.receptor}{action.conComprobante ? " con comprobante" : ""}. ¿Lo apruebas?
               </Label>
               {where}
               <Button compact title={action.conComprobante ? "Revisar comprobante" : "Revisar pago"} accessibilityHint="Abre el pago para aprobarlo o rechazarlo" onPress={() => router.push(`/(app)/pagos/${action.pagoId}`)} />
@@ -102,7 +101,7 @@ export function PendingActions({ actions, showGroup = true }: { actions: Pending
             <Card key={action.key} style={{ backgroundColor: palette.blush, borderColor: "#F6D8DD", padding: 14, gap: 8 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                 <View style={{ flex: 1 }}>
-                  <Label weight="bold" size={15}>Debes {money(action.monto)} a {action.persona}</Label>
+                  <Label weight="bold" size={15}>Debes {money(action.monto, action.moneda)} a {action.persona}</Label>
                   {where}
                   {action.enEspera && <Label size={12} color={palette.muted}>Ya registraste un pago: falta que {action.persona} lo confirme.</Label>}
                   {!action.activo && <Label size={12} color={palette.muted}>Esta persona ya no está en el grupo.</Label>}
@@ -110,7 +109,7 @@ export function PendingActions({ actions, showGroup = true }: { actions: Pending
                 {!action.enEspera && action.activo && (
                   <Button
                     compact
-                    title="Pagar"
+                    title="Ya pagué"
                     accessibilityHint={`Registrar que le pagaste a ${action.persona}`}
                     onPress={() =>
                       router.push({ pathname: "/(app)/pagos/pagar", params: { grupoId: action.grupoId, acreedorId: action.personaId, nombre: action.nombreCompleto, monto: action.monto } })
@@ -125,7 +124,7 @@ export function PendingActions({ actions, showGroup = true }: { actions: Pending
           <Card key={action.key} style={{ backgroundColor: palette.mint, borderColor: "#BDEBD9", padding: 14, gap: 8 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
               <View style={{ flex: 1 }}>
-                <Label weight="bold" size={15}>{action.persona} te debe {money(action.monto)}</Label>
+                <Label weight="bold" size={15}>{action.persona} te debe {money(action.monto, action.moneda)}</Label>
                 {where}
                 {action.porConfirmar && <Label size={12} color={palette.muted}>Tiene un pago esperando tu confirmación arriba.</Label>}
                 {action.sinApp && <Label size={12} color="#8A5A00">Aún no tiene JUNTO</Label>}

@@ -11,7 +11,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
 export const api = createAxios({
   baseURL: `${API_URL}/api`,
   timeout: 15000,
-  headers: { "Content-Type": "application/json" },
+  headers: { "Content-Type": "application/json", "X-Junto-Currency-Version": "1" },
 });
 
 // Attach access token to every request

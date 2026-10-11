@@ -18,7 +18,7 @@ async function run() {
       const request = route.request(); const url = new URL(request.url());
       if (url.origin === 'http://127.0.0.1:8090') return route.continue();
       if (url.origin === 'https://junto.lunalav.pe' && url.pathname.startsWith('/api/')) {
-        const cors = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:8090', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE', 'Access-Control-Allow-Headers': 'authorization,content-type' };
+        const cors = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:8090', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE', 'Access-Control-Allow-Headers': 'authorization,content-type,x-junto-currency-version' };
         if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
         const result = await fetch('http://127.0.0.1:3033' + url.pathname + url.search, { method: request.method(), headers: { ...request.headers(), host: '127.0.0.1:3033' }, body: request.postData() || undefined });
         if (delayMessageResponse && request.method() === 'POST' && url.pathname.endsWith('/mensajes')) await new Promise(resolve => setTimeout(resolve, 1000));

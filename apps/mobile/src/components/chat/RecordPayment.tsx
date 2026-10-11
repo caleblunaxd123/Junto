@@ -1,11 +1,14 @@
+import { PaymentDate, todayLocal, validDate } from "../PaymentDate";
+import { PaymentExchange, resolveExchange, type ExchangeDraft } from "../PaymentExchange";
 import React, { useLayoutEffect, useState } from "react";
-import { Modal, Platform, Pressable, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar, Button, ErrorBox, Label, palette, design } from "../ui/Design";
 import { useResponsiveLayout } from "../ui/responsive";
-import { parseAmount } from "../../lib/billForm";
+import { parseMoney } from "../../lib/expensePreview";
 import { firstName } from "../../lib/members";
 import { centavosASoles } from "../../types";
+import { formatMoney, currencyInfo, type CurrencyCode, type PaymentConversion } from "@junto/shared/currency";
 
 const methods = [
   { id: "efectivo", label: "Efectivo" },
@@ -16,47 +19,54 @@ const methods = [
 export type Method = (typeof methods)[number]["id"];
 
 /** "Ana ya me pagó": the receiver records money already received; it counts at once. */
-export function RecordPayment({ person, receiver, max, onClose, onSave }: {
-  person: { id: string; nombre: string } | null; receiver?: { id: string; nombre: string }; max: number; onClose: () => void;
-  onSave: (monto: number, metodo: Method) => Promise<void>;
+export function RecordPayment({ person, receiver, moneda = "PEN", grupoId, max, onClose, onSave }: {
+  person: { id: string; nombre: string } | null; receiver?: { id: string; nombre: string }; max: number; moneda?: CurrencyCode; grupoId?: string; onClose: () => void;
+  onSave: (monto: number, metodo: Method, conversion?: PaymentConversion, fechaEfectiva?: string) => Promise<void>;
 }) {
+  const money = (value: number) => formatMoney(value, moneda);
   const { tablet } = useResponsiveLayout();
   const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(todayLocal);
+  const [exchange, setExchange] = useState<ExchangeDraft | null>(null);
+  const fx = resolveExchange(exchange, moneda);
   const [method, setMethod] = useState<Method>("efectivo");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [shown, setShown] = useState(false);
   // Initialize before paint: a fast first edit must not be overwritten by a delayed effect.
-  useLayoutEffect(() => { setAmount(max ? centavosASoles(max) : ""); setMethod("efectivo"); setError(""); }, [person?.id, receiver?.id, max]);
+  useLayoutEffect(() => { setAmount(max ? centavosASoles(max) : ""); setMethod("efectivo"); setExchange(null); setDate(todayLocal()); setError(""); }, [person?.id, receiver?.id, max]);
   useLayoutEffect(() => { setShown(false); }, [person?.id, receiver?.id]);
   if (!person) return null;
-  const cents = parseAmount(amount);
+  const cents = exchange ? fx.conversion?.monto ?? null : parseMoney(amount);
   const tooMuch = !!cents && cents > max;
   async function save() {
-    if (!cents || tooMuch || busy) return;
-    try { setBusy(true); setError(""); await onSave(cents, method); }
+    if (!cents || tooMuch || busy || !validDate(date)) return;
+    try { setBusy(true); setError(""); await onSave(cents, method, fx.conversion ? { monedaOrigen: fx.conversion.monedaOrigen, montoOrigen: fx.conversion.montoOrigen, tipoCambio: fx.conversion.tipoCambio, cotizacionId: fx.conversion.cotizacionId } : undefined, date); }
     catch (err) { setError(err instanceof Error ? err.message : "No pudimos registrar el pago. Reintenta."); }
     finally { setBusy(false); }
   }
   return (
     <Modal transparent statusBarTranslucent navigationBarTranslucent visible animationType={Platform.OS === "web" ? "none" : "slide"} onShow={() => setShown(true)} onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: tablet ? "center" : "flex-end", alignItems: tablet ? "center" : "stretch", padding: tablet ? 24 : 0, backgroundColor: "#08264466" }}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, justifyContent: tablet ? "center" : "flex-end", alignItems: tablet ? "center" : "stretch", padding: tablet ? 24 : 0, backgroundColor: "#08264466" }}>
         <Pressable accessibilityRole="button" accessibilityLabel="Cerrar" onPress={onClose} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
-        <SafeAreaView edges={["bottom"]} style={{ width: "100%", maxWidth: tablet ? 520 : undefined, borderRadius: tablet ? 28 : undefined, backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 14 }}>
+        <SafeAreaView edges={["bottom"]} style={{ width: "100%", maxWidth: tablet ? 520 : undefined, borderRadius: tablet ? 28 : undefined, backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "90%" }}>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 14 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
             <Avatar name={person.nombre} seed={person.id} size={44} />
             <View style={{ flex: 1 }}>
               <Label accessibilityRole="header" size={20} weight="extra">{receiver ? `${firstName(person.nombre)} pagó a ${firstName(receiver.nombre)}` : `${firstName(person.nombre)} ya te pagó`}</Label>
-              <Label size={13} color={palette.muted}>{receiver ? `Le debe a ${firstName(receiver.nombre)}` : "Te debe"} S/ {centavosASoles(max)}. Queda confirmado al guardar.</Label>
+              <Label size={13} color={palette.muted}>{receiver ? `Le debe a ${firstName(receiver.nombre)}` : "Te debe"} {money(max)}. Queda confirmado al guardar.</Label>
             </View>
           </View>
           <View style={[design.input, { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 0, borderColor: tooMuch || (amount && !cents) ? palette.coral : "#D3DDEA" }]}>
-            <Label size={22} weight="extra" color={palette.muted}>S/</Label>
-            <TextInput accessibilityLabel="Monto que recibiste" value={amount} onChangeText={setAmount} editable={shown && !busy} keyboardType="decimal-pad" maxLength={13} style={{ flex: 1, minHeight: 56, fontSize: 24, fontWeight: "800", color: palette.ink }} />
+            <Label size={22} weight="extra" color={palette.muted}>{currencyInfo(moneda).symbol}</Label>
+            <TextInput accessibilityLabel="Monto que recibiste" value={exchange ? (fx.conversion ? centavosASoles(fx.conversion.monto) : "") : amount} onChangeText={setAmount} editable={shown && !busy && !exchange} keyboardType="decimal-pad" maxLength={13} style={{ flex: 1, minHeight: 56, fontSize: 24, fontWeight: "800", color: palette.ink }} />
           </View>
-          {tooMuch && <Label size={12} color={palette.coral}>No puede ser más de lo que {receiver ? `debe a ${firstName(receiver.nombre)}` : "te debe"} (S/ {centavosASoles(max)}).</Label>}
+          {tooMuch && <Label size={12} color={palette.coral}>No puede ser más de lo que {receiver ? `debe a ${firstName(receiver.nombre)}` : "te debe"} ({money(max)}).</Label>}
+          <PaymentDate value={date} onChange={(next) => { setDate(next); if (exchange) setExchange({ ...exchange, cotizacionId: undefined }); }} disabled={busy} />
+          <PaymentExchange received grupoId={grupoId} fecha={date} value={exchange} onChange={(draft) => { setExchange(draft); if (draft) setMethod("transferencia"); }} target={moneda} disabled={!shown || busy} />
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {methods.map((m) => (
+            {methods.filter((m) => (exchange?.monedaOrigen ?? moneda) === "PEN" || m.id === "efectivo" || m.id === "transferencia").map((m) => (
               <Pressable key={m.id} accessibilityRole="radio" accessibilityState={{ checked: method === m.id }} accessibilityLabel={m.label} onPress={() => setMethod(m.id)}
                 style={{ minHeight: 42, paddingHorizontal: 14, borderRadius: 21, justifyContent: "center", borderWidth: 1.5, borderColor: method === m.id ? palette.primary : palette.line, backgroundColor: method === m.id ? palette.mint : "white" }}>
                 <Label size={13} weight="bold" color={method === m.id ? "#007B60" : palette.ink}>{m.label}</Label>
@@ -65,10 +75,11 @@ export function RecordPayment({ person, receiver, max, onClose, onSave }: {
           </View>
           {receiver && <Label size={13} color={palette.purple}>Lo registras como administrador por alguien sin cuenta. Confirma con {firstName(receiver.nombre)} que recibió el dinero antes de guardar.</Label>}
           {!!error && <ErrorBox message={error} />}
-          <Button title="Guardar pago recibido" loading={busy} disabled={!shown || !cents || tooMuch} onPress={() => { void save(); }} />
-          <Button title="Cancelar" secondary onPress={onClose} />
+          <Button title="Guardar pago recibido" loading={busy} disabled={!shown || !cents || tooMuch || !validDate(date)} onPress={() => { void save(); }} />
+          <Button title="Cancelar" secondary disabled={busy} onPress={onClose} />
+          </ScrollView>
         </SafeAreaView>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

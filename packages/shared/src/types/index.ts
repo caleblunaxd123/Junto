@@ -42,6 +42,8 @@ export interface Grupo {
   nombre: string;
   descripcion?: string | null;
   tipo: GrupoTipo;
+  moneda?: import("../../currency").CurrencyCode;
+  pais?: import("../../currency").CountryCode | null;
   creadoPor: string;
   linkInvitacion?: string | null;
   fechaCreacion: string;

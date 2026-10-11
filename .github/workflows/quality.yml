@@ -13,6 +13,7 @@ jobs:
       - run: npx prisma generate --schema apps/api/prisma/schema.prisma
       - run: npm run test --workspace=apps/api
       - run: node ops/test-mobile-ux.cjs
+      - run: node --test ops/test-currency.cjs
       - run: node ops/test-release-config.cjs
       - run: node --test ops/test-dialogs.cjs
       - run: node --test ops/test-bill-validation.cjs
@@ -87,4 +88,6 @@ jobs:
           node ops/test-members-by-name.cjs || (cat api.log && exit 1)
           node ops/test-group-imports.cjs || (cat api.log && exit 1)
           node ops/test-admin-received.cjs || (cat api.log && exit 1)
+          node ops/test-currency-api.cjs || (cat api.log && exit 1)
+          node ops/test-payment-flow.cjs || (cat api.log && exit 1)
           node ops/test-ledger-concurrency.cjs || (cat api.log && exit 1)

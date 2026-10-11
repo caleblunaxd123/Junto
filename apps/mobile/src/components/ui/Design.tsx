@@ -71,11 +71,13 @@ export function Label({
 export function Card({
   children,
   style,
+  testID,
 }: {
   children: React.ReactNode;
   style?: ViewStyle;
+  testID?: string;
 }) {
-  return <View style={[design.card, style]}>{children}</View>;
+  return <View testID={testID} style={[design.card, style]}>{children}</View>;
 }
 export function Button({
   title,

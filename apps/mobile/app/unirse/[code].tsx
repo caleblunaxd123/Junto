@@ -1,3 +1,4 @@
+import { formatMoney, type CurrencyCode } from "@junto/shared/currency";
 import React, { useState } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
@@ -8,7 +9,7 @@ import { useAuthStore } from "../../src/store/auth.store";
 import { api } from "../../src/lib/api";
 import { queryClient } from "../../src/lib/queryClient";
 import { errorMessage } from "../../src/lib/errorMessage";
-import { centavosASoles, type PartesAlUnirse } from "../../src/types";
+import { type PartesAlUnirse } from "../../src/types";
 import { JoinParts } from "../../src/components/JoinParts";
 import { modeWords } from "../../src/lib/groupMode";
 import {
@@ -22,7 +23,7 @@ import {
 } from "../../src/components/ui/Design";
 
 type Preview = {
-  nombre: string; tipo: string; modo?: string | null; miembros: number;
+  nombre: string; moneda?: CurrencyCode; tipo: string; modo?: string | null; miembros: number;
   // Personal link of someone added by name: who you are in the group and where you stand.
   personal?: { nombre: string; debes: number; teDeben: number } | null;
   // With the shared link: names you may say you are.
@@ -30,7 +31,6 @@ type Preview = {
   partesAlUnirse?: PartesAlUnirse;
   cuenta?: { descripcion: string; montoTotal: number; partes: number; parte: number; libres: number; pagadorNombre: string } | null;
 };
-const money = (cents: number) => `S/ ${centavosASoles(cents)}`;
 const first = (name: string) => name.trim().split(/\s+/)[0] || name;
 
 export default function Join() {
@@ -54,6 +54,7 @@ export default function Join() {
       setError("Este enlace no es válido. Pide una nueva invitación.");
     }
   }
+  const money = (value: number) => formatMoney(value, preview.data?.moneda);
   const names = preview.data?.personal ? [] : preview.data?.sinApp ?? [];
   const mustChoose = names.length > 0 && como === undefined;
   async function join() {
@@ -99,7 +100,7 @@ export default function Join() {
                       {(personal.debes > 0 || personal.teDeben > 0) && <Label size={28} weight="extra">{money(personal.debes || personal.teDeben)}</Label>}
                       <Label size={13}>Te agregaron como «{personal.nombre}». Al unirte verás cada gasto y podrás registrar tus pagos.</Label>
                     </Card>
-                  ) : preview.data.partesAlUnirse?.cuentas.length ? <JoinParts parts={preview.data.partesAlUnirse} division={modeWords(preview.data.modo).division} /> : preview.data.cuenta ? (
+                  ) : preview.data.partesAlUnirse?.cuentas.length ? <JoinParts moneda={preview.data.moneda} parts={preview.data.partesAlUnirse} division={modeWords(preview.data.modo).division} /> : preview.data.cuenta ? (
                     <Card style={{ backgroundColor: "#E7FBF3", gap: 4 }}>
                       <Label size={13} weight="bold" color="#007B60">TU PARTE</Label>
                       <Label size={28} weight="extra">{money(preview.data.cuenta.parte)}</Label>

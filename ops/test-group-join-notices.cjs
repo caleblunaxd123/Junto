@@ -65,7 +65,7 @@ async function run() {
     detail = await call(`/grupos/${group.id}`, owner);
     assert.equal(detail.resumen.cuentas.find(a => a.usuarioId === newcomer.usuario.id).tuParte, 0);
     assert.equal(detail.resumen.cuentas.find(a => a.usuarioId === ana.usuario.id).tuParte, 10000);
-    assert.equal((await call('/notificaciones', owner)).length, 5);
+    assert.equal((await call('/notificaciones', owner)).filter(n => n.tipo === 'integrante_unido').length, 5);
     // This exact fictional fixture is used by optional browser QA, never logged with tokens.
     if (process.env.JUNTO_QA_GROUP_FIXTURE === 'true') {
       const fs = require('node:fs'); const path = require('node:path');

@@ -6,9 +6,9 @@ import { Avatar, Button, Label, palette } from "../ui/Design";
 import { avatarColors } from "../../lib/people";
 import { modeWords } from "../../lib/groupMode";
 import { isEmojiMessage } from "../../lib/chatExpressions";
-import { centavosASoles, type ChatItem } from "../../types";
+import { type ChatItem } from "../../types";
 
-const money = (cents: number) => `S/ ${centavosASoles(cents)}`;
+import { formatMoney, type CurrencyCode } from "@junto/shared/currency";
 const methods: Record<string, string> = { yape: "Yape", plin: "Plin", transferencia: "transferencia", efectivo: "efectivo" };
 const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 // WhatsApp's palette: people already know how to read it.
@@ -43,11 +43,12 @@ function Bubble({ item, children, onPress, label, showAuthor, wide = false }: { 
   );
 }
 
-export function ChatBubble({ item, meId, modo, showAuthor, onAnswer, busy, onDelete }: {
-  item: ChatItem; meId?: string; modo?: string | null; showAuthor: boolean; busy: boolean;
+export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAnswer, busy, onDelete }: {
+  item: ChatItem; meId?: string; modo?: string | null; moneda?: CurrencyCode; showAuthor: boolean; busy: boolean;
   onAnswer: (pagoId: string, persona: string, monto: number, received: boolean) => void;
   onDelete: (comentarioId: string) => void;
 }) {
+  const money = (value: number) => formatMoney(value, moneda);
   const who = (person: { id: string; nombre: string }) => (person.id === meId ? "tú" : firstName(person.nombre));
   const Who = (person: { id: string; nombre: string }) => (person.id === meId ? "Tú" : firstName(person.nombre));
   const words = modeWords(modo);
@@ -114,6 +115,7 @@ export function ChatBubble({ item, meId, modo, showAuthor, onAnswer, busy, onDel
             <Label size={12} weight="bold" color="#007B60">{words.paymentUpper}{item.metodo ? ` · ${(methods[item.metodo] ?? item.metodo).toUpperCase()}` : ""}</Label>
           </View>
           <Label weight="extra" size={22}>{money(item.monto)}</Label>
+          {!!item.monedaOrigen && !!item.montoOrigen && !!item.tipoCambio && <Label size={12} color={palette.muted}>Pagó {formatMoney(item.montoOrigen, item.monedaOrigen)} · Cambio acordado: 1 {item.monedaOrigen} = {item.tipoCambio} {moneda}.</Label>}
           <Label size={13} color={palette.muted}>para {whom(item.receptor)}</Label>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
             <Ionicons name={status.icon} size={15} color={status.color} />

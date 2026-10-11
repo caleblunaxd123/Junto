@@ -62,6 +62,16 @@ export async function authMiddleware(
       return;
     }
     req.user = payload;
+    // Older APKs hard-code soles: never let them mislabel a foreign-currency ledger.
+    // Authentication and account settings remain available to update safely.
+    if (req.baseUrl !== '/api/auth' && req.get('X-Junto-Currency-Version') !== '1' && (
+      (typeof req.body?.moneda === 'string' && req.body.moneda !== 'PEN') ||
+      await prisma.grupoMiembro.count({ where: { usuarioId: payload.userId, grupo: { moneda: { not: 'PEN' } } } }) ||
+      await prisma.invitacion.count({ where: { invitadoId: payload.userId, estado: 'pendiente', grupo: { moneda: { not: 'PEN' } } } })
+    )) {
+      res.status(426).json({ error: 'Este grupo usa otra moneda. Actualiza JUNTO a la versión 1.3.0 o entra desde junto.lunalav.pe/app para ver los montos correctamente.' });
+      return;
+    }
     next();
   } catch (error) {
     next(error);

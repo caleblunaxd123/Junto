@@ -49,8 +49,10 @@ export async function interpretarGasto(
 ) {
   const membership = await prisma.grupoMiembro.findFirst({
     where: { grupoId: input.grupoId, usuarioId: userId, activo: true },
+    include: { grupo: { select: { moneda: true } } },
   });
   if (!membership) throw new AiServiceError("No perteneces a este grupo", 403);
+  if (membership.grupo.moneda !== 'PEN') throw new AiServiceError('El asistente de texto interpreta soles por ahora. En este grupo escribe el monto y el reparto manualmente; no se convertirá a soles.', 422);
 
   const members = await prisma.grupoMiembro.findMany({
     where: { grupoId: input.grupoId, activo: true },

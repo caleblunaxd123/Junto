@@ -1,3 +1,5 @@
+import { PaymentDate, todayLocal, validDate } from "../../../src/components/PaymentDate";
+import { PaymentExchange, resolveExchange, type ExchangeDraft } from "../../../src/components/PaymentExchange";
 import React, { useEffect, useRef, useState } from "react";
 import { useIsFocused } from "@react-navigation/native";
 import { ActivityIndicator, Image, Pressable, TextInput, View } from "react-native";
@@ -19,7 +21,7 @@ import { payableLimit } from "@junto/shared/payable";
 import { pickVoucherImage } from "../../../src/lib/voucherPicker";
 import { peekSharedVoucher, readSharedVoucher, takeSharedVoucher } from "../../../src/lib/sharedVoucher";
 
-const money = (value: number) => `S/ ${centavosASoles(value)}`;
+import { formatMoney, currencyInfo } from "@junto/shared/currency";
 const methods: { id: MetodoPago; name: string; icon: keyof typeof Ionicons.glyphMap; color: string }[] = [
   { id: "yape", name: "Yape", icon: "phone-portrait", color: "#7821AF" },
   { id: "plin", name: "Plin", icon: "phone-portrait", color: "#00BACB" },
@@ -37,6 +39,11 @@ export default function Payment() {
 
   const [creditorId, setCreditorId] = useState<string | null>(params.acreedorId || null);
   const [typed, setTyped] = useState<string | null>(null);
+  const moneda = group?.moneda ?? "PEN";
+  const money = (value: number) => formatMoney(value, moneda);
+  const [date, setDate] = useState(todayLocal);
+  const [exchange, setExchange] = useState<ExchangeDraft | null>(null);
+  const fx = resolveExchange(exchange, moneda);
   const [method, setMethod] = useState<MetodoPago | null>(null);
   const [note, setNote] = useState("");
   const [image, setImage] = useState<{ uri: string; base64: string } | null>(null);
@@ -51,7 +58,7 @@ export default function Payment() {
   // A new person or group starts a clean form.
   useEffect(() => {
     setCreditorId(params.acreedorId || null);
-    setTyped(null); setMethod(null); setNote(""); setImage(null); setLectura(null);
+    setTyped(null); setExchange(null); setDate(todayLocal()); setMethod(null); setNote(""); setImage(null); setLectura(null);
     setVoucherError(""); setError(""); setReported(null);
   }, [grupoId, params.acreedorId]);
 
@@ -83,19 +90,21 @@ export default function Payment() {
   // Without a voucher, propose the suggested transfer (what the row says you owe this person).
   const edge = creditors.find((c) => c.acreedorId === selected)?.monto ?? 0;
   const suggested = lectura?.monto && lectura.monto <= limit ? lectura.monto : Math.min(limit, edge || limit);
-  const amountText = typed ?? (suggested ? centavosASoles(suggested) : "");
-  const value = parseMoney(amountText) || 0;
-  const effectiveMethod: MetodoPago = method ?? lectura?.app ?? "yape";
+  const baseAmountText = typed ?? (suggested ? centavosASoles(suggested) : "");
+  const amountText = exchange ? (fx.conversion ? centavosASoles(fx.conversion.monto) : "") : baseAmountText;
+  const value = exchange ? fx.conversion?.monto ?? 0 : parseMoney(amountText) || 0;
+  const paymentCurrency = exchange?.monedaOrigen ?? moneda;
+  const effectiveMethod: MetodoPago = method ?? lectura?.app ?? (paymentCurrency === "PEN" ? "yape" : "transferencia");
   const creditorMember = group?.miembros.find((m) => m.usuarioId === selected);
   const phone = creditorMember?.usuario.celular && /^9\d{8}$/.test(creditorMember.usuario.celular) ? creditorMember.usuario.celular : null;
-  const admins = group?.aprobacionPagos === "administrador"
-    ? (group.miembros ?? []).filter((m) => m.rol === "admin" && m.usuarioId !== user?.id && m.usuarioId !== selected).map((m) => nombre(m.usuarioId))
+  const admins = (group?.aprobacionPagos === "administrador" || !!creditorMember?.usuario.sinCuenta)
+    ? (group?.miembros ?? []).filter((m) => m.rol === "admin" && m.usuarioId !== user?.id && m.usuarioId !== selected).map((m) => nombre(m.usuarioId))
     : [];
 
   const waiting = history.data?.find((p) => p.grupoId === grupoId && p.pagadorId === user?.id && p.receptorId === selected && p.estado === "reportado");
   const done = reported ?? waiting ?? null;
 
-  const checks = voucherChecks({ lectura, monto: value || null, limite: limit, receptorId: selected, nombre, acreedores: creditors.map((c) => c.acreedorId) });
+  const checks = voucherChecks({ lectura, moneda: paymentCurrency, monedaGrupo: moneda, monto: exchange ? fx.conversion?.montoOrigen ?? null : value || null, limite: limit, receptorId: selected, nombre, acreedores: creditors.map((c) => c.acreedorId) });
 
   async function pick(camera: boolean) {
     if (reading || busy) return;
@@ -114,8 +123,11 @@ export default function Payment() {
     try {
       const { data } = await api.post<LecturaComprobante>("/pagos/comprobantes", { grupoId, imagen: base64 }, { timeout: 60_000 });
       setLectura(data);
+      if (data.fecha && validDate(data.fecha)) setDate(data.fecha);
       setTyped(null);
-      setMethod(null);
+      setMethod(data.app ?? null);
+      if (data.moneda && data.moneda !== moneda) setExchange({ monedaOrigen: data.moneda, amount: data.monto ? centavosASoles(data.monto) : "", rate: "" });
+      else setExchange(null);
       // The voucher names someone you owe: pick them, unless you already chose.
       if (!creditorId && data.sugerenciaReceptorId && creditors.some((c) => c.acreedorId === data.sugerenciaReceptorId)) setCreditorId(data.sugerenciaReceptorId);
     } catch (err) {
@@ -145,14 +157,14 @@ export default function Payment() {
       void pick(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.subir, params.compartido, group, done, creditors.length]);
+  }, [params.subir, params.compartido, group, done, creditors.length, exchange]);
 
   function removeVoucher() {
-    setImage(null); setLectura(null); setVoucherError(""); setTyped(null); setMethod(null);
+    setImage(null); setLectura(null); setVoucherError(""); setTyped(null); setExchange(null); setMethod(null);
   }
 
   async function submit() {
-    if (busy || reading || !selected || !group || value <= 0 || value > limit || blocksSending(checks) || history.isPending || history.isError) return;
+    if (busy || reading || !validDate(date) || !selected || !group || value <= 0 || value > limit || blocksSending(checks) || history.isPending || history.isError) return;
     setBusy(true);
     setError("");
     try {
@@ -160,12 +172,13 @@ export default function Payment() {
         receptorId: selected,
         grupoId,
         monto: value,
+        fechaEfectiva: date, ...(fx.conversion ? { conversion: { monedaOrigen: fx.conversion.monedaOrigen, montoOrigen: fx.conversion.montoOrigen, tipoCambio: fx.conversion.tipoCambio, cotizacionId: fx.conversion.cotizacionId } } : {}),
         metodo: effectiveMethod,
         nota: note.trim() || undefined,
         comprobanteId: lectura?.comprobanteId,
       });
       setReported(data);
-      await Promise.all(["pagos", "actividad", "grupos"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
+      await Promise.all(["pagos", "actividad", "grupos", "chat", "notificaciones"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
     } catch (err) {
       setError(errorText(err, "No pudimos registrar el pago. Reintenta."));
       // It may have been saved before the answer was lost: refresh so an existing report shows up.
@@ -213,7 +226,7 @@ export default function Payment() {
       <Screen title="Registrar pago" subtitle={group.nombre} back>
         <Card style={{ backgroundColor: palette.mint, gap: 8 }}>
           <Label weight="bold" size={16}>No le debes nada a nadie en este grupo</Label>
-          <Label size={13}>Cuando debas algo, aquí podrás subir tu comprobante de Yape o Plin para que lo aprueben.</Label>
+          <Label size={13}>Cuando debas algo, aquí podrás registrar tu pago para que quien recibe lo confirme.</Label>
         </Card>
         {params.compartido === "1" && !!peekSharedVoucher() && (
           <Button title="Elegir otro grupo para la imagen" onPress={() => router.replace("/(app)/pagos/compartido")} />
@@ -222,7 +235,7 @@ export default function Payment() {
       </Screen>
     );
 
-  const canSend = !!selected && value > 0 && value <= limit && !reading && !blocksSending(checks) && !history.isPending && !history.isError;
+  const canSend = validDate(date) && !!selected && value > 0 && value <= limit && !reading && !blocksSending(checks) && !history.isPending && !history.isError;
   return (
     <Screen
       title="Registrar pago"
@@ -232,15 +245,15 @@ export default function Payment() {
       footer={
         <>
           {!!error && <ErrorBox message={error} />}
-          <Button title={lectura ? "Enviar para aprobación" : "Registrar pago"} loading={busy} disabled={!canSend} onPress={submit} />
+          <Button title={"Avisar que ya pagué"} loading={busy} disabled={!canSend} onPress={submit} />
           {!!selected && <Label size={11} color={palette.muted}>{approvalSentence(nombre(selected), admins)} Tu deuda baja cuando lo aprueban.</Label>}
         </>
       }
     >
-      <Label size={13} color={palette.muted}>JUNTO no mueve dinero: pagas por Yape, Plin o como acuerden, y aquí lo registras para que lo aprueben.</Label>
+      <Label size={13} color={palette.muted}>Primero paga por fuera, por Yape, Plin, efectivo o transferencia. Después registra aquí lo que ya pagaste: avisaremos a quien recibe para que lo confirme. JUNTO no mueve dinero.</Label>
 
       {/* 1. Who */}
-      <Label accessibilityRole="header" weight="extra" size={18}>{creditors.length > 1 ? "1. ¿A quién le pagaste?" : "1. Le pagas a"}</Label>
+      <Label accessibilityRole="header" weight="extra" size={18}>{creditors.length > 1 ? "1. ¿A quién le pagaste?" : "1. Le pagaste a"}</Label>
       <View style={{ gap: 8 }}>
         {creditors.map((c) => {
           const active = c.acreedorId === selected;
@@ -250,7 +263,7 @@ export default function Payment() {
               accessibilityRole="radio"
               accessibilityState={{ checked: active }}
               accessibilityLabel={`${nombre(c.acreedorId)}. Le debes ${money(c.monto)}`}
-              onPress={() => { setCreditorId(c.acreedorId); setTyped(null); }}
+              onPress={() => { setCreditorId(c.acreedorId); setTyped(null); setExchange(null); }}
               style={[design.card, { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderWidth: 1.5, borderColor: active ? palette.primary : palette.line, backgroundColor: active ? palette.mint : "white" }]}
             >
               <Avatar name={c.acreedorNombre} seed={c.acreedorId} size={42} />
@@ -263,7 +276,7 @@ export default function Payment() {
           );
         })}
       </View>
-      {!!selected && (phone ? (
+      {paymentCurrency === "PEN" && !!selected && (phone ? (
         <Card style={{ padding: 12, gap: 2 }}>
           <Label size={12} color={palette.muted}>Yape o Plin de {nombre(selected)}</Label>
           <Label selectable accessibilityLabel={`Número de ${nombre(selected)}: ${phone.split("").join(" ")}`} size={22} weight="extra" style={{ letterSpacing: 1 }}>
@@ -275,25 +288,29 @@ export default function Payment() {
         <Label size={12} color={palette.muted}>{nombre(selected)} no registró su celular en JUNTO. Pídele su número de Yape o Plin, o paga en efectivo.</Label>
       ))}
 
+      <PaymentDate value={date} onChange={(next) => { setDate(next); if (exchange) setExchange({ ...exchange, cotizacionId: undefined }); }} disabled={busy || reading} />
+      <PaymentExchange grupoId={grupoId} fecha={date} value={exchange} onChange={(draft) => { setExchange(draft); setMethod((draft?.monedaOrigen ?? moneda) === "PEN" ? null : "transferencia"); }} target={moneda} disabled={busy || reading} />
+      {/* The reader proposes the original currency; conversion remains an explicit reviewed choice. */}
+      <>
       {/* 2. Voucher */}
       <Label accessibilityRole="header" weight="extra" size={18}>2. Comprobante</Label>
       {!image ? (
         <>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Subir la captura de tu Yape o Plin"
+            accessibilityLabel="Subir comprobante del pago"
             accessibilityHint="Abre tu galería. JUNTO lee el monto y el número de operación."
             onPress={() => pick(false)}
             style={{ borderWidth: 1.5, borderStyle: "dashed", borderColor: palette.purple, borderRadius: 20, padding: 18, alignItems: "center", gap: 6, backgroundColor: palette.lilac }}
           >
             <Ionicons name="cloud-upload-outline" size={34} color={palette.purple} />
-            <Label weight="extra" size={16} color={palette.purple}>Subir captura de Yape o Plin</Label>
+            <Label weight="extra" size={16} color={palette.purple}>Subir comprobante del pago</Label>
             <Label size={12} color={palette.muted} style={{ textAlign: "center" }}>Leemos el monto, la fecha y el número de operación. Tú revisas antes de enviar.</Label>
           </Pressable>
           <View style={{ flexDirection: "row", gap: 8 }}>
             <View style={{ flex: 1 }}><Button compact secondary title="Tomar foto" onPress={() => pick(true)} /></View>
           </View>
-          <Label size={11} color={palette.muted}>¿Te llegó por WhatsApp? Guárdala en tu galería y elígela aquí. ¿Pagaste en efectivo? Puedes registrarlo sin comprobante.</Label>
+          <Label size={11} color={palette.muted}>Sube tu comprobante JPG/PNG de transferencia o billetera. La lectura es una propuesta, no una verificación bancaria. ¿Pagaste en efectivo? Puedes registrarlo sin captura.</Label>
         </>
       ) : (
         <Card style={{ flexDirection: "row", gap: 12, padding: 12 }}>
@@ -307,12 +324,12 @@ export default function Payment() {
             ) : lectura ? (
               <>
                 <Label weight="bold" size={14}>{lectura.leido ? "Esto leímos" : "Comprobante adjunto"}</Label>
-                {lectura.monto != null && <Label size={13}>Monto: <Label size={13} weight="bold">{money(lectura.monto)}</Label></Label>}
+                {lectura.monto != null && <Label size={13}>Monto: <Label size={13} weight="bold">{formatMoney(lectura.monto, lectura.moneda ?? paymentCurrency)}</Label></Label>}
                 {lectura.monto == null && lectura.candidatos.length > 1 && (
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
                     {lectura.candidatos.map((c) => (
-                      <Pressable key={c} accessibilityRole="button" accessibilityLabel={`Usar ${money(c)}`} onPress={() => setTyped(centavosASoles(c))} style={{ paddingHorizontal: 12, minHeight: 44, justifyContent: "center", borderRadius: 12, backgroundColor: palette.lilac }}>
-                        <Label size={12} weight="bold" color={palette.purple}>{money(c)}</Label>
+                      <Pressable key={c} accessibilityRole="button" accessibilityLabel={`Usar ${formatMoney(c, lectura.moneda ?? paymentCurrency)}`} onPress={() => exchange ? setExchange({ ...exchange, amount: centavosASoles(c) }) : setTyped(centavosASoles(c))} style={{ paddingHorizontal: 12, minHeight: 44, justifyContent: "center", borderRadius: 12, backgroundColor: palette.lilac }}>
+                        <Label size={12} weight="bold" color={palette.purple}>{formatMoney(c, lectura.moneda ?? paymentCurrency)}</Label>
                       </Pressable>
                     ))}
                   </View>
@@ -341,14 +358,16 @@ export default function Payment() {
         </View>
       ))}
 
+      </>
       {/* 3. Amount and method */}
       <Label accessibilityRole="header" weight="extra" size={18}>3. Monto y método</Label>
       <Card style={{ padding: 12, gap: 10 }}>
         <View style={{ flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: value > limit ? palette.coral : palette.line, borderRadius: 16, paddingHorizontal: 12, backgroundColor: "white" }}>
-          <Label color="#00997D" size={24} weight="extra">S/</Label>
+          <Label color="#00997D" size={24} weight="extra">{currencyInfo(moneda).symbol}</Label>
           <TextInput
-            accessibilityLabel="Monto del pago en soles"
+            accessibilityLabel={`Monto del pago en ${moneda}`}
             value={amountText}
+            editable={!exchange && !busy}
             onChangeText={setTyped}
             keyboardType="decimal-pad"
             style={{ flex: 1, minHeight: 56, fontFamily: "JakartaExtra", color: "#00997D", fontSize: 26, marginLeft: 6, minWidth: 0 }}
@@ -358,7 +377,7 @@ export default function Payment() {
           {value > limit ? `No puede superar lo que debes (${money(limit)}).` : lectura?.monto != null && typed === null && lectura.monto <= limit ? "Monto tomado del comprobante. Corrígelo si no coincide." : "Puede ser un pago parcial. Registra solo dinero que ya pagaste."}
         </Label>
         <View accessibilityRole="radiogroup" style={{ flexDirection: "row", gap: 6 }}>
-          {methods.map((m) => {
+          {methods.filter((m) => paymentCurrency === "PEN" || m.id === "transferencia" || m.id === "efectivo").map((m) => {
             const active = effectiveMethod === m.id;
             return (
               <Pressable

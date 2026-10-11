@@ -23,7 +23,7 @@ async function run() {
         const req = route.request(); const url = new URL(req.url());
         if (url.origin === 'http://127.0.0.1:8090') return route.continue();
         if (url.origin === 'https://junto.lunalav.pe' && url.pathname.startsWith('/api/')) {
-          const cors = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:8090', 'Access-Control-Allow-Headers': 'authorization,content-type', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE' };
+          const cors = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:8090', 'Access-Control-Allow-Headers': 'authorization,content-type,x-junto-currency-version', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE' };
           if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
           const response = await fetch('http://127.0.0.1:3037' + url.pathname + url.search, { method: req.method(), headers: { ...req.headers(), host: '127.0.0.1:3037' }, body: req.postData() || undefined });
           return route.fulfill({ status: response.status, headers: { ...cors, 'Content-Type': response.headers.get('content-type') || 'application/json' }, body: Buffer.from(await response.arrayBuffer()) });

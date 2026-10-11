@@ -145,6 +145,8 @@ export function useResolverPago() {
     // Also after an error: "ya fue resuelto" means someone else decided, and the card must go away.
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["actividad"] });
+      queryClient.invalidateQueries({ queryKey: ["notificaciones"] });
+      queryClient.invalidateQueries({ queryKey: ["chat"] });
       queryClient.invalidateQueries({ queryKey: ["pagos"] });
       queryClient.invalidateQueries({ queryKey: ["grupos"] });
       queryClient.invalidateQueries({ queryKey: ["saldos"] });

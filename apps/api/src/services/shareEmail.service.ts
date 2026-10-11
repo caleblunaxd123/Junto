@@ -55,9 +55,9 @@ export async function buildShareMessage(userId: string, recurso: ShareResource):
     return groupShareMessage(group, group.pagosPorConfirmar);
   }
   const expense = await getGastoDetalle(recurso.id, userId).catch(() => { throw notFound(); });
-  const group = await prisma.grupo.findUnique({ where: { id: expense.grupoId }, select: { nombre: true, activo: true } });
+  const group = await prisma.grupo.findUnique({ where: { id: expense.grupoId }, select: { nombre: true, activo: true, moneda: true } });
   if (!group?.activo) throw notFound();
-  return expenseShareMessage(expense, group.nombre);
+  return expenseShareMessage(expense, group.nombre, group.moneda);
 }
 
 function recipientHash(email: string) {

@@ -33,6 +33,7 @@ import {
   palette,
   design,
 } from "../../../src/components/ui/Design";
+import { formatMoney, currencyInfo } from "@junto/shared/currency";
 import { centavosASoles, TipoDivision, Gasto } from "../../../src/types";
 import { parseMoney, parsePercentage, allocatePreview } from "../../../src/lib/expensePreview";
 import { groupCover } from "../../../src/components/ui/Artwork";
@@ -82,6 +83,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   }, [groupId, groups, params.gastoId]);
   const fixedGroup = !!params.grupoId || !!params.gastoId;
   const { data: group, isLoading } = useGrupo(groupId);
+  const moneda = group?.moneda ?? "PEN";
+  const money = (value: number) => formatMoney(value, moneda);
   const user = useAuthStore((s) => s.usuario);
   const create = useCrearGasto(groupId, params.gastoId);
   const interpret = useInterpretarGasto();
@@ -321,7 +324,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     >
       {params.cuenta === "1" && !params.gastoId && <Card style={{ backgroundColor: palette.mint, gap: 8 }}>
         <Label weight="bold">Registra la cuenta una sola vez</Label>
-        <Label size={13}>Escribe el total ya pagado, elige quién lo adelantó y reparte entre quienes participaron. Ejemplo: S/ 500 entre 5 son S/ 100 por persona.</Label>
+        <Label size={13}>Escribe el total ya pagado, elige quién lo adelantó y reparte entre quienes participaron. Ejemplo: {money(50000)} entre 5 son {money(10000)} por persona.</Label>
         <Label size={12} color={palette.muted}>Después, los integrantes usan «Registrar mi pago» para indicar cuánto devolvieron. No vuelvan a añadir esos pagos como gastos. Si falta alguien, invítalo antes de guardar el reparto.</Label>
       </Card>}
       {params.gastoId && original.isLoading ? (
@@ -355,7 +358,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
         <ErrorBox message="No pudimos cargar este grupo. Vuelve y reintenta." />
       ) : (
         <>
-          {!params.gastoId && (
+          {moneda !== "PEN" && <Label size={13} color={palette.muted}>Gastos y pagos en {moneda}. Usa el formulario; el asistente de texto interpreta soles por ahora. No convertimos monedas.</Label>}
+          {!params.gastoId && moneda === "PEN" && (
             <Pressable
               accessibilityRole="button"
               accessibilityState={{ expanded: writeIt }}
@@ -368,7 +372,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
               </Label>
             </Pressable>
           )}
-          {writeIt && !params.gastoId && (
+          {writeIt && !params.gastoId && moneda === "PEN" && (
             <Card style={{ backgroundColor: palette.lilac, padding: 12, gap: 8 }}>
               <TextInput
                 accessibilityLabel="Describe el gasto en una frase"
@@ -419,10 +423,10 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                 ]}
               >
                 <Label size={27} weight="extra">
-                  S/
+                  {currencyInfo(moneda).symbol}
                 </Label>
                 <TextInput
-                  accessibilityLabel="Monto total en soles"
+                  accessibilityLabel={`Monto total en ${moneda}`}
                   value={amount}
                   onChangeText={(value) => {
                     cancelProposal();
@@ -720,7 +724,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                       />
                     )}
                     <Label size={15} weight="extra" color="#078B70">
-                      S/ {centavosASoles(shares[i] || 0)}
+                      {money(shares[i] || 0)}
                     </Label>
                   </View>
                 ))}
@@ -732,7 +736,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                     ? "✓ La suma coincide hasta el último céntimo."
                     : mode === "porcentaje"
                       ? `Los porcentajes suman ${pctSum.toFixed(2)}%. Deben sumar 100%.`
-                      : `Asignado: S/ ${centavosASoles(shares.reduce((a, b) => a + b, 0))} de S/ ${centavosASoles(total)}.`}
+                      : `Asignado: ${money(shares.reduce((a, b) => a + b, 0))} de ${money(total)}.`}
               </Label>
             </View>
           </Card>

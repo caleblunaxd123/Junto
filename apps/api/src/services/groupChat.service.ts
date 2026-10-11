@@ -43,7 +43,7 @@ export async function getGroupChat(userId: string, grupoId: string) {
     })),
     ...payments.map((p) => ({
       id: `pago-${p.id}`, tipo: "pago" as const, fecha: p.fechaPago, autor: p.pagador, mio: mine(p.pagadorId),
-      pagoId: p.id, monto: p.monto, metodo: p.metodo, estado: p.estado, receptor: p.receptor, resolutor: p.resolutor, fechaResolucion: p.fechaResolucion, comentarios: p._count.comentarios,
+      pagoId: p.id, monto: p.monto, monedaOrigen: p.monedaOrigen, montoOrigen: p.montoOrigen, tipoCambio: p.tipoCambio, metodo: p.metodo, estado: p.estado, receptor: p.receptor, resolutor: p.resolutor, fechaResolucion: p.fechaResolucion, comentarios: p._count.comentarios,
       // As who the viewer decides a waiting payment; null when it is not theirs to decide.
       apruebaComo: p.estado !== "reportado" || mine(p.pagadorId) ? null : mine(p.receptorId) ? "receptor" : approves || (viewer.rol === "admin" && p.receptor.sinCuenta) ? "administrador" : null,
     })),

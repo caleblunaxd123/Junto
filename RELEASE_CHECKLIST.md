@@ -1,5 +1,11 @@
 # JUNTO — controles previos a publicación
 
+## Candidata 1.3.0: monedas y pago reportado
+
+Preparada localmente, **no publicada**. Ver `ops/web/FLOW-PAYMENTS-20261011.md`: país sugiere moneda sin imponerla; referencia diaria por fecha de pago frente al cambio aplicado; «Ya pagué» → aviso interno al receptor → confirmación/rechazo → aviso al pagador. Invitados excluidos no pagan; receptor sin cuenta requiere representación administrativa. Comprobante solo propone datos, nunca confirma dinero.
+
+Antes de anunciar disponibilidad: CI verde, respaldo restaurado/validado, despliegue compatible, APK con Google y mismo firmante, prueba física. Push con la app cerrada sigue pendiente de FCM/Expo y recepción real. No volver a una API que asuma PEN después de crear grupos en otras monedas.
+
 ## Resuelto en código (verificable en este repositorio)
 
 Cambios locales posteriores a la beta 1.2.0 (todavía requieren despliegue aprobado):

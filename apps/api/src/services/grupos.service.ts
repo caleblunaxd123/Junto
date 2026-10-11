@@ -25,6 +25,8 @@ export async function crearGrupo(input: CrearGrupoInput, creadoPor: string) {
         nombre: datos.nombre,
         descripcion: datos.descripcion,
         tipo: datos.tipo,
+        moneda: datos.moneda,
+        pais: datos.pais,
         aprobacionPagos: datos.aprobacionPagos,
         modo: datos.modo,
         fechaLimite: datos.fechaLimite ? new Date(datos.fechaLimite) : undefined,

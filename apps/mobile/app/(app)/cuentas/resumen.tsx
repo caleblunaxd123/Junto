@@ -12,9 +12,8 @@ import {
   palette,
   design,
 } from "../../../src/components/ui/Design";
-import { centavosASoles } from "../../../src/types";
+import { formatMoney as money } from "@junto/shared/currency";
 import { useAuthStore } from "../../../src/store/auth.store";
-const money = (v: number) => `S/ ${centavosASoles(v)}`;
 export default function AccountsOverview() {
   const user = useAuthStore((s) => s.usuario);
   const groupsQuery = useGrupos();
@@ -53,9 +52,9 @@ export default function AccountsOverview() {
                 size={25}
                 weight="extra"
                 adjustsFontSizeToFit
-                numberOfLines={1}
+                numberOfLines={summary.byCurrency.length}
               >
-                {money(summary.owed)}
+                {summary.byCurrency.map((bucket) => money(bucket.owed, bucket.moneda)).join("\n")}
               </Label>
               <Label size={12}>Por cobrar en tus grupos.</Label>
             </Card>
@@ -66,13 +65,14 @@ export default function AccountsOverview() {
                 weight="extra"
                 color={palette.coral}
                 adjustsFontSizeToFit
-                numberOfLines={1}
+                numberOfLines={summary.byCurrency.length}
               >
-                {money(summary.owes)}
+                {summary.byCurrency.map((bucket) => money(bucket.owes, bucket.moneda)).join("\n")}
               </Label>
               <Label size={12}>Por pagar en tus grupos.</Label>
             </Card>
           </View>
+          {summary.byCurrency.length > 1 && <Label size={13} color={palette.muted}>Cada moneda se muestra por separado. No sumamos soles, pesos, dólares ni euros entre sí.</Label>}
           <Card style={{ backgroundColor: palette.lilac }}>
             <Label weight="extra">Esto no es dinero en JUNTO</Label>
             <Label size={13}>
@@ -112,10 +112,10 @@ export default function AccountsOverview() {
                   >
                     <Label size={13}>
                       {payment.receptorId === user?.id
-                        ? `${payment.pagador.nombre.split(" ")[0]} dice que te pagó ${money(payment.monto)}`
+                        ? `${payment.pagador.nombre.split(" ")[0]} dice que te pagó ${money(payment.monto, payment.grupo.moneda)}`
                         : payment.pagadorId === user?.id
-                          ? `Tu pago de ${money(payment.monto)} a ${payment.receptor.nombre.split(" ")[0]}`
-                          : `${payment.pagador.nombre.split(" ")[0]} → ${payment.receptor.nombre.split(" ")[0]}: ${money(payment.monto)}`}
+                          ? `Tu pago de ${money(payment.monto, payment.grupo.moneda)} a ${payment.receptor.nombre.split(" ")[0]}`
+                          : `${payment.pagador.nombre.split(" ")[0]} → ${payment.receptor.nombre.split(" ")[0]}: ${money(payment.monto, payment.grupo.moneda)}`}
                     </Label>
                     <Label size={12} color={palette.muted}>
                       {payment.receptorId === user?.id ? "Confirmar ›" : payment.permisos?.aprobar ? "Revisar y aprobar ›" : "Ver pago ›"}
@@ -145,16 +145,16 @@ export default function AccountsOverview() {
                   weight="bold"
                 >
                   {group.balanceUsuario.debes
-                    ? `Debes ${money(group.balanceUsuario.debes)}`
+                    ? `Debes ${money(group.balanceUsuario.debes, group.moneda)}`
                     : group.balanceUsuario.teDeben
-                      ? `Te deben ${money(group.balanceUsuario.teDeben)}`
+                      ? `Te deben ${money(group.balanceUsuario.teDeben, group.moneda)}`
                       : group.resumen.cantidadGastos
                         ? "Tu saldo está al día"
                         : "Todavía no hay gastos"}
                 </Label>
                 <Label size={12} color={palette.muted}>
                   {group.resumen.cantidadGastos} gastos · Total del grupo{" "}
-                  {money(group.resumen.totalGastado)}
+                  {money(group.resumen.totalGastado, group.moneda)}
                 </Label>
                 <Label size={13} color={palette.purple}>
                   Ver mi parte, lo que pagué y el cálculo ›

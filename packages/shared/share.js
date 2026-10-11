@@ -3,10 +3,11 @@
  * the API. Amounts come from exact-cent calculations; text is never parsed back into amounts.
  */
 const { calculateQuickBill, quickBillBrief } = require("./quickBill");
+const { formatMoney } = require("./currency");
 
-function shareMoney(value) {
+function shareMoney(value, currency = "PEN") {
   if (!Number.isSafeInteger(value) || value < 0) throw new Error("Monto inválido para compartir.");
-  return `S/ ${(value / 100).toFixed(2)}`;
+  return formatMoney(value, currency);
 }
 // Names remain names in the exported report, never a misleading «Tú» for its recipient.
 const line = (value) => String(value).replace(/[\r\n\u0000-\u001f]/g, " ").trim();
@@ -32,13 +33,14 @@ function invitationShareMessage(groupName, url) {
   };
 }
 
-function expenseShareMessage(expense, groupName) {
+function expenseShareMessage(expense, groupName, currency = "PEN") {
+  const shareMoney = (value) => formatMoney(value, currency);
   const assigned = expense.participantes.reduce((sum, person) => sum + person.montoAsignado, 0);
   if (assigned !== expense.montoTotal) throw new Error("El reparto no coincide con el total. Actualiza el gasto antes de compartir.");
   return {
     subject: `JUNTO · ${line(expense.descripcion)}`,
     preview: {
-      title: line(expense.descripcion), total: expense.montoTotal, totalLabel: "Total del gasto",
+      title: line(expense.descripcion), total: expense.montoTotal, totalLabel: "Total del gasto", moneda: currency,
       caption: `${line(groupName)} · Adelantó ${line(expense.pagador.nombre)}`,
       rowsHeading: "Parte de cada persona",
       rows: expense.participantes.map((person, i) => ({ id: String(i), name: line(person.usuario.nombre), amount: person.montoAsignado })),
@@ -58,10 +60,11 @@ function expenseShareMessage(expense, groupName) {
 }
 
 function groupShareMessage(group, pendingPayments = 0) {
+  const shareMoney = (value) => formatMoney(value, group.moneda ?? "PEN");
   return {
     subject: `JUNTO · Cuentas de ${line(group.nombre)}`,
     preview: {
-      title: line(group.nombre), total: group.resumen.totalGastado, totalLabel: "Total gastado en el grupo",
+      title: line(group.nombre), total: group.resumen.totalGastado, totalLabel: "Total gastado en el grupo", moneda: group.moneda ?? "PEN",
       caption: `${group.resumen.cantidadGastos} gastos · Solo pagos confirmados`, rowsHeading: "Saldos de cada persona",
       rows: group.resumen.cuentas.map((person, i) => ({
         id: String(i), name: line(person.nombre), amount: Math.abs(person.neto),
@@ -147,7 +150,7 @@ function shareEmailHtml(message, meta = {}) {
   const preview = message.preview;
   const money = (cents) => {
     if (!Number.isSafeInteger(cents) || cents < 0) throw new Error("Monto inválido en el correo.");
-    return `S/ ${(cents / 100).toFixed(2)}`;
+    return formatMoney(cents, preview?.moneda ?? "PEN");
   };
   const sender = meta.sentBy ? `<p style="margin:0 0 18px;padding:12px 14px;background:#FFFCF7;border:1px solid #F1E6D2;border-radius:12px;font-size:14px;line-height:1.6;color:#082644;"><strong>${escape(line(meta.sentBy))}</strong> ${message.invitation ? 'te envió esta invitación' : 'te compartió este resumen'} desde JUNTO.</p>` : "";
   const invitation = message.invitation;

@@ -140,6 +140,7 @@ export async function invitacion(
         nombre: true,
         tipo: true,
         modo: true,
+        moneda: true,
         _count: { select: { miembros: { where: { activo: true } } } },
       },
     });
@@ -149,6 +150,10 @@ export async function invitacion(
         .json({
           error: "Esta invitación ya no está disponible. Pide un enlace nuevo.",
         });
+      return;
+    }
+    if (grupo.moneda !== "PEN" && req.get("X-Junto-Currency-Version") !== "1") {
+      res.status(426).json({ error: "Actualiza JUNTO a 1.3.0 o abre la invitación desde la web: este grupo usa otra moneda." });
       return;
     }
     // Added by name: who they are in the group and where they stand. Otherwise, the names a person
@@ -164,6 +169,7 @@ export async function invitacion(
       nombre: grupo.nombre,
       tipo: grupo.tipo,
       modo: grupo.modo,
+      moneda: grupo.moneda,
       miembros: grupo._count.miembros,
       personal,
       sinApp,

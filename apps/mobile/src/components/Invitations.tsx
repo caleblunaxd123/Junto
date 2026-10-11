@@ -7,9 +7,10 @@ import { errorMessage } from "../lib/errorMessage";
 import { AppDialog as Alert } from "./ui/AppDialog";
 import { Button, Card, ErrorBox, Label, palette } from "./ui/Design";
 import { JoinParts } from "./JoinParts";
+import { formatMoney, type CurrencyCode } from "@junto/shared/currency";
 import type { PartesAlUnirse } from "../types";
 
-type Invitation = { id: string; invitadoPor: string; fechaCreacion: string; grupo: { id: string; nombre: string; tipo: string; modo?: string | null; miembros: number }; partesAlUnirse?: PartesAlUnirse; cuenta?: { montoTotal: number; partes: number; parte: number; libres: number } | null };
+type Invitation = { id: string; invitadoPor: string; fechaCreacion: string; grupo: { id: string; moneda?: CurrencyCode; nombre: string; tipo: string; modo?: string | null; miembros: number }; partesAlUnirse?: PartesAlUnirse; cuenta?: { montoTotal: number; partes: number; parte: number; libres: number } | null };
 
 /**
  * Groups someone invited you to by e-mail or phone. Nothing is shared until you accept: not your
@@ -53,9 +54,9 @@ export function Invitations() {
           <Label weight="bold" size={15}>
             {invitation.invitadoPor} te invitó a «{invitation.grupo.nombre}»
           </Label>
-          {invitation.partesAlUnirse ? <JoinParts parts={invitation.partesAlUnirse} division={invitation.grupo.modo === "division"} /> : !!invitation.cuenta?.libres && (
+          {invitation.partesAlUnirse ? <JoinParts moneda={invitation.grupo.moneda} parts={invitation.partesAlUnirse} division={invitation.grupo.modo === "division"} /> : !!invitation.cuenta?.libres && (
             <Label size={14} weight="bold" color="#007B60">
-              {invitation.grupo.modo === "division" ? "Tu aporte" : "Tu parte"}: S/ {(invitation.cuenta.parte / 100).toFixed(2)} de S/ {(invitation.cuenta.montoTotal / 100).toFixed(2)}
+              {invitation.grupo.modo === "division" ? "Tu aporte" : "Tu parte"}: {formatMoney(invitation.cuenta.parte, invitation.grupo.moneda)} de {formatMoney(invitation.cuenta.montoTotal, invitation.grupo.moneda)}
             </Label>
           )}
           <Label size={12} color={palette.muted}>

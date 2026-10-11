@@ -7,23 +7,26 @@ import { useResponsiveLayout } from "../ui/responsive";
 import { meFirst } from "../../lib/people";
 import { firstName, sinCuenta } from "../../lib/members";
 import { freeParts } from "../../lib/groupProgress";
-import { centavosASoles, type GrupoConBalance } from "../../types";
+import { type GrupoConBalance } from "../../types";
+import { router } from "expo-router";
 
-const money = (cents: number) => `S/ ${centavosASoles(cents)}`;
+import { formatMoney } from "@junto/shared/currency";
 type Member = GrupoConBalance["miembros"][number];
 
 /**
  * The group's accounts in two parts: who pays whom to be even (with the action right there),
  * and each person's numbers (what they paid, their share).
  */
-export function WhoPaid({ group, userId, visible, onClose, onPay, onRecord, onRemind, onShare, onLink }: {
+export function WhoPaid({ group, payments = [], userId, visible, onClose, onPay, onRecord, onRemind, onShare, onLink }: {
   group: GrupoConBalance; userId?: string; visible: boolean; onClose: () => void;
+  payments?: { id: string; estado: string; pagadorId: string; receptorId: string; permisos?: { aprobar: boolean } }[];
   onPay: () => void;
   onRecord: (person: { id: string; nombre: string }, max: number, receiver?: { id: string; nombre: string }) => void;
   onRemind: () => void;
   onShare: (member: Member) => void;
   onLink: (member: Member) => void;
 }) {
+  const money = (value: number) => formatMoney(value, group.moneda);
   const { tablet } = useResponsiveLayout();
   const members = new Map(group.miembros.map((m) => [m.usuarioId, m]));
   const name = (id: string, fallback: string) => (id === userId ? "Tú" : firstName(members.get(id)?.usuario.nombre ?? fallback));
@@ -57,7 +60,7 @@ export function WhoPaid({ group, userId, visible, onClose, onPay, onRecord, onRe
               const debtor = members.get(s.deudorId);
               const iOwe = s.deudorId === userId;
               const owedToMe = s.acreedorId === userId;
-              const waiting = (group.resumen.cuentas.find((a) => a.usuarioId === s.deudorId)?.pagosPorConfirmar ?? 0) > 0;
+              const waiting = payments.find((p) => p.estado === "reportado" && p.pagadorId === s.deudorId && p.receptorId === s.acreedorId);
               return (
                 <View key={`${s.deudorId}-${s.acreedorId}`} style={{ padding: 12, gap: 8, borderRadius: 16, backgroundColor: "white", borderWidth: 1, borderColor: iOwe ? "#F5C2C7" : owedToMe ? "#A4EDD7" : palette.line }}>
                   <View accessible accessibilityLabel={`${name(s.deudorId, s.deudorNombre)} le paga ${money(s.monto)} a ${name(s.acreedorId, s.acreedorNombre)}`} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -69,9 +72,10 @@ export function WhoPaid({ group, userId, visible, onClose, onPay, onRecord, onRe
                     <Label size={17} weight="extra" color={iOwe ? palette.coral : owedToMe ? "#007B60" : palette.ink}>{money(s.monto)}</Label>
                   </View>
                   {waiting && <Label size={12} color="#8A5A00">Hay un pago esperando confirmación.</Label>}
-                  {iOwe && <Button compact title={`Pagar ${money(s.monto)}`} onPress={() => { onClose(); onPay(); }} />}
-                  {!iOwe && !owedToMe && admin && members.get(s.acreedorId)?.usuario.sinCuenta && <Button compact title={`Registrar pago recibido por ${name(s.acreedorId, s.acreedorNombre)}`} onPress={() => onRecord({ id: s.deudorId, nombre: s.deudorNombre }, s.monto, { id: s.acreedorId, nombre: s.acreedorNombre })} />}
-                  {owedToMe && (
+                  {!!waiting && (iOwe || owedToMe || waiting.permisos?.aprobar) && <Button compact title={waiting.permisos?.aprobar ? "Revisar pago reportado" : "Ver mi pago reportado"} onPress={() => { onClose(); router.push(`/(app)/pagos/${waiting.id}`); }} />}
+                  {iOwe && !waiting && <Button compact title="Ya pagué" onPress={() => { onClose(); onPay(); }} />}
+                  {!waiting && !iOwe && !owedToMe && admin && members.get(s.acreedorId)?.usuario.sinCuenta && <Button compact title={`Registrar pago recibido por ${name(s.acreedorId, s.acreedorNombre)}`} onPress={() => onRecord({ id: s.deudorId, nombre: s.deudorNombre }, s.monto, { id: s.acreedorId, nombre: s.acreedorNombre })} />}
+                  {owedToMe && !waiting && (
                     <View style={{ flexDirection: "row", gap: 8 }}>
                       <View style={{ flex: 1 }}><Button compact title="Ya me pagó" onPress={() => onRecord({ id: s.deudorId, nombre: s.deudorNombre }, s.monto)} /></View>
                       <View style={{ flex: 1 }}>{debtor && sinCuenta(debtor)
@@ -93,7 +97,7 @@ export function WhoPaid({ group, userId, visible, onClose, onPay, onRecord, onRe
                 ? { text: `${mine ? "Te" : "Le"} deben ${money(account.neto)}`, color: "#007B60" }
                 : account.neto < 0
                   ? { text: `${mine ? "Debes" : "Debe"} ${money(-account.neto)}`, color: palette.coral }
-                  : { text: account.tuParte || account.pagaste ? "A mano" : "Sin gastos", color: palette.muted };
+                  : { text: account.tuParte || account.pagaste ? "A mano" : group.resumen.cantidadGastos ? "Sin parte asignada" : "Sin gastos", color: palette.muted };
               return (
                 <View key={account.usuarioId} style={{ padding: 12, gap: 8, borderRadius: 16, backgroundColor: "white", borderWidth: 1, borderColor: mine ? "#A4EDD7" : palette.line }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -125,7 +129,7 @@ export function WhoPaid({ group, userId, visible, onClose, onPay, onRecord, onRe
           </ScrollView>
           <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-start", padding: 12, borderRadius: 14, backgroundColor: palette.lilac }}>
             <Ionicons name="information-circle-outline" size={18} color={palette.purple} />
-            <Label style={{ flex: 1 }} size={12}>JUNTO no mueve dinero: cada uno paga por Yape, Plin o efectivo y quien recibe lo confirma. Un pago cuenta cuando se confirma.</Label>
+            <Label style={{ flex: 1 }} size={12}>JUNTO no mueve dinero: cada uno paga por fuera de la app y quien recibe lo confirma. Un pago cuenta cuando se confirma.</Label>
           </View>
         </SafeAreaView>
       </View>

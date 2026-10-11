@@ -1,6 +1,8 @@
 import type { QuickBillInput } from "./quickBill";
+import type { CurrencyCode } from "./currency";
 
 export type SharePreview = {
+  moneda?: CurrencyCode | string;
   title: string;
   total: number;
   totalLabel: string;
@@ -27,14 +29,15 @@ export type ShareExpense = {
   participantes: { usuario: { nombre: string }; montoAsignado: number }[];
 };
 export type ShareGroup = {
+  moneda?: CurrencyCode | string;
   nombre: string;
   resumen: { totalGastado: number; cantidadGastos: number; cuentas: { nombre: string; tuParte: number; pagaste: number; neto: number }[] };
   saldos: { deudorNombre: string; acreedorNombre: string; monto: number }[];
 };
-export function shareMoney(value: number): string;
+export function shareMoney(value: number, currency?: CurrencyCode | string): string;
 export function validShareEmail(value: string): boolean;
 export function invitationShareMessage(groupName: string, url: string): ShareMessage;
-export function expenseShareMessage(expense: ShareExpense, groupName: string): ShareMessage;
+export function expenseShareMessage(expense: ShareExpense, groupName: string, currency?: CurrencyCode | string): ShareMessage;
 export function groupShareMessage(group: ShareGroup, pendingPayments?: number): ShareMessage;
 export function quickBillSharePreview(input: QuickBillInput, aportes?: Record<string, number>): SharePreview;
 export function quickBillShareMessage(input: QuickBillInput, aportes?: Record<string, number>): ShareMessage;

@@ -1,3 +1,4 @@
+import { formatMoney } from "@junto/shared/currency";
 import React from "react";
 import { ActivityIndicator, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, Share, useWindowDimensions, View } from "react-native";
 import { ModalSurface } from "./ModalSurface";
@@ -31,7 +32,6 @@ function MailOutcome({ result }: { result: ServerMailResult }) {
   </View>;
 }
 
-const money = (cents: number) => `S/ ${(cents / 100).toFixed(2)}`;
 
 function ReportImageContent({ uri, onClose }: { uri: string; onClose: () => void }) {
   const { width } = useWindowDimensions();
@@ -72,6 +72,7 @@ export function ShareSummary({ message, reportRef }: { message: ShareMessage; re
   const [expanded, setExpanded] = React.useState(false);
   React.useEffect(() => setExpanded(false), [message.body]);
   const preview = message.preview;
+  const money = (value: number) => formatMoney(value, preview?.moneda);
   if (message.invitation) return <View style={{ gap: 14 }}>
     <Card style={{ backgroundColor: palette.mint, borderColor: "#BDEBD9", padding: 22 }}>
       <Ionicons name="people-outline" size={36} color="#007E65" />
@@ -152,6 +153,7 @@ export function ShareSummary({ message, reportRef }: { message: ShareMessage; re
 /** User-reviewed handoff. Opening another app is not evidence that a message was sent. */
 type ShareContent = { channels: React.ReactNode; overlay: React.ReactNode | null };
 export function ShareChannels({ message, disabled = false, reportRef, initialChannel, initialRecipient = "", initialNotice = "", renderContent }: { message: ShareMessage; disabled?: boolean; reportRef?: React.RefObject<View | null>; initialChannel?: "mail"; initialRecipient?: string; initialNotice?: string; renderContent?: (content: ShareContent) => React.ReactNode }) {
+  const money = (value: number) => formatMoney(value, message.preview?.moneda);
   const [recipient, setRecipient] = React.useState(initialRecipient);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState("");

@@ -65,7 +65,7 @@ export async function myInvitations(userId: string) {
   const rows = await prisma.invitacion.findMany({
     where: { invitadoId: userId, estado: "pendiente", grupo: { activo: true } },
     include: {
-      grupo: { select: { id: true, nombre: true, tipo: true, modo: true, _count: { select: { miembros: { where: { activo: true } } } } } },
+      grupo: { select: { id: true, nombre: true, tipo: true, modo: true, moneda: true, _count: { select: { miembros: { where: { activo: true } } } } } },
       anfitrion: { select: { nombre: true } },
     },
     orderBy: { fechaCreacion: "desc" },
@@ -78,7 +78,7 @@ export async function myInvitations(userId: string) {
       id: row.id,
       fechaCreacion: row.fechaCreacion,
       invitadoPor: first(row.anfitrion.nombre),
-      grupo: { id: row.grupo.id, nombre: row.grupo.nombre, tipo: row.grupo.tipo, modo: row.grupo.modo, miembros: row.grupo._count.miembros },
+      grupo: { id: row.grupo.id, nombre: row.grupo.nombre, tipo: row.grupo.tipo, modo: row.grupo.modo, moneda: row.grupo.moneda, miembros: row.grupo._count.miembros },
       partesAlUnirse: await partesAlUnirse(row.grupo.id, userId),
       cuenta: cuenta && { montoTotal: cuenta.montoTotal, partes: cuenta.partes, parte: cuenta.siguienteParte ?? 0, libres: cuenta.libres },
     };

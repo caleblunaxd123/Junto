@@ -1,9 +1,13 @@
 import { prisma } from "../lib/prisma";
+import { convertPayment, type PaymentConversion } from "@junto/shared/currency";
+import { formatMoney as money } from "@junto/shared/currency";
 import { UserError as Error } from "../domain/errors";
 import { resumenCuentasGrupo } from "./balance.service";
 import { payableLimit } from "@junto/shared/payable";
 import { sendPushNotification } from "../lib/firebase";
 import { voucherInUse } from "./vouchers.service";
+import { savePaymentNotices } from "./groupNotices.service";
+import { referenceForDate } from "../domain/exchange";
 import { transactionLock } from "../lib/transactionLock";
 import type { RegistrarRecibidoInput, ReportarPagoInput } from "../schemas/pagos.schema";
 import type { Prisma } from "@prisma/client";
@@ -12,7 +16,8 @@ const person = { select: { id: true, nombre: true, fotoUrl: true } } as const;
 const pagoInclude = {
   pagador: person,
   receptor: { select: { id: true, nombre: true, fotoUrl: true, sinCuenta: true } },
-  grupo: { select: { id: true, nombre: true, aprobacionPagos: true } },
+  grupo: { select: { id: true, nombre: true, aprobacionPagos: true, moneda: true } },
+  referenciaCambio: true,
   resolutor: { select: { id: true, nombre: true } },
   comprobante: { select: { id: true, app: true, montoLeido: true } },
   _count: { select: { comentarios: { where: { eliminado: false } } } },
@@ -21,7 +26,30 @@ const pagoInclude = {
 export const HISTORY_LIMIT = 200;
 // A receiver can say "it never arrived" about a payment an admin approved for them, for this long.
 const REVERT_DAYS = 30;
-const money = (cents: number) => `S/ ${(cents / 100).toFixed(2)}`;
+async function paymentCurrency(tx: Prisma.TransactionClient, input: { grupoId: string; metodo?: string; comprobanteId?: string; conversion?: PaymentConversion }) {
+  const { moneda } = await tx.grupo.findUniqueOrThrow({ where: { id: input.grupoId }, select: { moneda: true } });
+  if ((input.conversion?.monedaOrigen ?? moneda) !== "PEN" && (input.metodo === "yape" || input.metodo === "plin"))
+    throw new Error("Yape y Plin se registran en soles. Para otra moneda elige transferencia o efectivo.");
+  return moneda;
+}
+async function paymentConversion(tx: Prisma.TransactionClient, input: { monto: number; conversion?: PaymentConversion; comprobanteId?: string; metodo?: string; fechaEfectiva?: string }, moneda: string) {
+  if (!input.conversion) return {};
+  if (input.conversion.monedaOrigen !== "PEN" && (input.metodo === "yape" || input.metodo === "plin")) throw new Error("Para un pago en otra moneda selecciona efectivo o transferencia; Yape y Plin se registran en soles.");
+  let result;
+  try { result = convertPayment(input.conversion, moneda); }
+  catch (error) { throw new Error(error instanceof globalThis.Error ? error.message : "Tipo de cambio inválido"); }
+  if (result.monto !== input.monto) throw new Error("El monto del grupo no coincide con el equivalente calculado. Revisa el tipo de cambio.", 400);
+  const { monto: _monto, ...evidence } = result;
+  let referenciaCambioId: string | undefined;
+  if (input.conversion.cotizacionId) {
+    const ref = await tx.cotizacionCambio.findUnique({ where: { id: input.conversion.cotizacionId } });
+    const date = input.fechaEfectiva ?? new Date().toISOString().slice(0, 10);
+    if (!ref || ref.origen !== input.conversion.monedaOrigen || ref.destino !== moneda || !referenceForDate(ref.fecha.toISOString().slice(0, 10), date))
+      throw new Error("La referencia no corresponde a estas monedas o a la fecha del pago. Consulta de nuevo o usa solo el cambio acordado.");
+    referenciaCambioId = ref.id;
+  }
+  return { ...evidence, referenciaCambioId };
+}
 const first = (name: string) => name.trim().split(/\s+/)[0] || name;
 
 type Rules = { pagadorId: string; receptorId: string; estado: string; resueltoPor: string | null; fechaResolucion: Date | null; grupo: { aprobacionPagos: string }; receptor?: { sinCuenta?: boolean } };
@@ -74,6 +102,8 @@ export async function reportarPago(
     if (miembros !== 2)
       throw new Error("Ambas personas deben pertenecer al grupo");
 
+    const moneda = await paymentCurrency(tx, input);
+    const conversion = await paymentConversion(tx, input, moneda);
     // Read the ledger through this transaction (one pool connection, consistent with the lock).
     const { cuentas } = await resumenCuentasGrupo(input.grupoId, tx);
     const waiting = await tx.pago.findMany({ where: { grupoId: input.grupoId, estado: "reportado" }, select: { pagadorId: true, receptorId: true, monto: true } });
@@ -83,7 +113,7 @@ export async function reportarPago(
     if (!limit) throw new Error("Ya hay pagos esperando aprobación que cubren este monto. Espera a que los revisen.");
     if (input.monto > limit) {
       throw new Error(
-        `El pago no puede superar S/ ${(limit / 100).toFixed(2)}: es lo que aún debes y lo que esta persona tiene por recibir`,
+        `El pago no puede superar ${money(limit, moneda)}: es lo que aún debes y lo que esta persona tiene por recibir`,
       );
     }
 
@@ -102,9 +132,10 @@ export async function reportarPago(
     if (input.comprobanteId) {
       voucher = await tx.comprobante.findFirst({
         where: { id: input.comprobanteId, subidoPor: pagadorId, grupoId: input.grupoId, pagoId: null },
-        select: { id: true, hash: true, app: true, operacion: true },
+        select: { id: true, hash: true, app: true, operacion: true, monedaLeida: true },
       });
       if (!voucher) throw new Error("El comprobante ya no está disponible. Súbelo otra vez.", 409);
+      if (voucher.monedaLeida && voucher.monedaLeida !== (input.conversion?.monedaOrigen ?? moneda)) throw new Error("La moneda del comprobante no coincide con la que registras. Usa la moneda original y revisa el cambio.");
       // A group row lock alone cannot protect the same evidence submitted in two different groups.
       const keys = [`voucher-image:${voucher.hash}`];
       if (voucher.operacion && voucher.operacion.length >= 6) keys.push(`voucher-operation:${JSON.stringify([voucher.app, voucher.operacion])}`);
@@ -119,12 +150,15 @@ export async function reportarPago(
         pagadorId,
         receptorId: input.receptorId,
         monto: input.monto,
+        ...conversion,
         feejunto: 0,
         metodo: input.metodo,
         estado: "reportado",
         nota: input.nota || null,
+        fechaEfectiva: input.fechaEfectiva ? new Date(`${input.fechaEfectiva}T00:00:00Z`) : new Date(),
       },
     });
+    await savePaymentNotices(tx, created, "pago_reportado", pagadorId);
     if (voucher) await tx.comprobante.update({ where: { id: voucher.id }, data: { pagoId: created.id } });
     return tx.pago.findUniqueOrThrow({ where: { id: created.id }, include: pagoInclude });
   });
@@ -134,15 +168,15 @@ export async function reportarPago(
   void notify(
     [input.receptorId],
     "Pago por confirmar",
-    `${payer} registró un pago de ${money(input.monto)}${evidence}. Confírmalo cuando lo veas en tu cuenta.`,
+    `${payer} registró un pago de ${money(input.monto, pago.grupo.moneda)}${evidence}. Confírmalo cuando lo veas en tu cuenta.`,
     { grupoId: input.grupoId, pagoId: pago.id, type: "pago_reportado" },
   );
-  if (pago.grupo.aprobacionPagos === "administrador") {
+  if (pago.grupo.aprobacionPagos === "administrador" || pago.receptor.sinCuenta) {
     const reviewers = (await admins(input.grupoId)).filter((id) => id !== pagadorId && id !== input.receptorId);
     void notify(
       reviewers,
       "Pago por revisar",
-      `${payer} subió un pago de ${money(input.monto)}${evidence} para ${first(pago.receptor.nombre)} en ${pago.grupo.nombre}. Revísalo.`,
+      `${payer} subió un pago de ${money(input.monto, pago.grupo.moneda)}${evidence} para ${first(pago.receptor.nombre)} en ${pago.grupo.nombre}. Revísalo.`,
       { grupoId: input.grupoId, pagoId: pago.id, type: "pago_reportado" },
     );
   }
@@ -179,19 +213,20 @@ export async function resolverPago(
       data: { estado: confirmar ? "exitoso" : "rechazado", fechaResolucion: new Date(), resueltoPor: userId },
     });
     if (result.count !== 1) throw new Error("Este pago ya fue resuelto. Actualiza el grupo.");
+    await savePaymentNotices(tx, pago, confirmar ? "pago_confirmado" : "pago_rechazado", userId);
     return { pago, reverted, resuelto: await tx.pago.findUniqueOrThrow({ where: { id: pagoId }, include: pagoInclude }) };
   });
   if (reverted) {
     void notify(
       [pago.pagadorId, ...(pago.resueltoPor ? [pago.resueltoPor] : [])], "Pago no recibido",
-      `${first(pago.receptor.nombre)} indicó que no recibió el pago de ${money(pago.monto)} en ${pago.grupo.nombre}. La deuda vuelve a estar pendiente.`,
+      `${first(pago.receptor.nombre)} indicó que no recibió el pago de ${money(pago.monto, pago.grupo.moneda)} en ${pago.grupo.nombre}. La deuda vuelve a estar pendiente.`,
       { grupoId: pago.grupoId, pagoId: pago.id, type: "pago_rechazado" },
     );
     return resuelto;
   }
 
   // Tell the payer (and the receiver, if an admin decided) so nobody is left guessing.
-  const amount = money(pago.monto);
+  const amount = money(pago.monto, pago.grupo.moneda);
   const byAdmin = userId !== pago.receptorId;
   const decider = first(resuelto.resolutor?.nombre || pago.receptor.nombre);
   const receiver = first(pago.receptor.nombre);
@@ -230,7 +265,7 @@ export async function getHistorial(usuarioId: string) {
     OR: [
       { pagadorId: usuarioId },
       { receptorId: usuarioId },
-      { estado: "reportado", grupoId: { in: [...adminGroups] }, grupo: { aprobacionPagos: "administrador", activo: true } },
+      { estado: "reportado", grupoId: { in: [...adminGroups] }, grupo: { activo: true }, OR: [{ grupo: { aprobacionPagos: "administrador" } }, { receptor: { sinCuenta: true } }] },
     ],
   };
   // Everything still waiting (the app needs all of it) plus the latest resolved ones: history no
@@ -249,13 +284,13 @@ export async function getPagoDetalle(pagoId: string, userId: string) {
     where: { id: pagoId },
     include: {
       ...pagoInclude,
-      comprobante: { select: { id: true, app: true, montoLeido: true, operacion: true, destinatarioLeido: true, fechaLeida: true, codigoSeguridad: true, imagen: { select: { mime: true } } } },
+      comprobante: { select: { id: true, app: true, montoLeido: true, monedaLeida: true, operacion: true, destinatarioLeido: true, fechaLeida: true, codigoSeguridad: true, imagen: { select: { mime: true } } } },
     },
   });
   const member = pago && await prisma.grupoMiembro.findFirst({ where: { grupoId: pago.grupoId, usuarioId: userId, activo: true }, select: { rol: true } });
   if (!pago || !member) throw new Error("No encontramos este pago.", 404);
   const permisos = paymentPermissions(pago, userId, member.rol === "admin");
-  const adminIds = pago.grupo.aprobacionPagos === "administrador" ? (await admins(pago.grupoId)).filter((id) => id !== pago.pagadorId && id !== pago.receptorId) : [];
+  const adminIds = (pago.grupo.aprobacionPagos === "administrador" || pago.receptor.sinCuenta) ? (await admins(pago.grupoId)).filter((id) => id !== pago.pagadorId && id !== pago.receptorId) : [];
   const adminNames = adminIds.length ? await prisma.usuario.findMany({ where: { id: { in: adminIds } }, select: { id: true, nombre: true } }) : [];
   const { comprobante, ...rest } = pago;
   return {
@@ -266,6 +301,7 @@ export async function getPagoDetalle(pagoId: string, userId: string) {
       id: comprobante.id,
       app: comprobante.app,
       montoLeido: comprobante.montoLeido,
+      monedaLeida: comprobante.monedaLeida,
       imagenDisponible: !!comprobante.imagen,
       // Read details can carry names and partial numbers: only for who may see the image.
       ...(permisos.verComprobante ? {
@@ -318,16 +354,19 @@ export async function registrarRecibido(input: RegistrarRecibidoInput, userId: s
     if (!owes) throw new Error("Esta persona no tiene una deuda pendiente en el grupo");
     if (!owed) throw new Error(receptorId === userId ? "No tienes dinero por recibir en este grupo" : "Esta persona no tiene dinero por recibir en el grupo");
     if (!limit) throw new Error("Ya hay pagos de esta persona esperando tu confirmación: confírmalos primero.");
-    if (input.monto > limit) throw new Error(`El pago no puede superar S/ ${(limit / 100).toFixed(2)}: es lo que esta persona aún ${receptorId === userId ? "te debe" : "debe al receptor"}`);
+    const moneda = await paymentCurrency(tx, input);
+    const conversion = await paymentConversion(tx, input, moneda);
+    if (input.monto > limit) throw new Error(`El pago no puede superar ${money(limit, moneda)}: es lo que esta persona aún ${receptorId === userId ? "te debe" : "debe al receptor"}`);
     const now = new Date();
     const created = await tx.pago.create({
-      data: { grupoId: input.grupoId, pagadorId: input.pagadorId, receptorId, monto: input.monto, feejunto: 0, metodo: input.metodo, estado: "exitoso", nota: input.nota || null, fechaResolucion: now, resueltoPor: userId },
+      data: { grupoId: input.grupoId, pagadorId: input.pagadorId, receptorId, monto: input.monto, ...conversion, feejunto: 0, metodo: input.metodo, estado: "exitoso", nota: input.nota || null, fechaEfectiva: input.fechaEfectiva ? new Date(`${input.fechaEfectiva}T00:00:00Z`) : now, fechaResolucion: now, resueltoPor: userId },
     });
+    await savePaymentNotices(tx, created, "pago_confirmado", userId);
     return tx.pago.findUniqueOrThrow({ where: { id: created.id }, include: pagoInclude });
   });
   void notify(
     [input.pagadorId], "Pago registrado",
-    `${receptorId === userId ? first(pago.receptor.nombre) : `${first(pago.resolutor?.nombre || "Administrador")} (administrador)`} registró que pagaste ${money(input.monto)} a ${first(pago.receptor.nombre)} en ${pago.grupo.nombre}.`,
+    `${receptorId === userId ? first(pago.receptor.nombre) : `${first(pago.resolutor?.nombre || "Administrador")} (administrador)`} registró que pagaste ${money(input.monto, pago.grupo.moneda)} a ${first(pago.receptor.nombre)} en ${pago.grupo.nombre}.`,
     { grupoId: input.grupoId, pagoId: pago.id, type: "pago_confirmado" },
   );
   return pago;

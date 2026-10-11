@@ -1,6 +1,4 @@
-import { centavosASoles } from "../types";
-
-const money = (cents: number) => `S/ ${centavosASoles(cents)}`;
+import { formatMoney, type CurrencyCode } from "@junto/shared/currency";
 
 export type VoucherCheck = {
   tone: "danger" | "warning" | "info";
@@ -12,6 +10,7 @@ export type VoucherCheck = {
 type Reading = {
   leido: boolean;
   monto: number | null;
+  moneda?: CurrencyCode | null;
   duplicado: string | null;
   sugerenciaReceptorId: string | null;
   destinatario: string | null;
@@ -23,6 +22,8 @@ type Reading = {
  * sending; the rest are things the approver will also see.
  */
 export function voucherChecks(input: {
+  moneda?: CurrencyCode;
+  monedaGrupo?: CurrencyCode;
   lectura: Reading | null;
   monto: number | null;
   limite: number;
@@ -33,9 +34,11 @@ export function voucherChecks(input: {
 }): VoucherCheck[] {
   const { lectura, monto, limite, receptorId, nombre, acreedores } = input;
   if (!lectura) return [];
+  const money = (value: number) => formatMoney(value, input.moneda);
   const checks: VoucherCheck[] = [];
+  if (lectura.moneda && input.moneda && lectura.moneda !== input.moneda) checks.push({ tone: "danger", text: `La captura indica ${lectura.moneda}, pero estás registrando ${input.moneda}. Elige la moneda que pagaste o cambia la captura.` });
   if (lectura.duplicado) checks.push({ tone: "danger", text: `${lectura.duplicado} Sube la captura de este pago.` });
-  if (lectura.monto && receptorId && limite > 0 && lectura.monto > limite)
+  if (lectura.monto && receptorId && limite > 0 && (!input.monedaGrupo || input.monedaGrupo === input.moneda) && lectura.monto > limite)
     checks.push({
       tone: "warning",
       text: `El comprobante dice ${money(lectura.monto)}, pero le debes ${money(limite)} a ${nombre(receptorId)}. Registra ${money(limite)} y conversen la diferencia.`,
@@ -71,11 +74,12 @@ type PaymentLike = {
   pagadorId: string;
   receptorId: string;
   resueltoPor?: string | null;
+  grupo?: { moneda?: CurrencyCode };
 };
 
 /** Headline for a payment, from the viewer's point of view. */
 export function paymentHeadline(pago: PaymentLike, meId: string | undefined, nombre: (id: string) => string) {
-  const amount = money(pago.monto);
+  const amount = formatMoney(pago.monto, pago.grupo?.moneda);
   const byOther = !!pago.resueltoPor && pago.resueltoPor !== pago.receptorId;
   switch (pago.estado) {
     case "reportado":
@@ -83,7 +87,7 @@ export function paymentHeadline(pago: PaymentLike, meId: string | undefined, nom
         tone: "waiting" as const,
         title: "Esperando aprobación",
         body: pago.receptorId === meId
-          ? `${nombre(pago.pagadorId)} dice que te pagó ${amount}. Revisa tu Yape, Plin o cuenta antes de aprobar.`
+          ? `${nombre(pago.pagadorId)} dice que te pagó ${amount}. Revisa tu cuenta o el dinero recibido antes de aprobar.`
           : pago.pagadorId === meId
             ? `Tu deuda baja cuando lo aprueben. Mientras tanto no cambia.`
             : `${nombre(pago.pagadorId)} registró ${amount} para ${nombre(pago.receptorId)}. La deuda no cambia hasta que lo aprueben.`,

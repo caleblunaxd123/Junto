@@ -4,6 +4,7 @@
  * receiver (or an admin, if the group allows it) approves the payment. Never a guess: a field that
  * is not clearly printed stays null.
  */
+import type { CurrencyCode } from '@junto/shared/currency';
 export type VoucherApp = "yape" | "plin" | "transferencia";
 
 export interface VoucherReading {
@@ -17,7 +18,7 @@ export interface VoucherReading {
   fecha: string | null;
   /** Yape's 3-digit security code: the receiver sees the same code in their Yape. */
   codigoSeguridad: string | null;
-  moneda: "PEN" | "USD" | null;
+  moneda: CurrencyCode | null;
   advertencias: string[];
 }
 
@@ -167,6 +168,32 @@ export function readVoucher(text: string, today = new Date()): VoucherReading {
     moneda,
     advertencias,
   };
+}
+
+/** Explicit ISO code or unambiguous symbol only. A bare "$" is never guessed from the group. */
+export function readPaymentVoucher(text: string, today = new Date()): VoucherReading {
+  const legacy = readVoucher(text, today);
+  const labels: Record<CurrencyCode, string> = { PEN: String.raw`(?:PEN|S\s*/\s*\.?)`, USD: String.raw`(?:USD|US\s*\$)`, COP: 'COP', EUR: '(?:EUR|€)', MXN: 'MXN', BRL: String.raw`(?:BRL|R\s*\$)` };
+  const found = new Map<CurrencyCode, number[]>();
+  for (const line of text.split(/\r?\n/)) {
+    if (NOT_THE_PAYMENT.test(line)) continue;
+    for (const [code, label] of Object.entries(labels) as [CurrencyCode, string][]) {
+      const expressions = [new RegExp(String.raw`(?:^|[^\p{L}\d])${label}\s*${AMOUNT}(?![\d.,/]*\d)`, 'giu'), new RegExp(String.raw`(?:^|[^\d.,])${AMOUNT}\s*${label}(?!\p{L})`, 'giu')];
+      for (const expression of expressions) for (const match of line.matchAll(expression)) {
+        const value = voucherCents(match[1]);
+        if (value) found.set(code, [...(found.get(code) ?? []), value]);
+      }
+    }
+  }
+  if (!found.size && legacy.moneda === 'PEN') return legacy;
+  const moneda = found.size === 1 ? [...found.keys()][0] : null;
+  const candidatos = moneda ? [...new Set(found.get(moneda))].slice(0, 6) : [];
+  const monto = candidatos.length === 1 ? candidatos[0] : null;
+  const advertencias = legacy.advertencias.filter((a) => /fecha|hace \d+ días/.test(a));
+  if (found.size > 1) advertencias.push('Hay importes en distintas monedas. Elige manualmente el pago correcto; no sumamos ni convertimos lo que aparece en la captura.');
+  else if (!moneda) advertencias.push('No pudimos identificar claramente la moneda y el monto. Revisa la captura y escribe ambos; el símbolo $ por sí solo es ambiguo.');
+  else if (!monto) advertencias.push('Vimos más de un monto. Elige el que realmente pagaste.');
+  return { ...legacy, moneda, monto, candidatos, advertencias, app: moneda && moneda !== 'PEN' && (legacy.app === 'yape' || legacy.app === 'plin') ? null : legacy.app };
 }
 
 const normalized = (value: string) =>

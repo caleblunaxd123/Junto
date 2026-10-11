@@ -10,11 +10,15 @@ import { FormField } from "../../../src/components/ui/Reference";
 import { DeadlinePicker } from "../../../src/components/DeadlinePicker";
 import { NamesInput } from "../../../src/components/NamesInput";
 import { errorMessage } from "../../../src/lib/errorMessage";
+import { GroupCurrencyPicker } from "../../../src/components/GroupCurrencyPicker";
+import type { CountryCode, CurrencyCode } from "@junto/shared/currency";
 
 /** A group is just a name and its people. Amounts go in each expense, inside the group. */
 export default function CreateGroup() {
   const user = useAuthStore((s) => s.usuario);
   const [name, setName] = useState("");
+  const [country, setCountry] = useState<CountryCode>("PE");
+  const [currency, setCurrency] = useState<CurrencyCode>("PEN");
   const [people, setPeople] = useState<string[]>([]);
   const [deadline, setDeadline] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -33,6 +37,8 @@ export default function CreateGroup() {
       setError("");
       const group = await api.post<{ id: string }>("/grupos", {
         nombre: name.trim(),
+        pais: country,
+        moneda: currency,
         tipo: guessGroupType(name) ?? "amigos",
         // Whoever created the group can confirm payments for people who don't have the app yet.
         aprobacionPagos: "administrador",
@@ -74,6 +80,8 @@ export default function CreateGroup() {
         placeholder="Ej. Paseo a Lunahuaná"
       />
 
+      <GroupCurrencyPicker country={country} currency={currency} onChange={(nextCountry, nextCurrency) => { setCountry(nextCountry); setCurrency(nextCurrency); }} disabled={busy || !!createdId} />
+
       <View style={{ gap: 8 }}>
         <Label weight="bold" size={15}>¿Quiénes participan?</Label>
         <Label size={13} color={palette.muted}>Escribe sus nombres, aunque todavía no tengan JUNTO. Así puedes anotar gastos desde ya; después cada uno entra con su enlace.</Label>
@@ -90,7 +98,7 @@ export default function CreateGroup() {
         <Label size={13} weight="bold">Así funciona</Label>
         <Label size={13}>1. Anota cada gasto: cuánto, quién pagó y entre quiénes.</Label>
         <Label size={13}>2. JUNTO te dice quién le debe a quién.</Label>
-        <Label size={13}>3. Cada uno paga por Yape, Plin o efectivo y quien recibe lo confirma.</Label>
+        <Label size={13}>3. Cada uno paga por fuera de JUNTO {currency === "PEN" ? "(Yape, Plin, transferencia o efectivo)" : "(transferencia o efectivo)"} y quien recibe lo confirma.</Label>
       </View>
     </Screen>
   );

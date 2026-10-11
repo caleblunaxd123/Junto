@@ -14,7 +14,7 @@ import { Label, Button, ErrorBox, palette, design } from "../../../src/component
 import { groupArt } from "../../../src/components/ui/Artwork";
 import { PendingActions } from "../../../src/components/PendingActions";
 import { pendingActions } from "../../../src/lib/pending";
-import { centavosASoles, type ChatItem } from "../../../src/types";
+import { type ChatItem } from "../../../src/types";
 import { ShareMessageSheet } from "../../../src/components/ui/ShareMessage";
 import { groupShareMessage, type ShareMessage } from "../../../src/lib/shareMessage";
 import { useResponsiveLayout } from "../../../src/components/ui/responsive";
@@ -26,7 +26,7 @@ import { RecordPayment, LinkMember } from "../../../src/components/chat/RecordPa
 import { ExpressionTray } from "../../../src/components/chat/ExpressionTray";
 import { appendExpression } from "../../../src/lib/chatExpressions";
 
-const money = (value: number) => `S/ ${centavosASoles(value)}`;
+import { formatMoney, type PaymentConversion } from "@junto/shared/currency";
 const systemTypes = new Set(["creado", "union", "recordatorio"]);
 
 /** A quick action above the message box, like WhatsApp's attachments but for money. */
@@ -53,6 +53,7 @@ export default function Group() {
   const focused = useIsFocused();
   const insets = useSafeAreaInsets();
   const { data: group, isLoading, isRefetchError, refetch } = useGrupo(id);
+  const money = (value: number) => formatMoney(value, group?.moneda);
   const { data: payments = [], isError: paymentsError, isFetching: paymentsFetching, isLoading: paymentsLoading, refetch: refetchPayments } = usePagos();
   const chat = useQuery<ChatItem[]>({
     queryKey: ["chat", id],
@@ -107,7 +108,7 @@ export default function Group() {
   const goInvite = () => router.push(`/(app)/grupos/agregar-personas?grupoId=${id}`);
   const goPay = () => router.push(`/(app)/pagos/pagar?grupoId=${id}`);
   const goExpense = () => router.push(`/(app)/gastos/agregar?grupoId=${id}`);
-  const refreshMoney = () => Promise.all(["chat", "grupos", "pagos", "actividad"].map((key) => qc.invalidateQueries({ queryKey: [key] })));
+  const refreshMoney = () => Promise.all(["chat", "grupos", "pagos", "actividad", "notificaciones"].map((key) => qc.invalidateQueries({ queryKey: [key] })));
 
   function leave() {
     setMenu(false);
@@ -192,10 +193,10 @@ export default function Group() {
     }
   }
 
-  async function recordPayment(monto: number, metodo: string) {
+  async function recordPayment(monto: number, metodo: string, conversion?: PaymentConversion, fechaEfectiva?: string) {
     if (!recordFor) return;
     try {
-      await api.post("/pagos/recibido", { grupoId: id, pagadorId: recordFor.person.id, ...(recordFor.receiver ? { receptorId: recordFor.receiver.id } : {}), monto, metodo });
+      await api.post("/pagos/recibido", { grupoId: id, pagadorId: recordFor.person.id, ...(recordFor.receiver ? { receptorId: recordFor.receiver.id } : {}), monto, metodo, fechaEfectiva, ...(conversion ? { conversion } : {}) });
     } catch (err) {
       throw new Error(errorMessage(err, "No pudimos registrar el pago. Revisa tu conexión y reintenta."));
     }
@@ -262,7 +263,7 @@ export default function Group() {
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <Label accessibilityRole="header" size={17} weight="extra" color="white" numberOfLines={1}>{group.nombre}</Label>
-              <Label size={12} color="#D8F3EC" numberOfLines={1}>{group.miembros.length} {group.miembros.length === 1 ? "integrante" : "integrantes"}{noApp.length ? ` · ${noApp.length} sin app` : ""}</Label>
+              <Label size={12} color="#D8F3EC" numberOfLines={1}>{group.miembros.length} {group.miembros.length === 1 ? "integrante" : "integrantes"}{noApp.length ? ` · ${noApp.length} sin app` : ""} · {group.moneda ?? "PEN"}</Label>
             </View>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Invitar personas" hitSlop={8} onPress={goInvite} style={{ width: 40, height: 44, alignItems: "center", justifyContent: "center" }}>
@@ -346,7 +347,7 @@ export default function Group() {
             return (
               <View key={item.id} style={{ gap: 8, marginTop: showAuthor && index ? 4 : 0 }}>
                 {newDay && <DaySeparator date={day} />}
-                <ChatBubble item={item} meId={user?.id} modo={group.modo} showAuthor={showAuthor} busy={resolve.isPending} onAnswer={answer} onDelete={remove} />
+                <ChatBubble item={item} meId={user?.id} modo={group.modo} moneda={group.moneda} showAuthor={showAuthor} busy={resolve.isPending} onAnswer={answer} onDelete={remove} />
               </View>
             );
           })}
@@ -374,7 +375,8 @@ export default function Group() {
           {newMessages && <View style={{ paddingHorizontal: 12 }}><Button compact secondary title="Ver mensajes nuevos ↓" onPress={() => { nearBottom.current = true; setNewMessages(false); feed.current?.scrollToEnd({ animated: true }); }} /></View>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 8, paddingHorizontal: 12 }}>
             <Chip primary icon="add" title="Agregar gasto" onPress={goExpense} />
-            {group.balanceUsuario.debes > 0 && <Chip primary icon="cash-outline" title={`Pagar ${money(group.balanceUsuario.debes)}`} onPress={goPay} />}
+            {group.balanceUsuario.debes > 0 && <Chip primary icon="cash-outline" title="Ya pagué" onPress={goPay} />}
+            {group.balanceUsuario.debes > 0 && <Chip icon="receipt-outline" title="Subir comprobante" onPress={() => router.push(`/(app)/pagos/pagar?grupoId=${id}&subir=1`)} />}
             <Chip icon="swap-horizontal-outline" title="Cuentas" onPress={() => setWhoPaid(true)} />
             {collect.length > 0 && <Chip highlight icon="notifications-outline" title="Recordar" onPress={() => setReminders(true)} />}
             <Chip icon="person-add-outline" title="Invitar" onPress={goInvite} />
@@ -411,12 +413,12 @@ export default function Group() {
         </View>
       </KeyboardAvoidingView>
 
-      <WhoPaid group={group} userId={user?.id} visible={whoPaid} onClose={() => setWhoPaid(false)} onPay={goPay}
+      <WhoPaid group={group} payments={groupPayments} userId={user?.id} visible={whoPaid} onClose={() => setWhoPaid(false)} onPay={goPay}
         onRecord={(person, max, receiver) => { setWhoPaid(false); setRecordFor({ person, max, receiver }); }}
         onRemind={() => setReminders(true)}
         onShare={(member) => { setWhoPaid(false); setShareMessage(personalInvite(group, member, user?.nombre ?? "")); }}
         onLink={(member) => { setWhoPaid(false); setLinkFor(member); }} />
-      <RecordPayment person={recordFor?.person ?? null} receiver={recordFor?.receiver} max={recordFor?.max ?? 0} onClose={() => setRecordFor(null)} onSave={recordPayment} />
+      <RecordPayment grupoId={group.id} moneda={group.moneda} person={recordFor?.person ?? null} receiver={recordFor?.receiver} max={recordFor?.max ?? 0} onClose={() => setRecordFor(null)} onSave={recordPayment} />
       <LinkMember member={linkFor} candidates={group.miembros.filter((m) => !sinCuenta(m))} onClose={() => setLinkFor(null)} onPick={linkMember} />
 
       <Modal transparent statusBarTranslucent navigationBarTranslucent visible={reminders} animationType="slide" onRequestClose={() => setReminders(false)}>
@@ -438,6 +440,7 @@ export default function Group() {
           <Pressable accessibilityRole="button" accessibilityLabel="Cerrar opciones" onPress={() => setMenu(false)} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
           <SafeAreaView edges={["bottom"]} style={{ width: "100%", maxWidth: tablet ? 560 : undefined, borderRadius: tablet ? 28 : undefined, backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 12 }}>
             <Label accessibilityRole="header" size={22} weight="extra">{group.nombre}</Label>
+            <Label size={13} color={palette.muted}>Moneda: {group.moneda ?? "PEN"}. No se puede cambiar ni se hacen conversiones.</Label>
             <Button title="Invitar personas" onPress={() => { setMenu(false); goInvite(); }} />
             <Button title="Agregar gasto" secondary onPress={() => { setMenu(false); goExpense(); }} />
             <Button title="Cuentas del grupo" secondary onPress={() => { setMenu(false); setWhoPaid(true); }} />

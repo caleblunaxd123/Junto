@@ -6,7 +6,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { api } from "../../../src/lib/api";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { useGrupo } from "../../../src/hooks/useGrupos";
-import { Gasto, centavosASoles } from "../../../src/types";
+import { Gasto } from "../../../src/types";
 import { ShareMessageSheet } from "../../../src/components/ui/ShareMessage";
 import { expenseShareMessage, type ShareMessage } from "../../../src/lib/shareMessage";
 import { Comments } from "../../../src/components/Comments";
@@ -20,6 +20,7 @@ import {
   palette,
   design,
 } from "../../../src/components/ui/Design";
+import { formatMoney } from "@junto/shared/currency";
 export default function ExpenseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const user = useAuthStore((s) => s.usuario);
@@ -31,6 +32,7 @@ export default function ExpenseDetail() {
     queryFn: () => api.get(`/gastos/${id}`).then((r) => r.data),
   });
   const { data: group } = useGrupo(expense?.grupoId || "");
+  const money = (value: number) => formatMoney(value, expense?.grupo?.moneda ?? group?.moneda);
   const remove = useMutation({
     mutationFn: () => api.delete(`/gastos/${id}`),
     onSuccess: () => {
@@ -73,7 +75,7 @@ export default function ExpenseDetail() {
               {expense.descripcion}
             </Label>
             <Label size={34} weight="extra">
-              S/ {centavosASoles(expense.montoTotal)}
+              {money(expense.montoTotal)}
             </Label>
             <Label>{expense.pagadoPor === user?.id ? "Tú adelantaste este dinero." : `${expense.pagador.nombre} adelantó este dinero.`}</Label>
             <Label size={13} color={palette.muted}>
@@ -93,7 +95,7 @@ export default function ExpenseDetail() {
                   {p.usuarioId === user?.id ? " (tú)" : ""}
                 </Label>
                 <Label weight="bold">
-                  S/ {centavosASoles(p.montoAsignado)}
+                  {money(p.montoAsignado)}
                 </Label>
               </View>
             ))}
@@ -109,7 +111,7 @@ export default function ExpenseDetail() {
             </Card>
           )}
           <Comments gastoId={expense.id} hint="¿Algo que aclarar? Por ejemplo «¿Incluye la propina?» o «Te pago el viernes»." />
-          <Button title="Compartir gasto por WhatsApp o correo" secondary disabled={!group || remove.isPending} onPress={() => { try { setShareMessage(expenseShareMessage(expense, group?.nombre || "Mi grupo")); } catch (err) { setError((err as Error).message); } }} />
+          <Button title="Compartir gasto por WhatsApp o correo" secondary disabled={!group || remove.isPending} onPress={() => { try { setShareMessage(expenseShareMessage(expense, group?.nombre || "Mi grupo", group?.moneda)); } catch (err) { setError((err as Error).message); } }} />
           <ShareMessageSheet message={shareMessage} onClose={() => setShareMessage(null)} disabled={isError || remove.isPending} />
           <Button
             title="Ver las cuentas del grupo"

@@ -14,9 +14,8 @@ import { useComprobanteImagen, useGrupo, usePago, useResolverPago } from "../../
 import { useAuthStore } from "../../../src/store/auth.store";
 import { memberLabels } from "../../../src/lib/people";
 import { paymentHeadline } from "../../../src/lib/payment";
-import { centavosASoles } from "../../../src/types";
+import { formatMoney } from "@junto/shared/currency";
 
-const money = (value: number) => `S/ ${centavosASoles(value)}`;
 const apps: Record<string, string> = { yape: "Yape", plin: "Plin", transferencia: "Transferencia", efectivo: "Efectivo" };
 const tones = {
   waiting: { background: palette.yellow, border: "#F1DFA8", icon: "time-outline" as const, color: "#B07700" },
@@ -31,6 +30,7 @@ export default function PaymentDetail() {
   const focused = useIsFocused();
   const { data: pago, isLoading, isError, refetch, isRefetching } = usePago(id, focused);
   const { data: group } = useGrupo(pago?.grupoId || "");
+  const money = (value: number) => formatMoney(value, pago?.grupo.moneda);
   const canSee = !!pago?.permisos.verComprobante && !!pago.comprobante?.imagenDisponible;
   const image = useComprobanteImagen(id, canSee);
   const resolve = useResolverPago();
@@ -55,8 +55,8 @@ export default function PaymentDetail() {
       approve ? (asReceiver ? "¿Ya tienes el dinero?" : "¿Apruebas este pago?") : asReceiver ? "¿No te llegó este pago?" : "¿Rechazas este pago?",
       approve
         ? asReceiver
-          ? `Aprueba solo si ya ves ${money(pago.monto)} en tu Yape, Plin, cuenta o lo recibiste en efectivo. La deuda bajará por ese monto.`
-          : `Apruébalo solo si el comprobante es claro y coincide. ${receiver} recibirá un aviso y podrá indicar si no le llegó.`
+          ? `Aprueba solo si ya ves ${money(pago.monto)} en tu cuenta o lo recibiste en efectivo. La deuda bajará por ese monto.`
+          : `Confirma con ${receiver} que recibió el dinero. Una captura, aunque coincida, no demuestra la recepción. ${receiver} recibirá un aviso y podrá indicar si no le llegó.`
         : `${Nombre(pago.pagadorId)} verá que no se aprobó y la deuda seguirá igual. Pueden conversarlo en los comentarios.`,
       [
         { text: "Cancelar", style: "cancel" },
@@ -122,13 +122,14 @@ export default function PaymentDetail() {
   const headline = paymentHeadline(pago, user?.id, Nombre);
   const tone = tones[headline.tone];
   const voucher = pago.comprobante;
-  const amountMismatch = voucher?.montoLeido != null && voucher.montoLeido !== pago.monto;
+  const voucherMoney = (value: number) => formatMoney(value, voucher?.monedaLeida ?? pago.monedaOrigen ?? pago.grupo.moneda);
+  const amountMismatch = voucher?.montoLeido != null && voucher.montoLeido !== (pago.montoOrigen ?? pago.monto);
   const approvers = pago.aprobadores.map((a) => `${Nombre(a.id)}${a.rol === "administrador" ? " (administración)" : " (quien recibe)"}`);
 
   // The decision stays on screen while the approver looks at the voucher.
   const footer = pago.permisos.aprobar ? (
     <>
-      <Label size={13} weight="bold">{pago.receptorId === user?.id ? "¿Te llegó este dinero?" : "¿El comprobante coincide con lo que se debía?"}</Label>
+      <Label size={13} weight="bold">{pago.receptorId === user?.id ? "¿Te llegó este dinero?" : "¿Quien recibe confirmó que llegó el dinero?"}</Label>
       <View style={{ flexDirection: "row", gap: 8 }}>
         <View style={{ flex: 1 }}><Button title={pago.receptorId === user?.id ? "Sí, lo recibí" : "Aprobar"} loading={resolve.isPending} onPress={() => decide(true)} /></View>
         <View style={{ flex: 1 }}><Button title={pago.receptorId === user?.id ? "No llegó" : "Rechazar"} secondary disabled={resolve.isPending} onPress={() => decide(false)} /></View>
@@ -150,15 +151,15 @@ export default function PaymentDetail() {
         </View>
       </Card>
 
-      <Card style={{ gap: 12 }}>
+      <Card testID="payment-summary" style={{ gap: 12 }}>
+        <Label testID="payment-amount" weight="extra" size={26} style={{ textAlign: "center" }}>{money(pago.monto)}</Label>
         <View style={[design.row, { justifyContent: "space-between" }]}>
           <View style={{ alignItems: "center", flex: 1, gap: 4 }}>
             <Avatar name={pago.pagador.nombre} photo={pago.pagador.fotoUrl} seed={pago.pagadorId} size={48} />
             <Label size={13} weight="bold" numberOfLines={1}>{Nombre(pago.pagadorId)}</Label>
             <Label size={11} color={palette.muted}>pagó</Label>
           </View>
-          <View style={{ alignItems: "center", gap: 2 }}>
-            <Label weight="extra" size={26}>{money(pago.monto)}</Label>
+          <View style={{ alignItems: "center", gap: 2, flex: 2, minWidth: 0 }}>
             <Ionicons name="arrow-forward" size={20} color={palette.muted} />
             <Label size={12} color={palette.muted}>{pago.metodo ? apps[pago.metodo] ?? pago.metodo : "—"}</Label>
           </View>
@@ -168,6 +169,12 @@ export default function PaymentDetail() {
             <Label size={11} color={palette.muted}>recibe</Label>
           </View>
         </View>
+        {!!pago.monedaOrigen && !!pago.montoOrigen && !!pago.tipoCambio && <View style={{ padding: 14, borderRadius: 16, backgroundColor: palette.lilac, gap: 6 }}>
+          <Label size={13} weight="bold">Monto original: {formatMoney(pago.montoOrigen, pago.monedaOrigen)}</Label>
+          <Label size={13}>Cambio aplicado: 1 {pago.monedaOrigen} = {pago.tipoCambio} {pago.grupo.moneda ?? "PEN"}. Cubre {money(pago.monto)} de la deuda.</Label>
+          {!!pago.referenciaCambio && <Label size={12} color={palette.muted}>Referencia: 1 {pago.referenciaCambio.origen} = {pago.referenciaCambio.tasa} {pago.referenciaCambio.destino} · {pago.referenciaCambio.fecha.slice(0, 10)} · {pago.referenciaCambio.fuente}. Es orientativa; el cambio aplicado es el acordado arriba.</Label>}
+        </View>}
+        {!!pago.fechaEfectiva && <Label size={12} color={palette.muted}>Día del pago: {pago.fechaEfectiva.slice(0, 10)}.</Label>}
         <Label size={12} color={palette.muted}>
           Registrado el {new Date(pago.fechaPago).toLocaleString("es-PE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
           {pago.fechaResolucion ? ` · resuelto el ${new Date(pago.fechaResolucion).toLocaleDateString("es-PE", { day: "numeric", month: "short" })}` : ""}
@@ -197,7 +204,7 @@ export default function PaymentDetail() {
           <View style={{ gap: 4 }}>
             <Label size={12} weight="bold" color={palette.muted}>LEÍDO DEL COMPROBANTE (REVÍSALO EN LA IMAGEN)</Label>
             {[
-              ["Monto", voucher.montoLeido != null ? money(voucher.montoLeido) : "No se pudo leer"],
+              ["Monto", voucher.montoLeido != null ? voucherMoney(voucher.montoLeido) : "No se pudo leer"],
               ["App", voucher.app ? apps[voucher.app] ?? voucher.app : "—"],
               ["N.º de operación", voucher.operacion || "—"],
               ["Para", voucher.destinatarioLeido || "—"],
@@ -210,7 +217,7 @@ export default function PaymentDetail() {
               </View>
             ))}
             {amountMismatch && (
-              <Label size={12} weight="bold" color="#8A5B05">El comprobante dice {money(voucher.montoLeido!)} y se registró {money(pago.monto)}.</Label>
+              <Label size={12} weight="bold" color="#8A5B05">El comprobante dice {voucherMoney(voucher.montoLeido!)}. Revisa el monto original registrado y su equivalente antes de confirmar.</Label>
             )}
             {voucher.codigoSeguridad && pago.receptorId === user?.id && pago.estado === "reportado" && (
               <Label size={12} color={palette.muted}>Para verificarlo: abre tu Yape, busca este movimiento y compara el código de seguridad.</Label>

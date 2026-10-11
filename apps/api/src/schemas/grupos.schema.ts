@@ -14,6 +14,8 @@ const grupoSchema = z.object({
 });
 
 export const crearGrupoSchema = grupoSchema.extend({
+  moneda: z.enum(['PEN', 'COP', 'USD', 'EUR', 'MXN', 'BRL']).default('PEN'),
+  pais: z.enum(['PE', 'CO', 'US', 'ES', 'MX', 'BR', 'OTHER']).optional(),
   // People added by name right away ("Ana", "Luis"); they join later with their personal link.
   integrantes: z.array(z.string().max(60)).max(30, 'Agrega hasta 30 personas a la vez').optional(),
   // The bill the creator already paid (or will collect for), split in equal parts. Optional.

@@ -16,10 +16,9 @@ import {
   design,
 } from "../../../src/components/ui/Design";
 import { groupCover, art } from "../../../src/components/ui/Artwork";
-import { centavosASoles } from "../../../src/types";
+import { formatMoney } from "@junto/shared/currency";
 import { ShareMessageSheet } from "../../../src/components/ui/ShareMessage";
 import { groupShareMessage, type ShareMessage } from "../../../src/lib/shareMessage";
-const money = (v: number) => `S/ ${centavosASoles(v)}`;
 function Step({
   number,
   title,
@@ -98,6 +97,7 @@ function Step({
 export default function Accounts() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data: group, isLoading, isError, refetch } = useGrupo(id);
+  const money = (value: number) => formatMoney(value, group?.moneda);
   const payments = usePagos();
   const [shareMessage, setShareMessage] = React.useState<ShareMessage | null>(null);
   useFocusEffect(

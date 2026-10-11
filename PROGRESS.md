@@ -1,5 +1,17 @@
 # JUNTO — estado real
 
+## Monedas y pagos externos: candidata local, no publicada (11/10/2026)
+
+- País del plan explícito, sin GPS; su moneda es una sugerencia. Se puede elegir PEN, COP, USD, EUR, MXN o BRL independientemente del país. Los grupos existentes conservan PEN y país desconocido. Moneda y país quedan bloqueados para no reinterpretar el libro.
+- Los pagos conservan moneda/monto original, fecha real y tasa aplicada. Se consulta una referencia diaria de Frankfurter por fecha del pago, con fuente/fecha y uso explícito. Referencia y cambio acordado quedan registrados por separado; no es una cotización bancaria en tiempo real. Si falla la consulta, se permite el cambio acordado manual. El servidor recalcula con enteros y rechaza discrepancias, excedentes y autoaprobación.
+- «Ya pagué» reporta, no confirma ni reduce la deuda. Confirma quien recibe, no necesariamente el creador. La administración puede representar a un receptor añadido solo por nombre. Pagador/receptor reciben avisos internos persistentes aunque no haya token push; un pago pendiente se revisa en lugar de crear otro.
+- Resúmenes por moneda: no se suman soles, pesos y dólares. Mensajes compartidos, chat, actividad y recordatorios muestran la moneda del grupo. APKs sin soporte reciben una indicación de actualización ante grupos o invitaciones de otras monedas.
+- Validación local en base aislada `junto_payment_flow_qa_20261011`: 17 migraciones aplicadas, esquema sin desfase, API build y 79 pruebas de dominio; integraciones de moneda, cumpleaños con invitado excluido, receptor distinto del creador, receptor sin cuenta, pagos recibidos, concurrencia e importación. OCR real con imágenes ficticias y controles de privacidad/duplicados. No se enviaron correos ni push reales en esta ronda.
+- Pendientes antes de publicar: regresión completa de navegador y APK, auditoría del artefacto, CI y despliegue con respaldo. No se generó ni publicó todavía la candidata 1.3.0/versionCode 7.
+- «Subir comprobante» desde el grupo/chat abre el flujo privado del pago. OCR propone importes con moneda explícita PEN/COP/USD/EUR/MXN/BRL; `$` ambiguo o varias monedas/importes exige revisión. No lee automáticamente cualquier foto del chat ni confirma dinero por una captura.
+- Alcance y pruebas: `ops/web/FLOW-PAYMENTS-20261011.md`. Google en la APK nueva, push con la app cerrada y validación física siguen pendientes; los avisos internos no acreditan recepción push.
+
+
 Actualizado el 11 de octubre de 2026: código de la candidata 1.1.3 preparado para GitHub. La publicación del código no implica desplegar esta versión en Contabo ni habilitar la entrega push. Antes, el 10 de octubre se añadieron grupos de cobranza/división, chat y fecha límite.
 
 ## Candidata 1.1.3: inicio, guía y chat

@@ -1,7 +1,17 @@
 import { z } from 'zod';
+import { validPaymentDate } from '../domain/exchange';
+const paymentDateSchema = z.string().refine((date) => validPaymentDate(date), 'Elige una fecha válida que no sea futura.');
+const conversionSchema = z.object({
+  monedaOrigen: z.enum(['PEN', 'COP', 'USD', 'EUR', 'MXN', 'BRL']),
+  montoOrigen: z.number().int().positive().max(999_999_999),
+  tipoCambio: z.string().trim().max(20),
+  cotizacionId: z.string().uuid().optional(),
+}).strict();
 
 // Payments happen outside JUNTO (Yape, Plin, transfer or cash); the receiver confirms them.
 export const reportarPagoSchema = z.object({
+  conversion: conversionSchema.optional(),
+  fechaEfectiva: paymentDateSchema.optional(),
   nota: z.string().trim().max(100).optional(),
   receptorId: z.string().uuid(),
   grupoId: z.string().uuid(),
@@ -13,6 +23,8 @@ export const reportarPagoSchema = z.object({
 
 // The receiver records money they already got (cash, or from someone added by name).
 export const registrarRecibidoSchema = z.object({
+  conversion: conversionSchema.optional(),
+  fechaEfectiva: paymentDateSchema.optional(),
   nota: z.string().trim().max(100).optional(),
   // An admin may record receipt for a name-only receiver, never for another real account.
   receptorId: z.string().uuid().optional(),

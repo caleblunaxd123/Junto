@@ -19,7 +19,7 @@ async function run(){
    if(u.origin===WEB)return route.continue();
    if(u.origin==='https://wa.me'){whatsappDraft=request.url();return route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>QA draft capture only</title>No WhatsApp request sent.'});}
    if(u.origin==='https://junto.lunalav.pe'&&u.pathname.startsWith('/api/')){
-    if(request.method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':WEB,'Access-Control-Allow-Methods':'GET,POST,PUT,PATCH,DELETE','Access-Control-Allow-Headers':'authorization,content-type'}});
+    if(request.method()==='OPTIONS')return route.fulfill({status:204,headers:{'Access-Control-Allow-Origin':WEB,'Access-Control-Allow-Methods':'GET,POST,PUT,PATCH,DELETE','Access-Control-Allow-Headers':'authorization,content-type,x-junto-currency-version'}});
     // Regression: sharing immediately must not depend on the slow group-detail query.
     if(request.method()==='GET' && /^\/api\/grupos\/[0-9a-f-]{36}$/.test(u.pathname))await new Promise(r=>setTimeout(r,5000));
     if(closing)return route.abort().catch(()=>undefined);

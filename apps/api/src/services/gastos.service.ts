@@ -1,3 +1,4 @@
+import { formatMoney } from "@junto/shared/currency";
 import { describeError } from "../lib/logSafe";
 import { prisma } from "../lib/prisma";
 import { UserError as Error } from "../domain/errors";
@@ -159,7 +160,7 @@ async function notificarParticipantes(
   creadoPor: string,
 ) {
   const pagadorNombre = gasto.pagador.nombre;
-  const montoSoles = (gasto.montoTotal / 100).toFixed(2);
+  const { moneda } = await prisma.grupo.findUniqueOrThrow({ where: { id: gasto.grupoId }, select: { moneda: true } });
 
   for (const participante of gasto.participantes) {
     if (participante.usuario.id === creadoPor) continue;
@@ -170,11 +171,11 @@ async function notificarParticipantes(
     });
 
     if (usuario?.expoPushToken) {
-      const montoParte = (participante.montoAsignado / 100).toFixed(2);
+      const montoParte = formatMoney(participante.montoAsignado, moneda);
       await sendPushNotification(
         usuario.expoPushToken,
         "Nuevo gasto registrado",
-        `${pagadorNombre} registró ${gasto.descripcion}: te tocan S/${montoParte}`,
+        `${pagadorNombre} registró ${gasto.descripcion}: te tocan ${montoParte}`,
         { grupoId: gasto.grupoId, gastoId: gasto.id, type: "nuevo_gasto" },
       );
     }
@@ -227,6 +228,7 @@ export async function getGastoDetalle(gastoId: string, usuarioId: string, db: Pr
   const gasto = await db.gasto.findUnique({
     where: { id: gastoId },
     include: {
+      grupo: { select: { moneda: true } },
       participantes: {
         // Stable order: the shared summary (app preview and e-mail) must list people identically.
         orderBy: { id: "asc" },
