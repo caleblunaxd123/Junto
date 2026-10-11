@@ -14,6 +14,8 @@ const grupoSchema = z.object({
 });
 
 export const crearGrupoSchema = grupoSchema.extend({
+  // People added by name right away ("Ana", "Luis"); they join later with their personal link.
+  integrantes: z.array(z.string().max(60)).max(30, 'Agrega hasta 30 personas a la vez').optional(),
   // The bill the creator already paid (or will collect for), split in equal parts. Optional.
   cuenta: z.object({
     descripcion: z.string().trim().min(1).max(200).optional(),

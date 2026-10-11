@@ -11,6 +11,15 @@ export const reportarPagoSchema = z.object({
   comprobanteId: z.string().uuid().optional(),
 });
 
+// The receiver records money they already got (cash, or from someone added by name).
+export const registrarRecibidoSchema = z.object({
+  nota: z.string().trim().max(100).optional(),
+  pagadorId: z.string().uuid(),
+  grupoId: z.string().uuid(),
+  monto: z.number().int().positive().max(999_999_999),
+  metodo: z.enum(['yape', 'plin', 'transferencia', 'efectivo']),
+}).strict();
+
 // ~3 MB image in base64.
 export const subirComprobanteSchema = z.object({
   grupoId: z.string().uuid(),
@@ -18,3 +27,4 @@ export const subirComprobanteSchema = z.object({
 }).strict();
 
 export type ReportarPagoInput = z.infer<typeof reportarPagoSchema>;
+export type RegistrarRecibidoInput = z.infer<typeof registrarRecibidoSchema>;

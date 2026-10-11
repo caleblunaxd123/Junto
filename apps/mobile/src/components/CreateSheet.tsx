@@ -13,9 +13,17 @@ export function CreateSheet({ visible, onClose, groups }: { visible: boolean; on
   const [pressedOption, setPressedOption] = React.useState<string | null>(null);
   const { tablet } = useResponsiveLayout();
   const options: Option[] = [
-    { icon: "cash-outline", title: "Grupo de cobranza", subtitle: "Pusiste todo el dinero y los demás te devuelven su parte.", href: "/(app)/grupos/crear?modo=cobranza", color: "#007B60", bg: palette.mint },
-    { icon: "flag-outline", title: "Grupo de división de gastos", subtitle: "Entre todos juntan un monto meta, cada uno con su aporte.", href: "/(app)/grupos/crear?modo=division", color: palette.purple, bg: palette.lilac },
-    { icon: "receipt-outline", title: "Una cuenta de hoy", subtitle: "Cena o cumple: tus invitados no necesitan la app.", href: "/(app)/cuentas/rapida", color: "#1D5FA8", bg: "#E2F0FF" },
+    ...(groups.length
+      ? [{
+          icon: "receipt-outline" as const,
+          title: "Agregar un gasto",
+          subtitle: "¿Cuánto?, ¿quién pagó? y ¿entre quiénes?",
+          href: (groups.length === 1 ? { pathname: "/(app)/gastos/agregar", params: { grupoId: groups[0].id } } : "/(app)/gastos/agregar") as Href,
+          color: "#007B60",
+          bg: palette.mint,
+        }]
+      : []),
+    { icon: "people-outline", title: "Nuevo grupo", subtitle: "Viaje, salida, cumple o depa. Agrega a tu gente por su nombre.", href: "/(app)/grupos/crear", color: "#1D5FA8", bg: "#E2F0FF" },
     { icon: "link-outline", title: "Unirme con un enlace", subtitle: "Pega la invitación que te compartieron.", href: "/(app)/unirme", color: "#8A5A00", bg: palette.yellow },
   ];
   return (
@@ -63,7 +71,7 @@ export function AddButton({ onPress }: { onPress: () => void }) {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Agregar"
-      accessibilityHint="Crear un grupo de cobranza o de división de gastos, dividir una cuenta o unirte con un enlace"
+      accessibilityHint="Agregar un gasto, crear un grupo o unirte con un enlace"
       onPress={onPress}
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}

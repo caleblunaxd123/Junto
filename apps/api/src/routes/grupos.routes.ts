@@ -6,6 +6,7 @@ import { authMiddleware } from "../middleware/auth";
 import { z } from "zod";
 import { getGroupChat } from "../services/groupChat.service";
 import { createComment } from "../services/comentarios.service";
+import { agregarIntegrantes, quitarIntegrante, unirIntegrante } from "../services/integrantes.service";
 
 const router = Router();
 
@@ -20,6 +21,26 @@ router.get("/:id/saldos", gruposController.getSaldos);
 router.post("/:id/invitar", gruposController.invitar);
 router.post("/unirse", gruposController.unirse);
 router.delete("/:id/salir", gruposController.salir);
+// People added by name before they have JUNTO.
+router.post("/:id/integrantes", async (req, res, next) => {
+  try {
+    const { nombres } = z.object({ nombres: z.array(z.string().max(60)).min(1).max(30) }).strict().parse(req.body);
+    res.status(201).json(await agregarIntegrantes(z.string().uuid().parse(req.params.id), req.user!.userId, nombres));
+  } catch (error) { next(error); }
+});
+router.delete("/:id/integrantes/:integranteId", async (req, res, next) => {
+  try {
+    await quitarIntegrante(z.string().uuid().parse(req.params.id), req.user!.userId, z.string().uuid().parse(req.params.integranteId));
+    res.status(204).end();
+  } catch (error) { next(error); }
+});
+router.post("/:id/integrantes/:integranteId/unir", async (req, res, next) => {
+  try {
+    const { usuarioId } = z.object({ usuarioId: z.string().uuid() }).strict().parse(req.body);
+    await unirIntegrante(z.string().uuid().parse(req.params.id), req.user!.userId, z.string().uuid().parse(req.params.integranteId), usuarioId);
+    res.json({ unido: true });
+  } catch (error) { next(error); }
+});
 // The group as a chat about money: timeline plus plain messages.
 router.get("/:id/chat", async (req, res, next) => {
   try {

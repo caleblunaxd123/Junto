@@ -57,6 +57,8 @@ export async function enviarRecordatorio(
     await transactionLock(tx, `reminder:${grupoId}:${acreedorId}:${deudorId}`);
     const miembro = await tx.grupoMiembro.findFirst({ where: { grupoId, usuarioId: acreedorId, activo: true, grupo: { activo: true } } });
     if (!miembro) throw new Error('No perteneces a este grupo');
+    if (await tx.usuario.count({ where: { id: deudorId, sinCuenta: true } }))
+      throw new Error('Esta persona aún no tiene JUNTO: envíale su enlace personal por WhatsApp desde «Invitar».', 409);
     const { debt, pending } = await currentUnpaid(tx, grupoId, deudorId, acreedorId);
     if (debt <= 0) throw new Error('Esta persona ya no te debe nada en este grupo. Actualiza para ver las cuentas.', 409);
     if (pending <= 0) throw new Error('Esta persona ya registró un pago por lo que te debe. Revisa si lo recibiste.', 409);
@@ -143,7 +145,9 @@ export async function ejecutarRecordatoriosAutomaticos() {
   for (const config of configs) {
     if (!config.grupo.miembros.some((m) => m.usuarioId === config.configuradoPor)) continue;
     const saldos = await calcularSaldosGrupo(config.grupoId);
-    const activos = new Set(config.grupo.miembros.map((m) => m.usuarioId));
+    const sinCuenta = new Set((await prisma.usuario.findMany({ where: { id: { in: config.grupo.miembros.map((m) => m.usuarioId) }, sinCuenta: true }, select: { id: true } })).map((u) => u.id));
+    // People added by name have no app or e-mail: nothing to send them.
+    const activos = new Set(config.grupo.miembros.map((m) => m.usuarioId).filter((id) => !sinCuenta.has(id)));
 
     for (const saldo of saldos) {
       if (saldo.monto <= 0 || saldo.acreedorId !== config.configuradoPor || !activos.has(saldo.deudorId)) continue;
@@ -209,15 +213,17 @@ export async function ejecutarRecordatoriosPorFecha(now = new Date()) {
   if (isQuietHour(now)) return 0;
   const grupos = await prisma.grupo.findMany({
     where: { activo: true, fechaLimite: { gte: new Date(now.getTime() - (OVERDUE_REMINDER_DAYS + 1) * 86_400_000), lte: new Date(now.getTime() + 3 * 86_400_000) } },
-    select: { id: true, nombre: true, modo: true, fechaLimite: true, miembros: { where: { activo: true }, select: { usuarioId: true } } },
+    select: { id: true, nombre: true, modo: true, fechaLimite: true, miembros: { where: { activo: true }, select: { usuarioId: true, usuario: { select: { sinCuenta: true } } } } },
   });
   let sent = 0;
   for (const grupo of grupos) {
     const stage = deadlineStage(now, grupo.fechaLimite!);
     if (!stage) continue;
     const activos = new Set(grupo.miembros.map((m) => m.usuarioId));
+    // People added by name have no app or e-mail: their reminder is the WhatsApp link, sent by hand.
+    const conCuenta = new Set(grupo.miembros.filter((m) => !m.usuario.sinCuenta).map((m) => m.usuarioId));
     for (const saldo of await calcularSaldosGrupo(grupo.id)) {
-      if (saldo.monto <= 0 || !activos.has(saldo.deudorId) || !activos.has(saldo.acreedorId)) continue;
+      if (saldo.monto <= 0 || !conCuenta.has(saldo.deudorId) || !activos.has(saldo.acreedorId)) continue;
       const created = await prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${grupo.id}::uuid FOR UPDATE`;
         await transactionLock(tx, `reminder:${grupo.id}:${saldo.acreedorId}:${saldo.deudorId}`);

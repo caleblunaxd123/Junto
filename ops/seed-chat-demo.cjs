@@ -1,4 +1,4 @@
-// Local QA only: a "cobranza" group as a chat, for trying the app on an emulator.
+// Local QA only: a group with people added by name and the three typical cases, for the emulator.
 // Usage: DATABASE_URL=<local QA db> JUNTO_QA_API=http://localhost:3005/api node ops/seed-chat-demo.cjs
 // Fictional accounts (@example.invalid). Credentials go to ops/artifacts/chat-demo-private.json (git-ignored).
 const fs = require('node:fs');
@@ -9,7 +9,7 @@ const db = new PrismaClient();
 const suffix = Date.now().toString(36);
 async function call(route, user, method = 'GET', body) {
   const response = await fetch(API.replace(/\/$/, '') + route, { method, headers: { 'Content-Type': 'application/json', ...(user ? { Authorization: `Bearer ${user.accessToken}` } : {}) }, body: body ? JSON.stringify(body) : undefined });
-  const data = await response.json();
+  const data = response.status === 204 ? null : await response.json();
   if (!response.ok) throw new Error(`${method} ${route}: ${response.status} ${JSON.stringify(data)}`);
   return data;
 }
@@ -21,21 +21,21 @@ async function person(name) {
   return { email, password, ...await call('/auth/verify-email', null, 'POST', { email, otp: user.otpCode }) };
 }
 (async () => {
-  const [caleb, ana, luis, marta] = [await person('Caleb'), await person('Ana'), await person('Luis'), await person('Marta')];
-  const deadline = new Date(Date.now() + 2 * 86_400_000); deadline.setHours(23, 59, 0, 0);
-  const group = await call('/grupos', caleb, 'POST', { nombre: 'Cine del viernes', tipo: 'amigos', modo: 'cobranza', aprobacionPagos: 'administrador', cuenta: { descripcion: 'Entradas y canchita', montoTotal: 50000, partes: 5 }, fechaLimite: deadline.toISOString() });
-  for (const p of [ana, luis, marta]) await call('/grupos/unirse', p, 'POST', { link: group.linkInvitacion });
-  await call(`/grupos/${group.id}/mensajes`, caleb, 'POST', { texto: '¡Listo! Ya compré las 5 entradas 🎬 Cada uno me devuelve S/ 100 por Yape' });
-  const paid = await call('/pagos/reportar', ana, 'POST', { grupoId: group.id, receptorId: caleb.usuario.id, monto: 10000, metodo: 'yape' });
-  await call(`/pagos/${paid.id}/confirmar`, caleb, 'POST');
-  await call(`/grupos/${group.id}/mensajes`, ana, 'POST', { texto: 'Te yapeé, gracias Caleb 🙌' });
-  await call('/pagos/reportar', luis, 'POST', { grupoId: group.id, receptorId: caleb.usuario.id, monto: 5000, metodo: 'plin' });
-  await call(`/grupos/${group.id}/mensajes`, luis, 'POST', { texto: 'Te pasé la mitad por Plin, el resto el viernes' });
-  const division = await call('/grupos', ana, 'POST', { nombre: 'Regalo para mamá', modo: 'division', cuenta: { montoTotal: 30000, partes: 3 } });
-  await call('/grupos/unirse', caleb, 'POST', { link: division.linkInvitacion });
+  // Caleb has the app; Ana, Luis, Marta and Pedro (the birthday boy) are added by name.
+  const [caleb, ana] = [await person('Caleb'), await person('Ana')];
+  const group = await call('/grupos', caleb, 'POST', { nombre: 'Paseo a Lunahuaná', tipo: 'viaje', aprobacionPagos: 'administrador', integrantes: ['Ana', 'Luis', 'Marta', 'Pedro'] });
+  let detail = await call(`/grupos/${group.id}`, caleb);
+  const id = (nombre) => detail.miembros.find((m) => m.usuario.nombre === nombre).usuarioId;
+  const four = [caleb.usuario.id, id('Ana'), id('Luis'), id('Marta')];
+  await call(`/grupos/${group.id}/gastos`, caleb, 'POST', { descripcion: 'Entradas al canotaje', montoTotal: 30000, pagadoPor: caleb.usuario.id, categoria: 'entretenimiento', participantes: four.map((usuarioId) => ({ usuarioId })) });
+  await call(`/grupos/${group.id}/gastos`, caleb, 'POST', { descripcion: 'Almuerzo del cumple de Pedro', montoTotal: 20000, pagadoPor: id('Ana'), categoria: 'comida', participantes: four.map((usuarioId) => ({ usuarioId })) });
+  await call(`/grupos/${group.id}/gastos`, caleb, 'POST', { descripcion: 'Taxi al hotel', montoTotal: 4000, pagadoPor: id('Luis'), categoria: 'transporte', participantes: [caleb.usuario.id, id('Marta')].map((usuarioId) => ({ usuarioId })) });
+  await call(`/grupos/${group.id}/mensajes`, caleb, 'POST', { texto: 'Anoté las entradas, el almuerzo y el taxi 🙌 Pedro no paga, ¡es su cumple!' });
+  detail = await call(`/grupos/${group.id}`, caleb);
+  const anaCode = detail.miembros.find((m) => m.usuario.nombre === 'Ana').codigoPersonal;
   const out = path.join(__dirname, 'artifacts', 'chat-demo-private.json');
   fs.mkdirSync(path.dirname(out), { recursive: true });
-  fs.writeFileSync(out, JSON.stringify({ groupId: group.id, link: group.linkInvitacion, accounts: Object.fromEntries(Object.entries({ caleb, ana, luis, marta }).map(([k, v]) => [k, { email: v.email, password: v.password }])) }, null, 2));
+  fs.writeFileSync(out, JSON.stringify({ groupId: group.id, link: group.linkInvitacion, anaPersonalCode: anaCode, accounts: { caleb: { email: caleb.email, password: caleb.password }, ana: { email: ana.email, password: ana.password } } }, null, 2));
   console.log(`Demo ready: group ${group.id}. Credentials written to ${out}`);
   await db.$disconnect();
 })().catch(async (error) => { console.error(error.message); await db.$disconnect(); process.exitCode = 1; });

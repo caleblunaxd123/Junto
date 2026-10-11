@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { reportarPagoSchema, subirComprobanteSchema } from '../schemas/pagos.schema';
+import { registrarRecibidoSchema, reportarPagoSchema, subirComprobanteSchema } from '../schemas/pagos.schema';
 import * as pagosService from '../services/pagos.service';
 import { uploadVoucher } from '../services/vouchers.service';
 
@@ -68,5 +68,13 @@ export async function rechazarPago(req: Request, res: Response, next: NextFuncti
     res.json(pago);
   } catch (err) {
     next(err);
+  }
+}
+
+export async function registrarRecibido(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.status(201).json(await pagosService.registrarRecibido(registrarRecibidoSchema.parse(req.body), req.user!.userId));
+  } catch (error) {
+    next(error);
   }
 }

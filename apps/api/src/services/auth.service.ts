@@ -106,7 +106,8 @@ export async function login(input: LoginInput) {
     input.password,
     usuario?.passwordHash ?? DUMMY_HASH,
   );
-  if (!usuario || !usuario.activo) {
+  // Someone added to a group by name only has no login of their own.
+  if (!usuario || !usuario.activo || usuario.sinCuenta) {
     throw new UserError("El correo o la contraseña no coinciden.", 401);
   }
   if (!passwordValid) {
@@ -203,7 +204,7 @@ export async function verifyEmail(email: string, otp: string) {
 
 export async function resendVerification(email: string) {
   const usuario = await prisma.usuario.findUnique({ where: { email } });
-  if (!usuario || usuario.emailVerificado) return;
+  if (!usuario || usuario.emailVerificado || usuario.sinCuenta) return;
   if (
     usuario.otpExpires &&
     usuario.otpExpires.getTime() - 14 * 60 * 1000 > Date.now()
@@ -312,7 +313,7 @@ export async function logout(refreshToken: string, expoPushToken?: string) {
 export async function forgotPassword(email: string) {
   const usuario = await prisma.usuario.findUnique({ where: { email } });
   // Don't reveal if email exists
-  if (!usuario || !usuario.activo) return;
+  if (!usuario || !usuario.activo || usuario.sinCuenta) return;
   if (
     usuario.otpExpires &&
     usuario.otpExpires.getTime() - 14 * 60_000 > Date.now()
@@ -378,6 +379,7 @@ async function validateCode(email: string, otp: string, purpose: string) {
   if (
     !usuario ||
     !usuario.activo ||
+    usuario.sinCuenta ||
     usuario.otpPurpose !== purpose ||
     !usuario.otpExpires ||
     usuario.otpExpires < new Date() ||

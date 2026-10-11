@@ -112,8 +112,8 @@ export async function invitar(req: Request, res: Response, next: NextFunction) {
 
 export async function unirse(req: Request, res: Response, next: NextFunction) {
   try {
-    const { link } = z.object({ link: z.string() }).parse(req.body);
-    const result = await gruposService.unirseConLink(link, req.user!.userId);
+    const { link, como } = z.object({ link: z.string(), como: z.string().uuid().optional() }).parse(req.body);
+    const result = await gruposService.unirseConLink(link, req.user!.userId, como);
     res.json(result);
   } catch (err) {
     next(err);
@@ -132,8 +132,9 @@ export async function invitacion(
       .regex(/^[A-Za-z0-9_-]{8,128}$/)
       .parse(req.params.code);
     const { prisma } = await import("../lib/prisma");
-    const grupo = await prisma.grupo.findFirst({
-      where: { linkInvitacion: code, activo: true },
+    const resolved = await gruposService.resolverCodigo(code);
+    const grupo = resolved && await prisma.grupo.findFirst({
+      where: { id: resolved.grupo.id, activo: true },
       select: {
         id: true,
         nombre: true,
@@ -142,7 +143,7 @@ export async function invitacion(
         _count: { select: { miembros: { where: { activo: true } } } },
       },
     });
-    if (!grupo) {
+    if (!resolved || !grupo) {
       res
         .status(404)
         .json({
@@ -150,6 +151,13 @@ export async function invitacion(
         });
       return;
     }
+    // Added by name: who they are in the group and where they stand. Otherwise, the names a person
+    // joining with the shared link may say they are (only people who owe, never someone owed money).
+    const { resumenCuentasGrupo } = await import("../services/balance.service");
+    const { reclamablesSinCodigo } = await import("../services/integrantes.service");
+    const neto = resolved.personal ? (await resumenCuentasGrupo(grupo.id)).cuentas.find((c) => c.usuarioId === resolved.personal!.id)?.neto ?? 0 : 0;
+    const personal = resolved.personal && { nombre: resolved.personal.nombre, debes: Math.max(0, -neto), teDeben: Math.max(0, neto) };
+    const sinApp = resolved.personal ? [] : await reclamablesSinCodigo(grupo.id);
     // What joining means in money: the part this person would take, if one is free.
     const cuenta = await gruposService.cuentaPorPartes(grupo.id);
     res.json({
@@ -157,6 +165,8 @@ export async function invitacion(
       tipo: grupo.tipo,
       modo: grupo.modo,
       miembros: grupo._count.miembros,
+      personal,
+      sinApp,
       partesAlUnirse: await gruposService.partesAlUnirse(grupo.id, req.user!.userId),
       // Only the first name of whoever paid: enough to know who to pay back, nothing more.
       cuenta: cuenta && { descripcion: cuenta.descripcion, montoTotal: cuenta.montoTotal, partes: cuenta.partes, parte: cuenta.siguienteParte ?? 0, libres: cuenta.libres, pagadorNombre: cuenta.pagadorNombre.trim().split(/\s+/)[0] },

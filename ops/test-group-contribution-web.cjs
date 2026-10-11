@@ -35,7 +35,7 @@ async function run() {
       await page.setViewportSize({ width, height: 960 });
       await page.goto(`http://127.0.0.1:8090/app/grupos/${fixture.groupId}`, { waitUntil: 'networkidle' });
       // The group opens as a chat: pinned summary, bubbles, quick actions and a message box.
-      await page.getByText('Te devolvieron S/ 50.00 de S/ 400.00', { exact: false }).first().waitFor().catch(async (error) => {
+      await page.getByText('Deudas pagadas: S/ 50.00 de S/ 400.00', { exact: false }).first().waitFor().catch(async (error) => {
         await page.screenshot({ path: path.join(__dirname, 'artifacts/group-chat-web-failure.png') });
         console.error('Page errors:', errors.join(' | '));
         throw error;
@@ -43,13 +43,14 @@ async function run() {
       await page.getByText('Te deben S/ 350.00', { exact: true }).first().waitFor();
       assert.ok(await page.getByText(/PAGO · YAPE/).count() >= 1, 'payment bubble');
       assert.ok(await page.getByLabel('Escribe un mensaje al grupo').count() === 1, 'message box');
-      await page.getByRole('button', { name: '¿Quién pagó?', exact: true }).click();
-      await page.getByText('¿Quién ya pagó?', { exact: true }).waitFor();
-      await page.getByText('Falta S/ 50.00', { exact: true }).waitFor();
-      await page.getByText('Sin parte', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Cuentas', exact: true }).click();
+      await page.getByText('Cuentas del grupo', { exact: true }).waitFor();
+      await page.getByText('Para quedar a mano', { exact: true }).waitFor();
+      await page.getByText('Debe S/ 50.00', { exact: true }).waitFor();
+      await page.getByText('Sin gastos', { exact: true }).waitFor();
       if (width === 360) await page.screenshot({ path: path.join(__dirname, 'artifacts/group-chat-web-whopaid-360.png') });
       await page.getByRole('button', { name: 'Cerrar panel' }).click();
-      await page.getByText('¿Quién ya pagó?', { exact: true }).waitFor({ state: 'hidden' });
+      await page.getByText('Cuentas del grupo', { exact: true }).waitFor({ state: 'hidden' });
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'No overflow at ' + width);
       if ([390, 1440].includes(width)) await page.screenshot({ path: path.join(__dirname, `artifacts/group-contribution-${engine === webkit ? 'webkit' : 'chrome'}-${width}.png`), fullPage: true });
     }
@@ -61,12 +62,12 @@ async function run() {
     }
     const payment = await call('/pagos/reportar', fixture.ana, { grupoId: fixture.groupId, receptorId: fixture.owner.usuario.id, monto: 2500, metodo: 'plin' });
     await page.getByText('PAGO · PLIN', { exact: true }).waitFor({ timeout: 12000 });
-    await page.getByText('Te devolvieron S/ 50.00 de S/ 400.00', { exact: false }).first().waitFor();
+    await page.getByText('Deudas pagadas: S/ 50.00 de S/ 400.00', { exact: false }).first().waitFor();
     await call(`/pagos/${payment.id}/confirmar`, fixture.owner);
-    await page.getByText('Te devolvieron S/ 75.00 de S/ 400.00', { exact: false }).first().waitFor({ timeout: 12000 });
+    await page.getByText('Deudas pagadas: S/ 75.00 de S/ 400.00', { exact: false }).first().waitFor({ timeout: 12000 });
     await page.getByText('Te deben S/ 325.00', { exact: true }).first().waitFor();
-    await page.getByRole('button', { name: '¿Quién pagó?', exact: true }).click();
-    await page.getByText('Falta S/ 25.00', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Cuentas', exact: true }).click();
+    await page.getByText('Debe S/ 25.00', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Cerrar panel' }).click();
     delayMessageResponse = true;
     const input = page.getByLabel('Escribe un mensaje al grupo');
@@ -77,9 +78,9 @@ async function run() {
     assert.equal(await input.inputValue(), 'Segundo mensaje aún sin enviar', 'typing during send is never discarded');
     await page.goto('http://127.0.0.1:8090/app/', { waitUntil: 'networkidle' });
     await page.getByText(/se unieron a «/).first().waitFor();
-    await page.getByText('Grupo de cobranza', { exact: true }).first().waitFor();
+    await page.getByText('Nuevo grupo', { exact: true }).first().waitFor();
     assert.equal(errors.length, 0, errors.join('\n'));
-    console.log('PASS: five viewport sizes, exact progress and who-paid panel, live payment/confirmation updates without reopening, unsent text preserved during delivery, grouped join notices. No external requests.');
+    console.log('PASS: five viewport sizes, debts-paid progress and group accounts panel, live payment/confirmation updates without reopening, unsent text preserved during delivery, grouped join notices. No external requests.');
   } finally { if (browser) await browser.close(); server.child.kill(); }
 }
 run().catch(e => { console.error(e.stack); process.exitCode = 1; });

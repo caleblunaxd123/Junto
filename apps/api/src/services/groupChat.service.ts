@@ -16,10 +16,10 @@ export async function getGroupChat(userId: string, grupoId: string) {
   if (!viewer) throw new UserError("No perteneces a este grupo", 403);
   const approves = viewer.rol === "admin" && viewer.grupo.aprobacionPagos === "administrador";
   const [members, notices, expenses, payments, reminders, messages] = await Promise.all([
-    prisma.grupoMiembro.findMany({ where: { grupoId }, include: { usuario: person }, orderBy: { fechaUnion: "desc" }, take: LIMIT }),
+    prisma.grupoMiembro.findMany({ where: { grupoId }, include: { usuario: { select: { id: true, nombre: true, fotoUrl: true, sinCuenta: true } } }, orderBy: { fechaUnion: "desc" }, take: LIMIT }),
     prisma.avisoGrupo.findMany({ where: { grupoId, parte: { not: null } }, select: { integranteId: true, parte: true }, orderBy: { fecha: "desc" }, distinct: ["integranteId"] }),
     prisma.gasto.findMany({ where: { grupoId, activo: true }, include: { creador: person, pagador: person, participantes: { select: { usuarioId: true, montoAsignado: true } }, _count: { select: { comentarios: { where: { eliminado: false } } } } }, orderBy: { fecha: "desc" }, take: LIMIT }),
-    prisma.pago.findMany({ where: { grupoId }, include: { pagador: person, receptor: person, resolutor: person, _count: { select: { comentarios: { where: { eliminado: false } } } } }, orderBy: { fechaPago: "desc" }, take: LIMIT }),
+    prisma.pago.findMany({ where: { grupoId }, include: { pagador: person, receptor: { select: { id: true, nombre: true, fotoUrl: true, sinCuenta: true } }, resolutor: person, _count: { select: { comentarios: { where: { eliminado: false } } } } }, orderBy: { fechaPago: "desc" }, take: LIMIT }),
     // A reminder is between who owes and who collects: the rest of the group never sees it.
     prisma.recordatorio.findMany({ where: { grupoId, OR: [{ enviadoPor: userId }, { enviadoA: userId }] }, include: { enviador: person, receptor: person }, orderBy: { fechaEnvio: "desc" }, take: LIMIT }),
     prisma.comentario.findMany({ where: { grupoId, gastoId: null, pagoId: null }, include: { autor: person }, orderBy: { fechaCreacion: "desc" }, take: LIMIT }),
@@ -32,6 +32,8 @@ export async function getGroupChat(userId: string, grupoId: string) {
     { id: `grupo-${grupoId}`, tipo: "creado" as const, fecha: viewer.grupo.fechaCreacion, autor: viewer.grupo.creador, mio: mine(viewer.grupo.creadoPor) },
     ...members.filter((m) => m.usuarioId !== viewer.grupo.creadoPor || m.fechaUnion.getTime() - viewer.grupo.fechaCreacion.getTime() > 60_000).map((m) => ({
       id: `union-${m.id}`, tipo: "union" as const, fecha: m.fechaUnion, autor: m.usuario, mio: mine(m.usuarioId), parte: parts.get(m.usuarioId) ?? null, activo: m.activo,
+      // Added by name (no account): "Se agregó a Ana", not "Ana se unió".
+      sinCuenta: m.usuario.sinCuenta,
     })),
     ...expenses.map((e) => ({
       id: `gasto-${e.id}`, tipo: e.partes ? "cuenta" as const : "gasto" as const, fecha: e.fecha, autor: e.creador, mio: mine(e.creadoPor),
@@ -43,7 +45,7 @@ export async function getGroupChat(userId: string, grupoId: string) {
       id: `pago-${p.id}`, tipo: "pago" as const, fecha: p.fechaPago, autor: p.pagador, mio: mine(p.pagadorId),
       pagoId: p.id, monto: p.monto, metodo: p.metodo, estado: p.estado, receptor: p.receptor, resolutor: p.resolutor, fechaResolucion: p.fechaResolucion, comentarios: p._count.comentarios,
       // As who the viewer decides a waiting payment; null when it is not theirs to decide.
-      apruebaComo: p.estado !== "reportado" || mine(p.pagadorId) ? null : mine(p.receptorId) ? "receptor" : approves ? "administrador" : null,
+      apruebaComo: p.estado !== "reportado" || mine(p.pagadorId) ? null : mine(p.receptorId) ? "receptor" : approves || (viewer.rol === "admin" && p.receptor.sinCuenta) ? "administrador" : null,
     })),
     ...reminders.map((r) => ({ id: `recordatorio-${r.id}`, tipo: "recordatorio" as const, fecha: r.fechaEnvio, autor: r.enviador, mio: mine(r.enviadoPor), para: r.receptor, monto: r.monto, aviso: r.tipo === "manual" ? null : r.tipo })),
     ...messages.map((c) => ({ id: `mensaje-${c.id}`, tipo: "mensaje" as const, fecha: c.fechaCreacion, autor: c.autor, mio: mine(c.autorId), comentarioId: c.id, texto: c.eliminado ? "" : c.texto, eliminado: c.eliminado, puedeEliminar: !c.eliminado && (mine(c.autorId) || viewer.rol === "admin") })),

@@ -12,6 +12,8 @@ import { ShareMessageSheet } from "../../../src/components/ui/ShareMessage";
 import type { ShareMessage } from "../../../src/lib/shareMessage";
 import { openWhatsAppDraft, shareChannelError } from "../../../src/lib/shareChannel";
 import { invitationShareMessage, validShareEmail } from "@junto/shared/share";
+import { NamesInput } from "../../../src/components/NamesInput";
+import { personalInvite, sinCuenta } from "../../../src/lib/members";
 import {
   Screen,
   Card,
@@ -28,6 +30,7 @@ export default function Invite() {
   const { data: group, refetch } = useGrupo(grupoId);
   const qc = useQueryClient();
   const meId = useAuthStore((s) => s.usuario?.id);
+  const meName = useAuthStore((s) => s.usuario?.nombre ?? "");
   const labels = memberLabels(group?.miembros.map((m) => ({ ...m.usuario, id: m.usuarioId })) ?? [], meId);
   const [identifier, setIdentifier] = useState("");
   const [busy, setBusy] = useState(false);
@@ -110,6 +113,29 @@ export default function Invite() {
     if (/^(?:\+?51)?9\d{8}$/.test(value.replace(/\s/g, ""))) return share("whatsapp", value);
     setError("Escribe un correo válido o un celular peruano de 9 dígitos que empiece con 9.");
   }
+  // Added by name: they are in the group (and in its expenses) from now on, before having JUNTO.
+  async function addNames(names: string[]) {
+    if (!names.length || busy) return;
+    try {
+      setBusy(true); setError(""); setMessage("");
+      await api.post(`/grupos/${grupoId}/integrantes`, { nombres: names });
+      await refetch();
+      await qc.invalidateQueries({ queryKey: ["grupos"] });
+      setMessage(`${names.join(", ")} ya ${names.length === 1 ? "está" : "están"} en el grupo. Envíale su enlace cuando quieras.`);
+    } catch (err) {
+      setError(errorMessage(err, "No pudimos agregar a esa persona. Reintenta."));
+    } finally { setBusy(false); }
+  }
+  async function removeName(usuarioId: string) {
+    try {
+      setBusy(true); setError(""); setMessage("");
+      await api.delete(`/grupos/${grupoId}/integrantes/${usuarioId}`);
+      await refetch();
+      await qc.invalidateQueries({ queryKey: ["grupos"] });
+    } catch (err) {
+      setError(errorMessage(err, "No pudimos quitar a esa persona. Reintenta."));
+    } finally { setBusy(false); }
+  }
   const fresh = nuevo === "1";
   return (
     <Screen
@@ -124,12 +150,42 @@ export default function Invite() {
         />
       }
     >
+      <Card style={{ gap: 10 }}>
+        <Label size={19} weight="extra">Agrega a alguien por su nombre</Label>
+        <Label size={13} color={palette.muted}>No necesita tener JUNTO: puedes anotar sus gastos desde ya y luego enviarle su enlace personal.</Label>
+        <NamesInput names={[]} onChange={(names) => { void addNames(names); }} taken={group?.miembros.map((m) => m.usuario.nombre) ?? []} disabled={busy} />
+      </Card>
+      {!!error && <ErrorBox message={error} />}
+      {!!message && <FeedbackBox title="Listo" tone="info" message={message} />}
+      <Label size={18} weight="extra">
+        En el grupo ({group?.miembros.length || 0})
+      </Label>
+      {group && meFirst(group.miembros, (m) => m.usuarioId, meId).map((m) => (
+        <View key={m.usuarioId} style={{ gap: 6, paddingVertical: 4 }}>
+          <View style={design.row}>
+            <Avatar name={m.usuario.nombre} photo={m.usuario.fotoUrl} seed={m.usuarioId} size={40} />
+            <View style={{ flex: 1 }}>
+              <Label weight="bold">{m.usuarioId === meId ? `${m.usuario.nombre} (Tú)` : m.usuario.nombre}</Label>
+              {sinCuenta(m) ? <Label size={12} color="#8A5A00">Sin app todavía</Label> : labels.get(m.usuarioId) !== m.usuario.nombre.split(" ")[0] && m.usuarioId !== meId && (
+                <Label size={12} color={palette.muted}>Aparece como «{labels.get(m.usuarioId)}»</Label>
+              )}
+            </View>
+            {m.rol === "admin" && <Label size={12} color={palette.muted}>Admin</Label>}
+          </View>
+          {sinCuenta(m) && (
+            <View style={{ flexDirection: "row", gap: 8, paddingLeft: 52 }}>
+              <View style={{ flex: 2 }}><Button compact title="Enviar su enlace" disabled={busy} onPress={() => { setInitialChannel(undefined); setInitialRecipient(""); setShareNotice(""); setShareMessage(personalInvite(group, m, meName)); }} /></View>
+              <View style={{ flex: 1 }}><Button compact secondary title="Quitar" disabled={busy} onPress={() => { void removeName(m.usuarioId); }} /></View>
+            </View>
+          )}
+        </View>
+      ))}
       <Card style={{ backgroundColor: palette.mint, borderColor: "#BDEBD9" }}>
         <Label size={19} weight="extra">
-          {fresh ? "Ahora suma a tu gente" : "Comparte el enlace"}
+          {fresh ? "Ahora suma a tu gente" : "O comparte el enlace del grupo"}
         </Label>
         <Label size={14} color={palette.muted}>
-          Comparte el enlace para que revisen «{group?.nombre || "tu grupo"}», entren con su cuenta y decidan si quieren unirse. No necesitas acceder a sus contactos.
+          Sirve para cualquiera del grupo: al abrirlo eligen quiénes son o entran como nuevos. No necesitas acceder a sus contactos.
         </Label>
         <Button title="Invitar por WhatsApp" disabled={busy} onPress={() => share("whatsapp")} />
         <Button secondary title="Enviar invitación por correo" disabled={busy} onPress={() => share("mail")} />
@@ -142,7 +198,6 @@ export default function Invite() {
           Enviamos {Number(invitados) === 1 ? "1 invitación" : `${invitados} invitaciones`} a quienes ya usan JUNTO: entrarán al grupo cuando la acepten desde su inicio.
         </Label>
       )}
-      {!!error && <ErrorBox message={error} />}
       <View style={{ gap: 8 }}>
         <Label weight="bold" size={16}>¿A quién quieres invitar?</Label>
         <Label size={12} color={palette.muted}>Correo: preparamos el email. Celular: abrimos su chat en WhatsApp. No necesita tener cuenta en JUNTO.</Label>
@@ -162,26 +217,7 @@ export default function Invite() {
         </View>
         <Button secondary compact title="Avisar solo dentro de JUNTO" onPress={invite} loading={busy} disabled={busy || identifier.trim().length < 5} />
         <Label size={11} color={palette.muted}>«Avisar solo dentro de JUNTO» no manda correo ni SMS: se muestra a quienes ya tienen cuenta.</Label>
-        {!!message && <FeedbackBox title="Estado de la invitación" tone="info" message={message} />}
       </View>
-      <Label size={18} weight="extra">
-        En el grupo ({group?.miembros.length || 0})
-      </Label>
-      {group && meFirst(group.miembros, (m) => m.usuarioId, meId).map((m) => (
-        <View key={m.usuarioId} style={[design.row, { paddingVertical: 4 }]}>
-          <Avatar name={m.usuario.nombre} photo={m.usuario.fotoUrl} seed={m.usuarioId} size={40} />
-          <View style={{ flex: 1 }}>
-            <Label weight="bold">{m.usuarioId === meId ? `${m.usuario.nombre} (Tú)` : m.usuario.nombre}</Label>
-            {labels.get(m.usuarioId) !== m.usuario.nombre.split(" ")[0] && m.usuarioId !== meId && (
-              <Label size={12} color={palette.muted}>Aparece como «{labels.get(m.usuarioId)}»</Label>
-            )}
-          </View>
-          {m.rol === "admin" && <Label size={12} color={palette.muted}>Admin</Label>}
-        </View>
-      ))}
-      {group?.miembros.length === 1 && (
-        <Label size={13} color={palette.muted}>Por ahora solo estás tú. Cuando alguien se una, lo verás aquí.</Label>
-      )}
       <Label size={12} color={palette.muted}>
         Cualquiera con el enlace puede unirse: compártelo solo con tu grupo.
       </Label>

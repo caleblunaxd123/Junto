@@ -8,6 +8,7 @@ router.use(authMiddleware);
 // Junto registra pagos hechos fuera de la app; el receptor (o el administrador, si el grupo lo
 // permite) los confirma. JUNTO no cobra: no hay pasarela de pago ni webhooks de cobro.
 router.post('/reportar', pagosController.reportarPago);
+router.post('/recibido', pagosController.registrarRecibido);
 router.post('/comprobantes', pagosController.subirComprobante);
 router.get('/historial', pagosController.getHistorial);
 router.get('/:id', pagosController.getPago);

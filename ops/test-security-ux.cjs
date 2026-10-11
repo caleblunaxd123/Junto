@@ -141,7 +141,10 @@ async function run() {
     outside.accessToken,
   );
   // What joining means (mode and, if a bill in parts exists, the part) is shown; nothing about members.
-  assert.deepEqual(Object.keys(preview).sort(), ["cuenta", "miembros", "modo", "nombre", "partesAlUnirse", "tipo"]);
+  assert.deepEqual(Object.keys(preview).sort(), ["cuenta", "miembros", "modo", "nombre", "partesAlUnirse", "personal", "sinApp", "tipo"]);
+  // The shared link reveals no personal balance; names offered to choose carry only id and name.
+  assert.equal(preview.personal, null);
+  for (const option of preview.sinApp) assert.deepEqual(Object.keys(option).sort(), ["id", "nombre"]);
   assert.deepEqual(Object.keys(preview.partesAlUnirse).sort(), ["cuentas", "total"]);
   assert.ok(preview.partesAlUnirse.cuentas.every(bill => JSON.stringify(Object.keys(bill).sort()) === JSON.stringify(["descripcion", "pagadorNombre", "parte"])));
   if (preview.cuenta) assert.deepEqual(Object.keys(preview.cuenta).sort(), ["descripcion", "libres", "montoTotal", "pagadorNombre", "parte", "partes"]);

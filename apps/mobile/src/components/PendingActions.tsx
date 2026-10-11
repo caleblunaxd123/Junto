@@ -128,10 +128,12 @@ export function PendingActions({ actions, showGroup = true }: { actions: Pending
                 <Label weight="bold" size={15}>{action.persona} te debe {money(action.monto)}</Label>
                 {where}
                 {action.porConfirmar && <Label size={12} color={palette.muted}>Tiene un pago esperando tu confirmación arriba.</Label>}
+                {action.sinApp && <Label size={12} color="#8A5A00">Aún no tiene JUNTO</Label>}
               </View>
-              {action.activo && !action.porConfirmar && (
-                <Button compact secondary title={reminded ? "Enviado ✓" : "Recordar"} disabled={reminded || remind.isPending} onPress={() => nudge(action)} />
-              )}
+              {action.activo && !action.porConfirmar && (action.sinApp
+                // No app to remind: open the group's accounts to send their link or mark it paid.
+                ? <Button compact secondary title="Cobrar" accessibilityHint={`Enviar a ${action.persona} su enlace o marcar que ya te pagó`} onPress={() => router.push(`/(app)/grupos/${action.grupoId}?cuentas=1`)} />
+                : <Button compact secondary title={reminded ? "Enviado ✓" : "Recordar"} disabled={reminded || remind.isPending} onPress={() => nudge(action)} />)}
             </View>
           </Card>
         );

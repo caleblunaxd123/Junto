@@ -3,7 +3,7 @@ import { memberLabels } from "./people";
 type Group = {
   id: string;
   nombre: string;
-  miembros: { usuarioId: string; usuario: { id: string; nombre: string; email?: string | null } }[];
+  miembros: { usuarioId: string; usuario: { id: string; nombre: string; email?: string | null; sinCuenta?: boolean } }[];
   resumen: { saldos?: { deudorId: string; deudorNombre: string; acreedorId: string; acreedorNombre: string; monto: number }[] };
 };
 type Payment = {
@@ -16,7 +16,7 @@ export type PendingAction =
   | { kind: "confirmar"; key: string; pagoId: string; grupoId: string; grupo: string; persona: string; monto: number; metodo?: string | null; conComprobante: boolean }
   | { kind: "revisar"; key: string; pagoId: string; grupoId: string; grupo: string; persona: string; receptor: string; monto: number; conComprobante: boolean }
   | { kind: "pagar"; key: string; grupoId: string; grupo: string; personaId: string; persona: string; nombreCompleto: string; monto: number; enEspera: boolean; activo: boolean }
-  | { kind: "cobrar"; key: string; grupoId: string; grupo: string; personaId: string; persona: string; monto: number; porConfirmar: boolean; activo: boolean };
+  | { kind: "cobrar"; key: string; grupoId: string; grupo: string; personaId: string; persona: string; monto: number; porConfirmar: boolean; activo: boolean; sinApp: boolean };
 
 /**
  * Everything that needs the viewer: payments to confirm first (as receiver, then as approving admin),
@@ -48,7 +48,7 @@ export function pendingActions(groups: Group[], payments: Payment[], meId?: stri
         pay.push({ kind: "pagar", key: `p-${group.id}-${s.acreedorId}`, grupoId: group.id, grupo: group.nombre, personaId: s.acreedorId, persona: name(s.acreedorId, s.acreedorNombre), nombreCompleto: s.acreedorNombre, monto: s.monto, enEspera: waiting.some((p) => p.pagadorId === meId && p.receptorId === s.acreedorId), activo: active.has(s.acreedorId) });
       else if (s.acreedorId === meId && !waiting.some((p) => p.receptorId === meId && p.pagadorId === s.deudorId && p.monto >= s.monto))
         // A payment already waiting for your answer covers it: the "¿Lo recibiste?" card says it all.
-        collect.push({ kind: "cobrar", key: `r-${group.id}-${s.deudorId}`, grupoId: group.id, grupo: group.nombre, personaId: s.deudorId, persona: name(s.deudorId, s.deudorNombre), monto: s.monto, porConfirmar: waiting.some((p) => p.receptorId === meId && p.pagadorId === s.deudorId), activo: active.has(s.deudorId) });
+        collect.push({ kind: "cobrar", key: `r-${group.id}-${s.deudorId}`, grupoId: group.id, grupo: group.nombre, personaId: s.deudorId, persona: name(s.deudorId, s.deudorNombre), monto: s.monto, porConfirmar: waiting.some((p) => p.receptorId === meId && p.pagadorId === s.deudorId), activo: active.has(s.deudorId), sinApp: !!group.miembros.find((m) => m.usuarioId === s.deudorId)?.usuario.sinCuenta });
     }
   }
   return [...confirm, ...review, ...pay, ...collect];

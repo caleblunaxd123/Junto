@@ -26,6 +26,9 @@ model Usuario {
   googleId         String?   @unique @map("google_id") @db.VarChar(64)
   // Set when the person deletes the account: the row is anonymized, never reused.
   fechaEliminacion DateTime? @map("fecha_eliminacion")
+  // Someone added to a group by name only ("Ana"): no login, no e-mail, no push. When the real
+  // person joins they take over this row's place in the group (see integrantes.service).
+  sinCuenta        Boolean   @default(false) @map("sin_cuenta")
 
   // Relations
   gruposCreados       Grupo[]           @relation("GrupoCreador")
@@ -132,6 +135,8 @@ model GrupoMiembro {
   // Last time this member opened the group chat: what came after is "unread".
   ultimaLectura DateTime? @map("ultima_lectura")
   activo      Boolean   @default(true)
+  // Personal invitation code for a member added by name: opening /unirse/<code> joins as them.
+  codigoPersonal String? @unique @map("codigo_personal") @db.VarChar(40)
 
   // Relations
   grupo       Grupo     @relation(fields: [grupoId], references: [id])

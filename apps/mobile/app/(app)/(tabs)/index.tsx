@@ -33,8 +33,6 @@ import { pendingActions } from "../../../src/lib/pending";
 import { PendingActions } from "../../../src/components/PendingActions";
 import { Invitations } from "../../../src/components/Invitations";
 import { GroupNotices } from "../../../src/components/GroupNotices";
-import { ModeChoice } from "../../../src/components/ModeChoice";
-import { modeWords } from "../../../src/lib/groupMode";
 import { AddButton, CreateSheet } from "../../../src/components/CreateSheet";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
@@ -130,17 +128,26 @@ export default function Home() {
         {usuario && <FirstSteps userId={usuario.id} />}
         {desktop && <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
           <View style={{ flex: 1, minWidth: 200 }}><Label size={15} color={palette.muted}>Todo lo compartido, en un solo lugar.</Label></View>
-          <Button compact title="Dividir una cuenta de hoy" onPress={() => router.push("/(app)/cuentas/rapida")} />
+          <Button compact title="Nuevo grupo" onPress={() => router.push("/(app)/grupos/crear")} />
           <Button compact secondary title="Agregar" onPress={() => setSheet(true)} />
         </View>}
 
         <Invitations />
         <GroupNotices />
-        {/* The two ways to start, always one tap away and explained in one line each. */}
-        <View style={{ gap: 8 }}>
-          <Label weight="bold" size={15}>Crear un grupo</Label>
-          <ModeChoice tiles onPick={(modo) => router.push(`/(app)/grupos/crear?modo=${modo}`)} />
-        </View>
+        {/* One way to start, explained with a real example. */}
+        {!empty && (
+          <Pressable accessibilityRole="button" accessibilityLabel="Nuevo grupo. Divide un gasto: anota quién pagó y JUNTO te dice quién le debe a quién." onPress={() => router.push("/(app)/grupos/crear")}
+            style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 20, backgroundColor: palette.mint, borderWidth: 1.5, borderColor: "#A4EDD7" }}>
+            <View style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "white" }}>
+              <Ionicons name="people-outline" size={24} color="#007B60" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Label weight="extra" size={15}>Nuevo grupo</Label>
+              <Label size={12} color={palette.muted}>Anota quién pagó y JUNTO te dice quién le debe a quién.</Label>
+            </View>
+            <Ionicons name="add-circle" size={28} color="#007B60" />
+          </Pressable>
+        )}
         {trial && (
           <Card style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", gap: 8 }}>
             <Label weight="bold">Tu cálculo de prueba sigue aquí</Label>
@@ -168,9 +175,12 @@ export default function Home() {
             <View style={{ flex: desktop ? 1 : undefined, gap: 14, minWidth: 0 }}>
             <Label size={19} weight="extra">¿Por dónde empezamos?</Label>
             <Label size={14} color={palette.muted}>
-              Elige arriba el tipo de grupo. Si es solo una cena y tus amigos no usan JUNTO, divide una cuenta de hoy.
+              Crea un grupo, agrega a tu gente por su nombre y anota quién pagó. JUNTO te dice quién le debe a quién.
             </Label>
-            <Button title="Dividir una cuenta de hoy" secondary onPress={() => router.push("/(app)/cuentas/rapida")} />
+            <View style={{ padding: 14, borderRadius: 16, backgroundColor: palette.yellow }}>
+              <Label size={13}>Ejemplo: pagaste S/ 300 por 4 personas → cada una te debe S/ 75.</Label>
+            </View>
+            <Button title="Nuevo grupo" onPress={() => router.push("/(app)/grupos/crear")} />
             <Pressable accessibilityRole="button" onPress={() => router.push("/(app)/ejemplo")} style={{ minHeight: 44, justifyContent: "center", alignItems: "center" }}>
               <Label size={13} weight="bold" color={palette.purple}>Ver un ejemplo explicado</Label>
             </Pressable>
@@ -269,7 +279,6 @@ export default function Home() {
                         />
                         <View style={{ flex: 1, gap: 4 }}>
                           <Label size={16} weight="extra" numberOfLines={2}>{g.nombre}</Label>
-                          {!!g.modo && <Label size={11} weight="bold" color={g.modo === "division" ? palette.purple : "#007B60"}>{modeWords(g.modo).name.toUpperCase()}</Label>}
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                             <View style={{ flexDirection: "row" }}>
                               {g.miembros.slice(0, 4).map((m, i) => (
@@ -306,9 +315,9 @@ export default function Home() {
             )}
 
             </View>
-            <View style={{ flex: desktop ? 1 : undefined, minWidth: 0, gap: 16 }}>
+            {!!bills.data?.length && <View style={{ flex: desktop ? 1 : undefined, minWidth: 0, gap: 16 }}>
             <SectionTitle
-              title="Cuentas de un día"
+              title="Cuentas anteriores"
               action={bills.data?.length ? "Ver todas" : undefined}
               onPress={() => router.push("/(app)/cuentas/rapidas")}
             />
@@ -338,11 +347,9 @@ export default function Home() {
                 </Pressable>
               ))
             ) : (
-              <Label size={13} color={palette.muted}>
-                {desktop ? "Para una cena o un cumple sin crear grupo: elige «Dividir una cuenta de hoy»." : "Para una cena o un cumple sin crear grupo: toca «+» y elige «Una cuenta de hoy»."}
-              </Label>
+              <Label size={13} color={palette.muted}>Todas tus cuentas anteriores están cobradas.</Label>
             )}
-            </View>
+            </View>}
             </View>
           </>
         )}

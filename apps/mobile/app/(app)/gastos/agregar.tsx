@@ -536,7 +536,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
               </Pressable>
             </Field>
             )}
-            <Field label={params.cuenta === "1" ? "¿Quién adelantó el total?" : "Pagó"}>
+            <Field label={params.cuenta === "1" ? "¿Quién adelantó el total?" : "¿Quién pagó?"}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Pagó: ${selectedPayer ? nameOf(selectedPayer.usuarioId) : "elige"}. Cambiar`}
@@ -554,7 +554,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                 <Ionicons name="chevron-down" size={17} color={palette.muted} />
               </Pressable>
             </Field>
-            <Field label="¿Para quién fue?">
+            <Field label="¿Entre quiénes se divide?">
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -619,9 +619,12 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                   ))}
                 </View>
               </ScrollView>
+              <Label size={12} color={palette.muted}>
+                Toca a alguien para sacarlo. Ejemplo: el cumpleañero no paga y su parte se reparte entre los demás.
+              </Label>
             </Field>
             <Label weight="bold" size={16}>
-              Dividir entre
+              ¿Cómo se divide?
             </Label>
             <View style={{ flexDirection: "row", gap: 6 }}>
               {(

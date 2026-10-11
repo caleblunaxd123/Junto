@@ -5,13 +5,13 @@ import { payableLimit } from "@junto/shared/payable";
 import { sendPushNotification } from "../lib/firebase";
 import { voucherInUse } from "./vouchers.service";
 import { transactionLock } from "../lib/transactionLock";
-import type { ReportarPagoInput } from "../schemas/pagos.schema";
+import type { RegistrarRecibidoInput, ReportarPagoInput } from "../schemas/pagos.schema";
 import type { Prisma } from "@prisma/client";
 
 const person = { select: { id: true, nombre: true, fotoUrl: true } } as const;
 const pagoInclude = {
   pagador: person,
-  receptor: person,
+  receptor: { select: { id: true, nombre: true, fotoUrl: true, sinCuenta: true } },
   grupo: { select: { id: true, nombre: true, aprobacionPagos: true } },
   resolutor: { select: { id: true, nombre: true } },
   comprobante: { select: { id: true, app: true, montoLeido: true } },
@@ -24,11 +24,12 @@ const REVERT_DAYS = 30;
 const money = (cents: number) => `S/ ${(cents / 100).toFixed(2)}`;
 const first = (name: string) => name.trim().split(/\s+/)[0] || name;
 
-type Rules = { pagadorId: string; receptorId: string; estado: string; resueltoPor: string | null; fechaResolucion: Date | null; grupo: { aprobacionPagos: string } };
+type Rules = { pagadorId: string; receptorId: string; estado: string; resueltoPor: string | null; fechaResolucion: Date | null; grupo: { aprobacionPagos: string }; receptor?: { sinCuenta?: boolean } };
 
 /** What a viewer may do with a payment. The payer never approves their own payment. */
 export function paymentPermissions(pago: Rules, userId: string, isAdmin: boolean, now = new Date()) {
-  const adminMayApprove = pago.grupo.aprobacionPagos === "administrador" && isAdmin;
+  // Someone added by name has no app to confirm with: an admin confirms for them.
+  const adminMayApprove = (pago.grupo.aprobacionPagos === "administrador" || !!pago.receptor?.sinCuenta) && isAdmin;
   const approver = userId !== pago.pagadorId && (userId === pago.receptorId || adminMayApprove);
   const approvedByOther = pago.estado === "exitoso" && !!pago.resueltoPor && pago.resueltoPor !== pago.receptorId;
   const recent = !!pago.fechaResolucion && now.getTime() - pago.fechaResolucion.getTime() < REVERT_DAYS * 86_400_000;
@@ -287,4 +288,40 @@ export async function getComprobanteImagen(pagoId: string, userId: string) {
   const image = pago.comprobante?.imagen;
   if (!image) throw new Error("La imagen de este comprobante ya no está disponible.", 404);
   return { mime: image.mime, imagen: Buffer.from(image.datos).toString("base64") };
+}
+
+/**
+ * Whoever receives the money records it directly ("Ana me pagó S/ 75 en efectivo"): confirmed at
+ * once, since the receiver is the one who would confirm it. Needed for people added by name, who
+ * have no app to report it, and handy for cash.
+ */
+export async function registrarRecibido(input: RegistrarRecibidoInput, receptorId: string) {
+  if (receptorId === input.pagadorId) throw new Error("No puedes registrar un pago de ti mismo");
+  const pago = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${input.grupoId}::uuid FOR UPDATE`;
+    const miembros = await tx.grupoMiembro.findMany({
+      where: { grupoId: input.grupoId, activo: true, grupo: { activo: true }, usuario: { activo: true }, usuarioId: { in: [receptorId, input.pagadorId] } },
+      select: { usuarioId: true, usuario: { select: { sinCuenta: true } } },
+    });
+    if (miembros.length !== 2) throw new Error("Ambas personas deben pertenecer al grupo");
+    if (miembros.find((m) => m.usuarioId === receptorId)?.usuario.sinCuenta) throw new Error("No perteneces a este grupo", 403);
+    const { cuentas } = await resumenCuentasGrupo(input.grupoId, tx);
+    const waiting = await tx.pago.findMany({ where: { grupoId: input.grupoId, estado: "reportado" }, select: { pagadorId: true, receptorId: true, monto: true } });
+    const { owes, owed, limit } = payableLimit(cuentas, waiting, input.pagadorId, receptorId);
+    if (!owes) throw new Error("Esta persona no tiene una deuda pendiente en el grupo");
+    if (!owed) throw new Error("No tienes dinero por recibir en este grupo");
+    if (!limit) throw new Error("Ya hay pagos de esta persona esperando tu confirmación: confírmalos primero.");
+    if (input.monto > limit) throw new Error(`El pago no puede superar S/ ${(limit / 100).toFixed(2)}: es lo que esta persona aún te debe`);
+    const now = new Date();
+    const created = await tx.pago.create({
+      data: { grupoId: input.grupoId, pagadorId: input.pagadorId, receptorId, monto: input.monto, feejunto: 0, metodo: input.metodo, estado: "exitoso", nota: input.nota || null, fechaResolucion: now, resueltoPor: receptorId },
+    });
+    return tx.pago.findUniqueOrThrow({ where: { id: created.id }, include: pagoInclude });
+  });
+  void notify(
+    [input.pagadorId], "Pago registrado",
+    `${first(pago.receptor.nombre)} registró que le pagaste ${money(input.monto)} en ${pago.grupo.nombre}.`,
+    { grupoId: input.grupoId, pagoId: pago.id, type: "pago_confirmado" },
+  );
+  return pago;
 }

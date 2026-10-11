@@ -38,7 +38,9 @@ export interface GrupoMiembro {
   rol: MiembroRol;
   fechaUnion: string;
   activo: boolean;
-  usuario: Pick<Usuario, "id" | "nombre" | "email" | "fotoUrl"> & { celular?: string | null };
+  /** Added by name only: their personal invitation code (joining with it makes them this person). */
+  codigoPersonal?: string | null;
+  usuario: Pick<Usuario, "id" | "nombre" | "email" | "fotoUrl"> & { celular?: string | null; sinCuenta?: boolean };
 }
 
 /** "receptor": only who receives approves a payment. "administrador": who receives or a group admin. */
@@ -113,7 +115,7 @@ export type ChatPersona = { id: string; nombre: string; fotoUrl?: string | null 
 type ChatBase = { id: string; fecha: string; autor: ChatPersona; mio: boolean };
 export type ChatItem = ChatBase & (
   | { tipo: "creado" }
-  | { tipo: "union"; parte: number | null; activo: boolean }
+  | { tipo: "union"; parte: number | null; activo: boolean; sinCuenta?: boolean }
   | { tipo: "cuenta" | "gasto"; gastoId: string; descripcion: string; monto: number; pagador: ChatPersona; comentarios: number; tuParte: number | null; partes?: number; parte?: number; libres?: number }
   | { tipo: "pago"; pagoId: string; monto: number; metodo: string | null; estado: string; receptor: ChatPersona; resolutor: ChatPersona | null; fechaResolucion: string | null; comentarios: number; apruebaComo: "receptor" | "administrador" | null }
   | { tipo: "recordatorio"; para: ChatPersona; monto: number | null; aviso: string | null }

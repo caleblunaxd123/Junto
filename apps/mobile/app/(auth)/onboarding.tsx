@@ -12,9 +12,9 @@ import { useGoogleLogin } from "../../src/hooks/useGoogleLogin";
 import { useResponsiveLayout } from "../../src/components/ui/responsive";
 
 const points: { icon: keyof typeof Ionicons.glyphMap; title: string; copy: string; color: string; bg: string }[] = [
-  { icon: "receipt-outline", title: "La cuenta de hoy, en segundos", copy: "Escribe el total o toma foto a la boleta. Tus amigos no necesitan la app.", color: "#007B60", bg: palette.mint },
-  { icon: "people-outline", title: "Grupos para lo que se repite", copy: "Depa, pareja o viaje: queda anotado quién pagó y quién debe a quién.", color: palette.purple, bg: palette.lilac },
-  { icon: "checkmark-done-outline", title: "Saldar sin incomodidad", copy: "Cada uno ve lo que debe. Pagan por Yape o Plin y tú confirmas que llegó.", color: "#1D5FA8", bg: "#E2F0FF" },
+  { icon: "people-outline", title: "Arma tu grupo", copy: "Viaje, salida, cumple o depa. Agrega a tu gente por su nombre, aunque no tengan la app.", color: "#007B60", bg: palette.mint },
+  { icon: "receipt-outline", title: "Anota quién pagó", copy: "Cada gasto: cuánto, quién pagó y entre quiénes. El cumpleañero no paga, si así lo quieren.", color: palette.purple, bg: palette.lilac },
+  { icon: "checkmark-done-outline", title: "Quedan a mano", copy: "JUNTO dice quién le debe a quién. Pagan por Yape, Plin o efectivo y quien recibe lo confirma.", color: "#1D5FA8", bg: "#E2F0FF" },
 ];
 
 export default function Onboarding() {

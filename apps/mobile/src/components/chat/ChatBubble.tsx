@@ -57,6 +57,10 @@ export function ChatBubble({ item, meId, modo, showAuthor, onAnswer, busy, onDel
     case "creado":
       return <SystemNote icon="people-outline" label="Grupo creado">{item.mio ? "Creaste el grupo" : `${Who(item.autor)} creó el grupo`}</SystemNote>;
     case "union": {
+      if (item.sinCuenta) {
+        const added = `Se agregó a ${firstName(item.autor.nombre)} por su nombre`;
+        return <SystemNote icon="person-add-outline" label={added}>{added}</SystemNote>;
+      }
       const joined = item.mio ? "Te uniste" : `${Who(item.autor)} se unió`;
       const text = item.parte ? `${joined} · ${item.mio ? "te" : "le"} toca ${words.division ? "aportar" : "devolver"} ${money(item.parte)}` : `${joined} al grupo`;
       return <SystemNote icon="person-add-outline" label={text}>{text}</SystemNote>;

@@ -8,13 +8,14 @@ import { takeFreeParts } from './billParts.service';
 import { allocateParts, nextPart, partsSummary } from '../domain/billParts';
 import { unreadInGroup } from './groupChat.service';
 import { transactionLock } from '../lib/transactionLock';
+import { crearSinCuenta, heredar, tieneDineroPorRecibir } from './integrantes.service';
 
 function generateLinkInvitacion(): string {
   return randomBytes(12).toString('base64url');
 }
 
 export async function crearGrupo(input: CrearGrupoInput, creadoPor: string) {
-  const { cuenta, ...datos } = input;
+  const { cuenta, integrantes, ...datos } = input;
   // Group and bill together: never a group with half a bill.
   return prisma.$transaction(async (tx) => {
     await transactionLock(tx, `account-membership:${creadoPor}`);
@@ -42,6 +43,7 @@ export async function crearGrupo(input: CrearGrupoInput, creadoPor: string) {
         },
       },
     });
+    if (integrantes?.length) await crearSinCuenta(tx, grupo.id, integrantes);
     if (cuenta) {
       await tx.gasto.create({
         data: {
@@ -102,7 +104,7 @@ export async function getGruposUsuario(usuarioId: string) {
           miembros: {
             where: { activo: true },
             include: {
-              usuario: { select: { id: true, nombre: true, email: true, fotoUrl: true } },
+              usuario: { select: { id: true, nombre: true, email: true, fotoUrl: true, sinCuenta: true } },
             },
           },
         },
@@ -166,7 +168,7 @@ export async function getGrupoDetalle(grupoId: string, usuarioId: string) {
       miembros: {
         where: { activo: true },
         include: {
-          usuario: { select: { id: true, nombre: true, email: true, celular: true, fotoUrl: true } },
+          usuario: { select: { id: true, nombre: true, email: true, celular: true, fotoUrl: true, sinCuenta: true } },
         },
       },
     },
@@ -181,16 +183,40 @@ export async function getGrupoDetalle(grupoId: string, usuarioId: string) {
   return { ...grupo, resumen, saldos: resumen.saldos, pagosPorConfirmar, cuenta: cuentasPorPartesDelGrupo[0] ?? null, cuentasPorPartes: cuentasPorPartesDelGrupo, balanceUsuario: { neto, teDeben: Math.max(neto, 0), debes: Math.max(-neto, 0) }, rolUsuario: miembro.rol };
 }
 
-export async function unirseConLink(linkInvitacion: string, usuarioId: string) {
-  const grupo = await prisma.grupo.findFirst({ where: { linkInvitacion, activo: true } });
-  if (!grupo) throw new Error('Link de invitación inválido');
+/**
+ * An invitation code is either the group's link or the personal code of someone added by name
+ * ("Ana"): joining with it means being Ana in the group.
+ */
+export async function resolverCodigo(code: string) {
+  const grupo = await prisma.grupo.findFirst({ where: { linkInvitacion: code, activo: true } });
+  if (grupo) return { grupo, personal: null };
+  const member = await prisma.grupoMiembro.findFirst({
+    where: { codigoPersonal: code, activo: true, grupo: { activo: true }, usuario: { sinCuenta: true, activo: true } },
+    include: { grupo: true, usuario: { select: { id: true, nombre: true } } },
+  });
+  return member ? { grupo: member.grupo, personal: member.usuario } : null;
+}
+
+/** `como`: with the group link, the name-only member this person says they are (only if they owe). */
+export async function unirseConLink(code: string, usuarioId: string, como?: string) {
+  const resolved = await resolverCodigo(code);
+  if (!resolved) throw new Error('Link de invitación inválido');
+  const { grupo } = resolved;
 
   const joined = await prisma.$transaction(async (tx) => {
     await transactionLock(tx, `account-membership:${usuarioId}`);
     await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${grupo.id}::uuid FOR UPDATE`;
-    if (!(await tx.usuario.count({ where: { id: usuarioId, activo: true } }))) throw new Error('Tu cuenta ya no está activa. Inicia sesión nuevamente.', 401);
-    const current = await tx.grupo.findFirst({ where: { id: grupo.id, linkInvitacion, activo: true } });
-    if (!current) throw new Error('Link de invitación inválido');
+    if (!(await tx.usuario.count({ where: { id: usuarioId, activo: true, sinCuenta: false } }))) throw new Error('Tu cuenta ya no está activa. Inicia sesión nuevamente.', 401);
+    // Re-read under the lock: the link may have been rotated or the personal code already used.
+    const still = resolved.personal
+      ? await tx.grupoMiembro.count({ where: { grupoId: grupo.id, codigoPersonal: code, activo: true, usuarioId: resolved.personal.id } })
+      : await tx.grupo.count({ where: { id: grupo.id, linkInvitacion: code, activo: true } });
+    if (!still) throw new Error(resolved.personal ? 'Este enlace personal ya se usó. Pide el enlace del grupo.' : 'Link de invitación inválido', 409);
+    const takeover = resolved.personal?.id ?? como;
+    // Choosing a name with the shared link is fine while that person only owes; someone owed
+    // money (they paid something) can only be claimed with their personal link or by an admin.
+    if (!resolved.personal && como && (await tieneDineroPorRecibir(tx, grupo.id, como)))
+      throw new Error('A esa persona le deben dinero en el grupo: pide tu enlace personal a quien te agregó.', 403);
     const invitation = await tx.invitacion.findFirst({ where: { grupoId: grupo.id, invitadoId: usuarioId, estado: 'pendiente' }, select: { invitadoPor: true } });
     const member = await tx.grupoMiembro.findUnique({ where: { grupoId_usuarioId: { grupoId: grupo.id, usuarioId } } });
     // Rejoining through the link never restores an old admin role.
@@ -198,8 +224,10 @@ export async function unirseConLink(linkInvitacion: string, usuarioId: string) {
     else if (!member.activo) await tx.grupoMiembro.update({ where: { id: member.id }, data: { activo: true, rol: 'miembro', fechaUnion: new Date() } });
     // A pending invitation to this group is answered by joining.
     await tx.invitacion.updateMany({ where: { grupoId: grupo.id, invitadoId: usuarioId, estado: 'pendiente' }, data: { estado: 'aceptada', fechaRespuesta: new Date() } });
+    if (takeover) await heredar(tx, grupo.id, takeover, usuarioId);
     if (member?.activo) return { recipients: [] as string[], parte: 0 };
-    const parte = await takeFreeParts(tx, grupo.id, usuarioId);
+    // Taking over a name already in the expenses; otherwise the old "free parts" bills still apply.
+    const parte = takeover ? 0 : await takeFreeParts(tx, grupo.id, usuarioId);
     return { recipients: await saveJoinNotices(tx, grupo.id, usuarioId, invitation?.invitadoPor, parte), parte };
   });
   void pushJoinNotice(grupo.id, usuarioId, joined.recipients, joined.parte);
@@ -226,8 +254,9 @@ export async function salirDeGrupo(grupoId: string, usuarioId: string) {
     const pendientes = await tx.pago.count({ where: { grupoId, estado: 'reportado', OR: [{ pagadorId: usuarioId }, { receptorId: usuarioId }] } });
     if (pendientes) throw new Error('Tienes un pago esperando confirmación en este grupo. Resuélvanlo antes de salir.');
 
+    // People added by name cannot run the group: only members with an account count here.
     const otros = await tx.grupoMiembro.findMany({
-      where: { grupoId, activo: true, usuarioId: { not: usuarioId } },
+      where: { grupoId, activo: true, usuarioId: { not: usuarioId }, usuario: { sinCuenta: false } },
       orderBy: { fechaUnion: 'asc' },
     });
     if (!otros.length) {
