@@ -1,5 +1,9 @@
 # JUNTO — estado real
 
+## Beta 1.3.1 publicada: Google web y chat (11/10/2026)
+
+GitHub actualizado a `55090e9`, CI verde; API/web/APK activados con respaldo restaurado y copia externa cifrada. Google web REAL comprobado con la cuenta autorizada y sesión conservada al recargar. Nuevos cambios de GitHub en chat/fotos, corrección de deduplicación de respuestas y tipos de hover; 22 migraciones completas, sin pérdida de los registros existentes al migrar. APK 1.3.1/code 8 actualizado en el emulador, misma firma y sesión. Ver `ops/web/DEPLOY-20261011-GOOGLE131.md` para pruebas, hash, recuperación y límites. No se certifica aún Google físico en esta APK ni entrega push con la app cerrada.
+
 ## Monedas y pagos externos: beta 1.3.0 publicada (11/10/2026)
 
 - País del plan explícito, sin GPS; su moneda es una sugerencia. Se puede elegir PEN, COP, USD, EUR, MXN o BRL independientemente del país. Los grupos existentes conservan PEN y país desconocido. Moneda y país quedan bloqueados para no reinterpretar el libro.

@@ -1,5 +1,9 @@
 # JUNTO — controles previos a publicación
 
+## Beta 1.3.1 publicada: Google web
+
+Ver `ops/web/DEPLOY-20261011-GOOGLE131.md`: fuente `55090e9`, CI verde, respaldo restaurable/cifrado, API/web/APK activados, 22 migraciones y rol runtime restringido. Google web real y sesión tras recarga comprobados; API/TypeScript/lint, pruebas locales de chat/fotos y Chrome/WebKit responsive correctos. APK mismo firmante/code 8 instalado sin desinstalar, sesión conservada. Publicada como beta interna, no tienda; faltan Google físico de este APK, WhatsApp/TalkBack y FCM/Expo con entrega real.
+
 ## Candidata 1.3.0: monedas y pago reportado
 
 Beta web/APK publicada con respaldo y CI verde; ver `ops/web/DEPLOY-20261011-MONEDAS.md`. Ver `ops/web/FLOW-PAYMENTS-20261011.md`: país sugiere moneda sin imponerla; referencia diaria por fecha de pago frente al cambio aplicado; «Ya pagué» → aviso interno al receptor → confirmación/rechazo → aviso al pagador. Invitados excluidos no pagan; receptor sin cuenta requiere representación administrativa. Comprobante solo propone datos, nunca confirma dinero.

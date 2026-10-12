@@ -1,15 +1,20 @@
-# Candidata 1.3.1 — Google web y cambios recientes
+# Beta 1.3.1 publicada — Google web y cambios recientes
 
 Base GitHub `fea86c8`: respuestas, reacciones, presencia, mensaje fijado y foto de perfil.
-Esta candidata todavía no acredita activación ni inicio real con Google.
+Aplicación fuente `55090e9`. CI de rama `38193872942` y de main `38194099918` verdes. Activada el 11/10/2026 (12/10 UTC).
 
 - Google web: botón oficial GIS, nonce y validación de firma/audiencia/vencimiento; correo y contraseña alternativos conservan la invitación. Origen HTTPS de JUNTO guardado en el cliente existente con autorización del propietario, sin permisos Gmail ni secretos de cliente en la app.
 - Corregida deduplicación del chat: respuestas iguales a mensajes distintos no se descartan. Corregidos tipos de hover incompatibles con React Native en CI.
 - QA en base local nueva `junto_google_web_qa_20261011`: 22 migraciones, sin desfase; 84 pruebas de dominio, TypeScript y lint, suite de integración y Chrome/WebKit. SDK simulado para error/reintento, token rechazado, callback doble y sesión local: no equivale a un acceso real Google.
 - Respaldo `/opt/junto/backups/junto-20261012T015152Z.dump`, restaurado con las 17 migraciones actuales en una base temporal nueva. Copia externa DPAPI verificada; requiere la cuenta Windows del propietario. Se retiró únicamente su copia temporal sin cifrar.
 - El helper antiguo de restauración del VPS esperaba ocho migraciones y dejó su base de ensayo al fallar. Se utilizó el helper revisado en `restore-check-20261011.sh`, de nombre único y conteo explícito; producción no fue sobrescrita. La base de ensayo anterior no se eliminó.
-- APK candidata 1.3.1/code 8, mismo certificado beta, Google habilitado. No activa recepción push FCM ni representa publicación de tienda.
+- APK 1.3.1/code 8 publicado por HTTPS, mismo certificado beta SHA-256 `0f0c5c53e2ab1e83d9b278c805d9be75e99961f0abd7b239d9a26e4d2ee7df97`, Google habilitado. No activa recepción push FCM ni representa publicación de tienda.
+- [Descarga del APK](https://junto.lunalav.pe/app/descargas/JUNTO-beta-1.3.1.apk): SHA-256 `691107371d0246648667c6fcad6ba9ac603646e80d444a6373a325b98370bd93`, idéntico en local/HTTPS. No depurable, bundle incluido, Android 7+, ARM64/x86_64. Revisados archivos privados y valores de los secretos conocidos en APK/export, sin exponerlos. Actualizado en emulador sin desinstalar: versión y sesión conservadas, Inicio visible, sin error fatal/script en logs recientes.
 
-Antes de activar: CI verde, imagen API auditada, readiness con DB inaccesible, migración aditiva a 22 tablas históricas, privilegios runtime y smoke HTTPS. Conservar API/web anteriores y descargas; no restaurar el libro sobre operaciones nuevas sin consentimiento. Para reversión coordinada, web `20261011-googleweb` y API `20261011-beta130` son la referencia anterior compatible con monedas; las migraciones aditivas no se deshacen.
+Activación: API `junto-api:20261011-beta131` y web `junto-web:20261011-googleweb131`, fuente `/opt/junto/releases/55090e9`. Imagen API sin vulnerabilidades instaladas; readiness 503 con DB inaccesible. Cinco migraciones aditivas nuevas: 22 registros completos, ninguno pendiente. Recuento antes/después de migrar idéntico (12 usuarios, 7 grupos, 6 gastos, 1 pago); privilegios CRUD y rol no propietario comprobados. Configuración anterior respaldada en `compose.env.20261011-beta131.bak` y `runtime.env.20261011-beta131.bak`. No se cambiaron DNS, Caddy, MX ni otras apps.
 
-Pendientes de esta candidata: activación, hash de APK publicado, Google web real, actualización en emulador, validación física Google/WhatsApp/TalkBack y entrega push con app cerrada.
+Smoke HTTPS correcto: readiness, autenticación obligatoria, JSON inválido, CORS y legales. Chromium/WebKit comprobaron seis anchos, login/logout con la cuenta QA ya autorizada, grupo y preparación de correo, sin nuevos envíos. Cabeceras GIS/CSP/COOP/Referrer verificadas. El navegador integrado inició sesión REAL con `calebluna41@gmail.com` por el botón oficial y abrió Inicio; al recargar conservó la sesión. No se solicitaron permisos Gmail ni se ingresó contraseña/código Google. Fotos/reacciones/respuestas/pin/presencia probados con identidades ficticias en base local, no mensajes a amigos.
+
+Conservar imagen anterior para recuperación: Conservar API/web anteriores y descargas; no restaurar el libro sobre operaciones nuevas sin consentimiento. Para reversión coordinada, web `20261011-googleweb` y API `20261011-beta130` son la referencia anterior compatible con monedas; las migraciones aditivas no se deshacen.
+
+Pendientes: Google físico en este APK (la sesión anterior se conservó, no se hizo un nuevo acceso nativo), WhatsApp real, TalkBack/letra grande y recepción push FCM/Expo con app cerrada. Correo SMTP existente conservado; esta ronda capturó SMTP local y preparó mensajes de producción sin enviarlos. No confundir aceptación SMTP, avisos internos o abrir un borrador con entrega real.
