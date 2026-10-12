@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
 import { Sheet } from "../../../src/components/ui/Sheet";
+import { avatarColors } from "../../../src/lib/people";
 import { useGrupo, usePagos, useResolverPago } from "../../../src/hooks/useGrupos";
 import { api } from "../../../src/lib/api";
 import { useAuthStore } from "../../../src/store/auth.store";
@@ -164,6 +165,15 @@ export default function Group() {
 
   // Long press on a message: react, pin or delete.
   const [actionsFor, setActionsFor] = useState<Extract<ChatItem, { tipo: "mensaje" }> | null>(null);
+  // "Responder": the message being answered shows above the box until sent or dismissed.
+  const [replyTo, setReplyTo] = useState<Extract<ChatItem, { tipo: "mensaje" }> | null>(null);
+  const messageBox = useRef<TextInput>(null);
+  function answerMessage(message: Extract<ChatItem, { tipo: "mensaje" }>) {
+    setActionsFor(null);
+    setReplyTo(message);
+    setExpressions(false);
+    setTimeout(() => messageBox.current?.focus(), 50);
+  }
   async function react(comentarioId: string, emoji: string) {
     setActionsFor(null);
     try { await api.post(`/comentarios/${comentarioId}/reaccion`, { emoji }); await refetchChat(); }
@@ -218,9 +228,10 @@ export default function Group() {
     try {
       setSending(true);
       setError("");
-      await api.post(`/grupos/${id}/mensajes`, { texto: value });
+      await api.post(`/grupos/${id}/mensajes`, { texto: value, ...(replyTo ? { respondeA: replyTo.comentarioId } : {}) });
       // Do not erase a second message typed while the first one was being sent.
       setText((current) => current.trim() === value ? "" : current);
+      setReplyTo(null);
       setExpressions(false);
       await refetchChat();
     } catch (err) {
@@ -408,7 +419,7 @@ export default function Group() {
             return (
               <View key={item.id} style={{ gap: 8, marginTop: showAuthor && index ? 4 : 0 }}>
                 {newDay && <DaySeparator date={day} />}
-                <ChatBubble item={item} meId={user?.id} modo={group.modo} moneda={group.moneda} showAuthor={showAuthor} busy={resolve.isPending} onAnswer={answer} onDelete={remove} onMessageActions={setActionsFor} onReact={(comentarioId, emoji) => { void react(comentarioId, emoji); }} />
+                <ChatBubble item={item} meId={user?.id} modo={group.modo} moneda={group.moneda} showAuthor={showAuthor} busy={resolve.isPending} onAnswer={answer} onDelete={remove} onMessageActions={setActionsFor} onReply={answerMessage} onReact={(comentarioId, emoji) => { void react(comentarioId, emoji); }} />
               </View>
             );
           })}
@@ -447,10 +458,24 @@ export default function Group() {
             if (next === text) setError("Tu mensaje llegó a 500 caracteres. Acórtalo antes de añadir un emoji.");
             else { setText(next); setError(""); }
           }} />}
+          {replyTo && (
+            <View accessible accessibilityLabel={`Respondiendo a ${replyTo.mio ? "tu mensaje" : replyTo.autor.nombre}: ${replyTo.texto}`}
+              style={{ flexDirection: "row", alignItems: "center", gap: 10, marginHorizontal: 12, paddingVertical: 8, paddingLeft: 12, paddingRight: 6, borderRadius: 14, backgroundColor: "white", borderLeftWidth: 4, borderLeftColor: replyTo.mio ? chatColors.send : avatarColors(replyTo.autor.id).fg }}>
+              <Ionicons name="arrow-undo" size={16} color={palette.muted} />
+              <View style={{ flex: 1 }}>
+                <Label size={12} weight="bold" color={replyTo.mio ? chatColors.send : avatarColors(replyTo.autor.id).fg}>{replyTo.mio ? "Tú" : replyTo.autor.nombre.split(" ")[0]}</Label>
+                <Label size={13} color={palette.muted} numberOfLines={1}>{replyTo.texto}</Label>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Cancelar respuesta" hitSlop={8} onPress={() => setReplyTo(null)} style={{ width: 36, height: 36, alignItems: "center", justifyContent: "center" }}>
+                <Ionicons name="close" size={20} color={palette.muted} />
+              </Pressable>
+            </View>
+          )}
           <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 12 }}>
             <Pressable accessibilityRole="button" accessibilityLabel="Emojis y respuestas rápidas" accessibilityState={{ expanded: expressions }} onPress={() => { Keyboard.dismiss(); setExpressions(!expressions); }} style={{ width: 44, height: 48, alignItems: "center", justifyContent: "center" }}><Ionicons name={expressions ? "close-circle-outline" : "happy-outline"} size={27} color={chatColors.header} /></Pressable>
             <TextInput
-              accessibilityLabel="Escribe un mensaje al grupo"
+              ref={messageBox}
+              accessibilityLabel={replyTo ? `Respuesta a ${replyTo.autor.nombre}` : "Escribe un mensaje al grupo"}
               value={text}
               onChangeText={setText}
               onFocus={() => setExpressions(false)}
@@ -503,6 +528,7 @@ export default function Group() {
               );
             })}
           </View>
+          <Button title="Responder" onPress={() => answerMessage(actionsFor)} />
           <Button title={actionsFor.fijado ? "Desfijar mensaje" : "Fijar mensaje"} secondary onPress={() => { void pin(actionsFor.fijado ? null : actionsFor.comentarioId); }} />
           {actionsFor.puedeEliminar && <Button title="Eliminar mensaje" secondary onPress={() => { const target = actionsFor.comentarioId; setActionsFor(null); remove(target); }} />}
         </>}

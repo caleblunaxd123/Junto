@@ -69,6 +69,8 @@ export interface Grupo {
 
 /** WhatsApp ticks on what I post: ✓ sent, ✓✓ received (they used JUNTO after), blue ✓✓ seen. */
 export type Entrega = "enviado" | "recibido" | "visto";
+/** The message a reply quotes (text is empty if it was deleted). */
+export type Respuesta = { comentarioId: string; autor: ChatPersona; texto: string; eliminado: boolean };
 export type Reaccion = { emoji: string; total: number; mia: boolean };
 export type Presencia = { usuarioId: string; enLinea: boolean; ultimaConexion: string | null };
 
@@ -130,7 +132,7 @@ export type ChatItem = ChatBase & (
   | { tipo: "cuenta" | "gasto"; gastoId: string; descripcion: string; monto: number; pagador: ChatPersona; comentarios: number; tuParte: number | null; partes?: number; parte?: number; libres?: number; entrega?: Entrega }
   | { tipo: "pago"; pagoId: string; monto: number; monedaOrigen?: CurrencyCode | null; montoOrigen?: number | null; tipoCambio?: string | null; metodo: string | null; estado: string; receptor: ChatPersona; resolutor: ChatPersona | null; fechaResolucion: string | null; comentarios: number; apruebaComo: "receptor" | "administrador" | null }
   | { tipo: "recordatorio"; para: ChatPersona; monto: number | null; aviso: string | null }
-  | { tipo: "mensaje"; comentarioId: string; texto: string; eliminado: boolean; puedeEliminar: boolean; entrega?: Entrega; reacciones?: Reaccion[]; fijado?: boolean }
+  | { tipo: "mensaje"; comentarioId: string; texto: string; eliminado: boolean; puedeEliminar: boolean; entrega?: Entrega; reacciones?: Reaccion[]; fijado?: boolean; respuesta?: Respuesta }
 );
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────

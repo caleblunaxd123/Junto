@@ -68,8 +68,8 @@ router.post("/:id/fijar", async (req, res, next) => {
 });
 router.post("/:id/mensajes", async (req, res, next) => {
   try {
-    const { texto } = z.object({ texto: z.string().max(2000) }).strict().parse(req.body);
-    const result = await createComment(req.user!.userId, { grupoId: z.string().uuid().parse(req.params.id), texto });
+    const { texto, respondeA } = z.object({ texto: z.string().max(2000), respondeA: z.string().uuid().optional() }).strict().parse(req.body);
+    const result = await createComment(req.user!.userId, { grupoId: z.string().uuid().parse(req.params.id), texto, respondeA });
     res.status(result.repetido ? 200 : 201).json(result);
   } catch (error) { next(error); }
 });

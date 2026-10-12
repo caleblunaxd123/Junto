@@ -24,7 +24,7 @@ export async function getGroupChat(userId: string, grupoId: string) {
     prisma.pago.findMany({ where: { grupoId }, include: { pagador: person, receptor: { select: { id: true, nombre: true, fotoUrl: true, sinCuenta: true } }, resolutor: person, _count: { select: { comentarios: { where: { eliminado: false } } } } }, orderBy: { fechaPago: "desc" }, take: LIMIT }),
     // A reminder is between who owes and who collects: the rest of the group never sees it.
     prisma.recordatorio.findMany({ where: { grupoId, OR: [{ enviadoPor: userId }, { enviadoA: userId }] }, include: { enviador: person, receptor: person }, orderBy: { fechaEnvio: "desc" }, take: LIMIT }),
-    prisma.comentario.findMany({ where: { grupoId, gastoId: null, pagoId: null }, include: { autor: person, reacciones: { select: { usuarioId: true, emoji: true } } }, orderBy: { fechaCreacion: "desc" }, take: LIMIT }),
+    prisma.comentario.findMany({ where: { grupoId, gastoId: null, pagoId: null }, include: { autor: person, reacciones: { select: { usuarioId: true, emoji: true } }, respondeA: { select: { id: true, texto: true, eliminado: true, autor: person } } }, orderBy: { fechaCreacion: "desc" }, take: LIMIT }),
   ]);
   const parts = new Map(notices.map((n) => [n.integranteId, n.parte!]));
   // Opening the chat reads it, like WhatsApp.
@@ -55,7 +55,8 @@ export async function getGroupChat(userId: string, grupoId: string) {
     })),
     ...reminders.map((r) => ({ id: `recordatorio-${r.id}`, tipo: "recordatorio" as const, fecha: r.fechaEnvio, autor: r.enviador, mio: mine(r.enviadoPor), para: r.receptor, monto: r.monto, aviso: r.tipo === "manual" ? null : r.tipo })),
     ...messages.map((c) => ({ id: `mensaje-${c.id}`, tipo: "mensaje" as const, fecha: c.fechaCreacion, autor: c.autor, mio: mine(c.autorId), ...ticks(mine(c.autorId) && !c.eliminado, c.fechaCreacion), comentarioId: c.id, texto: c.eliminado ? "" : c.texto, eliminado: c.eliminado, puedeEliminar: !c.eliminado && (mine(c.autorId) || viewer.rol === "admin"),
-      reacciones: c.eliminado ? [] : reactionSummary(c.reacciones, userId), fijado: viewer.grupo.mensajeFijadoId === c.id })),
+      reacciones: c.eliminado ? [] : reactionSummary(c.reacciones, userId), fijado: viewer.grupo.mensajeFijadoId === c.id,
+      ...(c.respondeA && !c.eliminado ? { respuesta: { comentarioId: c.respondeA.id, autor: c.respondeA.autor, eliminado: c.respondeA.eliminado, texto: c.respondeA.eliminado ? "" : c.respondeA.texto.length > 140 ? `${c.respondeA.texto.slice(0, 137)}…` : c.respondeA.texto } } : {}) })),
   ];
   return items.sort((a, b) => a.fecha.getTime() - b.fecha.getTime()).slice(-200);
 }

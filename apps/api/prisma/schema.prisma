@@ -418,6 +418,8 @@ model Comentario {
   // Deleted comments keep their place in the thread but lose their text.
   eliminado     Boolean  @default(false)
   fechaCreacion DateTime @default(now()) @map("fecha_creacion")
+  // A group message can quote the one it answers (WhatsApp "Responder").
+  respondeAId   String?  @map("responde_a_id") @db.Uuid
 
   grupo    Grupo               @relation(fields: [grupoId], references: [id])
   gasto    Gasto?              @relation(fields: [gastoId], references: [id])
@@ -425,6 +427,8 @@ model Comentario {
   autor    Usuario             @relation(fields: [autorId], references: [id])
   reportes ReporteComentario[]
   reacciones ReaccionComentario[]
+  respondeA  Comentario?  @relation("Respuestas", fields: [respondeAId], references: [id], onDelete: SetNull)
+  respuestas Comentario[] @relation("Respuestas")
 
   @@index([gastoId, fechaCreacion])
   @@index([pagoId, fechaCreacion])

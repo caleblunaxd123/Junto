@@ -6,7 +6,7 @@ import { Avatar, Button, Label, palette } from "../ui/Design";
 import { avatarColors } from "../../lib/people";
 import { modeWords } from "../../lib/groupMode";
 import { chatReactions, isEmojiMessage } from "../../lib/chatExpressions";
-import { type ChatItem, type Entrega } from "../../types";
+import { type ChatItem, type Entrega, type Respuesta } from "../../types";
 
 import { formatMoney, type CurrencyCode } from "@junto/shared/currency";
 const methods: Record<string, string> = { yape: "Yape", plin: "Plin", transferencia: "transferencia", efectivo: "efectivo" };
@@ -33,7 +33,7 @@ function Ticks({ entrega }: { entrega?: Entrega }) {
   return <Ionicons accessibilityLabel={label} name={entrega === "enviado" ? "checkmark" : "checkmark-done"} size={15} color={entrega === "visto" ? "#53BDEB" : palette.muted} />;
 }
 
-function Bubble({ item, children, onPress, onLongPress, onQuickReact, label, showAuthor, wide = false, footer }: { item: ChatItem; children: React.ReactNode; onPress?: () => void; onLongPress?: () => void; onQuickReact?: (emoji: string) => void; label: string; showAuthor: boolean; wide?: boolean; footer?: React.ReactNode }) {
+function Bubble({ item, children, onPress, onLongPress, onQuickReact, onReply, label, showAuthor, wide = false, footer }: { item: ChatItem; children: React.ReactNode; onPress?: () => void; onLongPress?: () => void; onQuickReact?: (emoji: string) => void; onReply?: () => void; label: string; showAuthor: boolean; wide?: boolean; footer?: React.ReactNode }) {
   const mine = item.mio;
   const entrega = "entrega" in item ? item.entrega : undefined;
   // With a mouse nobody long-presses: on the web every message has a small ⌄ (and right-click works).
@@ -62,7 +62,7 @@ function Bubble({ item, children, onPress, onLongPress, onQuickReact, label, sho
   return (
     <View style={{ flexDirection: "row", justifyContent: mine ? "flex-end" : "flex-start", alignItems: "flex-end", gap: 6 }}>
       {!mine && (showAuthor ? <Avatar name={item.autor.nombre} photo={item.autor.fotoUrl ?? undefined} seed={item.autor.id} size={28} /> : <View style={{ width: 28 }} />)}
-      {webReact && mine && <ReactButton open={picking} onPress={() => setPicking(!picking)} />}
+      {webReact && mine && <SideActions open={picking} onReact={() => setPicking(!picking)} onReply={onReply} />}
       <View style={{ flexShrink: 1, alignItems: mine ? "flex-end" : "flex-start" }}>
         {webReact && picking && (
           <View accessibilityRole="radiogroup" accessibilityLabel="Reaccionar al mensaje" style={{ flexDirection: "row", gap: 2, padding: 4, marginBottom: 4, borderRadius: 24, backgroundColor: "white", borderWidth: 1, borderColor: palette.line, shadowColor: palette.ink, shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }}>
@@ -82,27 +82,48 @@ function Bubble({ item, children, onPress, onLongPress, onQuickReact, label, sho
           : <View accessible accessibilityLabel={label}>{body}</View>}
         {footer}
       </View>
-      {webReact && !mine && <ReactButton open={picking} onPress={() => setPicking(!picking)} />}
+      {webReact && !mine && <SideActions open={picking} onReact={() => setPicking(!picking)} onReply={onReply} />}
     </View>
   );
 }
 
-function ReactButton({ open, onPress }: { open: boolean; onPress: () => void }) {
+/** WhatsApp Web's buttons beside a message: react (🙂) and reply (↩). */
+function SideActions({ open, onReact, onReply }: { open: boolean; onReact: () => void; onReply?: () => void }) {
+  const button = ({ hovered }: { hovered?: boolean }, active = false) => ({ width: 30, height: 30, borderRadius: 15, alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: active || hovered ? "white" : "transparent", borderWidth: active ? 1 : 0, borderColor: palette.line });
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={open ? "Cerrar reacciones" : "Reaccionar"} accessibilityState={{ expanded: open }} onPress={onPress} hitSlop={4}
-      style={({ hovered }: { hovered?: boolean }) => ({ alignSelf: "center", width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: open || hovered ? "white" : "transparent", borderWidth: open ? 1 : 0, borderColor: palette.line })}>
-      <Ionicons name={open ? "close" : "happy-outline"} size={18} color={open ? palette.ink : "#9AA6B8"} />
-    </Pressable>
+    <View style={{ alignSelf: "center", flexDirection: "row", gap: 2 }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={open ? "Cerrar reacciones" : "Reaccionar"} accessibilityState={{ expanded: open }} onPress={onReact} hitSlop={4} style={(state) => button(state as { hovered?: boolean }, open)}>
+        <Ionicons name={open ? "close" : "happy-outline"} size={18} color={open ? palette.ink : "#9AA6B8"} />
+      </Pressable>
+      {!!onReply && !open && (
+        <Pressable accessibilityRole="button" accessibilityLabel="Responder" onPress={onReply} hitSlop={4} style={(state) => button(state as { hovered?: boolean })}>
+          <Ionicons name="arrow-undo-outline" size={17} color="#9AA6B8" />
+        </Pressable>
+      )}
+    </View>
   );
 }
 
-export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAnswer, busy, onDelete, onMessageActions, onReact }: {
+/** The quoted message on top of a reply, like WhatsApp. */
+function Quote({ quote, meId }: { quote: Respuesta; meId?: string }) {
+  const color = quote.autor.id === meId ? "#007B60" : avatarColors(quote.autor.id).fg;
+  return (
+    <View accessible accessibilityLabel={`En respuesta a ${quote.autor.id === meId ? "ti" : quote.autor.nombre}: ${quote.eliminado ? "mensaje eliminado" : quote.texto}`}
+      style={{ marginBottom: 2, paddingVertical: 5, paddingHorizontal: 8, borderRadius: 8, backgroundColor: "#0000000A", borderLeftWidth: 4, borderLeftColor: color }}>
+      <Label size={12} weight="bold" color={color}>{quote.autor.id === meId ? "Tú" : firstName(quote.autor.nombre)}</Label>
+      <Label size={13} color={palette.muted} numberOfLines={2} style={quote.eliminado ? { fontStyle: "italic" } : undefined}>{quote.eliminado ? "Mensaje eliminado" : quote.texto}</Label>
+    </View>
+  );
+}
+
+export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAnswer, busy, onDelete, onMessageActions, onReact, onReply }: {
   item: ChatItem; meId?: string; modo?: string | null; moneda?: CurrencyCode; showAuthor: boolean; busy: boolean;
   onAnswer: (pagoId: string, persona: string, monto: number, received: boolean) => void;
   onDelete: (comentarioId: string) => void;
   /** Long press on a message: reactions, pin, delete. */
   onMessageActions?: (item: Extract<ChatItem, { tipo: "mensaje" }>) => void;
   onReact?: (comentarioId: string, emoji: string) => void;
+  onReply?: (item: Extract<ChatItem, { tipo: "mensaje" }>) => void;
 }) {
   const money = (value: number) => formatMoney(value, moneda);
   const who = (person: { id: string; nombre: string }) => (person.id === meId ? "tú" : firstName(person.nombre));
@@ -193,6 +214,7 @@ export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAns
         <Bubble item={item} showAuthor={showAuthor} label={`${Who(item.autor)}: ${item.eliminado ? "mensaje eliminado" : item.texto}`}
           onLongPress={!item.eliminado && onMessageActions ? () => onMessageActions(item) : undefined}
           onQuickReact={!item.eliminado && onReact ? (emoji) => onReact(item.comentarioId, emoji) : undefined}
+          onReply={!item.eliminado && onReply ? () => onReply(item) : undefined}
           footer={!!item.reacciones?.length && (
             <View style={{ flexDirection: "row", gap: 4, marginTop: -6, paddingHorizontal: 8 }}>
               {item.reacciones.map((r) => (
@@ -204,6 +226,7 @@ export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAns
               ))}
             </View>
           )}>
+          {!item.eliminado && item.respuesta && <Quote quote={item.respuesta} meId={meId} />}
           {item.eliminado
             ? <Label size={14} color={palette.muted} style={{ fontStyle: "italic" }}>Mensaje eliminado</Label>
             : <Label size={isEmojiMessage(item.texto) ? 34 : 15}>{item.texto}</Label>}

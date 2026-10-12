@@ -140,6 +140,20 @@ async function run() {
     await call(`/comentarios/${sent.id}`, caleb, 'DELETE', undefined, 204);
     assert.equal((await detail(caleb, group.id)).mensajeFijado, null, 'a deleted message is unpinned');
 
+    // Replies quote a live message of the same group chat.
+    const question = await call(`/grupos/${group.id}/mensajes`, luisReal, 'POST', { texto: '¿Cuánto era lo del almuerzo?' }, 201);
+    const answer = await call(`/grupos/${group.id}/mensajes`, caleb, 'POST', { texto: 'S/ 36 cada uno', respondeA: question.id }, 201);
+    const quoted = (await call(`/grupos/${group.id}/chat`, martaReal)).find((i) => i.comentarioId === answer.id).respuesta;
+    assert.equal(quoted.comentarioId, question.id);
+    assert.equal(quoted.texto, '¿Cuánto era lo del almuerzo?');
+    assert.equal(quoted.autor.id, luisReal.usuario.id);
+    const other = await call('/grupos', stranger, 'POST', { nombre: `Otro ${suffix}`, integrantes: ['X'] }, 201);
+    const elsewhere = await call(`/grupos/${other.id}/mensajes`, stranger, 'POST', { texto: 'De otro grupo' }, 201);
+    await call(`/grupos/${group.id}/mensajes`, caleb, 'POST', { texto: 'No se puede', respondeA: elsewhere.id }, 404);
+    await call(`/comentarios/${question.id}`, luisReal, 'DELETE', undefined, 204);
+    await call(`/grupos/${group.id}/mensajes`, caleb, 'POST', { texto: 'Tampoco', respondeA: question.id }, 404);
+    assert.equal((await call(`/grupos/${group.id}/chat`, caleb)).find((i) => i.comentarioId === answer.id).respuesta.eliminado, true, 'the quote of a deleted message stays, without its text');
+
     // Profile photo: upload, shown next to my messages, public by random id, replaced and removed.
     const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
     await call('/auth/me/foto', caleb, 'PUT', { imagen: 'bm90IGFuIGltYWdl' }, 400);

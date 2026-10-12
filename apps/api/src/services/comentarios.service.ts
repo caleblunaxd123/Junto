@@ -64,7 +64,7 @@ export async function listComments(userId: string, target: CommentTarget) {
   }));
 }
 
-export async function createComment(userId: string, input: CommentTarget & { texto: string }) {
+export async function createComment(userId: string, input: CommentTarget & { texto: string; respondeA?: string }) {
   const texto = cleanComment(input.texto);
   if (!texto) throw new UserError("Escribe un comentario.");
   if (texto.length > COMMENT_LIMITS.maxLength) throw new UserError(`El comentario puede tener hasta ${COMMENT_LIMITS.maxLength} caracteres.`);
@@ -77,7 +77,13 @@ export async function createComment(userId: string, input: CommentTarget & { tex
     if (repeated) return { id: repeated.id, repetido: true as const };
     const recent = await tx.comentario.count({ where: { autorId: userId, fechaCreacion: { gte: new Date(Date.now() - 10 * 60_000) } } });
     if (recent >= COMMENT_LIMITS.per10Minutes) throw new UserError("Escribiste muchos comentarios seguidos. Espera unos minutos.", 429);
-    const created = await tx.comentario.create({ data: { gastoId: input.gastoId, pagoId: input.pagoId, grupoId: target.grupoId, autorId: userId, texto }, select: { id: true, autor: { select: { nombre: true } } } });
+    // Only a live message of this same group chat can be quoted.
+    if (input.respondeA) {
+      if (!input.grupoId) throw new UserError("Solo puedes responder mensajes del chat del grupo.");
+      const quoted = await tx.comentario.count({ where: { id: input.respondeA, grupoId: target.grupoId, gastoId: null, pagoId: null, eliminado: false } });
+      if (!quoted) throw new UserError("Ese mensaje ya no está disponible para responder.", 404);
+    }
+    const created = await tx.comentario.create({ data: { gastoId: input.gastoId, pagoId: input.pagoId, grupoId: target.grupoId, autorId: userId, texto, respondeAId: input.respondeA ?? null }, select: { id: true, autor: { select: { nombre: true } } } });
     return { ...created, repetido: false as const };
   });
   if (result.repetido) return result;
