@@ -4,8 +4,8 @@ import * as gastosController from "../controllers/gastos.controller";
 import * as recordatoriosController from "../controllers/recordatorios.controller";
 import { authMiddleware } from "../middleware/auth";
 import { z } from "zod";
-import { getGroupChat } from "../services/groupChat.service";
-import { createComment } from "../services/comentarios.service";
+import { getGroupChat, groupPresence } from "../services/groupChat.service";
+import { createComment, pinMessage } from "../services/comentarios.service";
 import { agregarIntegrantes, quitarIntegrante, unirIntegrante } from "../services/integrantes.service";
 import { draftImportSchema, importDraft } from "../services/groupImport.service";
 
@@ -51,6 +51,19 @@ router.get("/:id/chat", async (req, res, next) => {
   try {
     res.set("Cache-Control", "private, no-store");
     res.json(await getGroupChat(req.user!.userId, z.string().uuid().parse(req.params.id)));
+  } catch (error) { next(error); }
+});
+// Who is online now, and when the others were last seen. Members only; people added by name have no presence.
+router.get("/:id/presencia", async (req, res, next) => {
+  try {
+    res.set("Cache-Control", "private, no-store");
+    res.json(await groupPresence(req.user!.userId, z.string().uuid().parse(req.params.id)));
+  } catch (error) { next(error); }
+});
+router.post("/:id/fijar", async (req, res, next) => {
+  try {
+    const { comentarioId } = z.object({ comentarioId: z.string().uuid().nullable() }).strict().parse(req.body ?? {});
+    res.json(await pinMessage(req.user!.userId, z.string().uuid().parse(req.params.id), comentarioId));
   } catch (error) { next(error); }
 });
 router.post("/:id/mensajes", async (req, res, next) => {

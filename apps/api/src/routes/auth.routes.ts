@@ -2,6 +2,8 @@ import { Router } from 'express';
 import * as authController from '../controllers/auth.controller';
 import { authMiddleware } from '../middleware/auth';
 import { authRateLimit } from '../middleware/authRateLimit';
+import { z } from 'zod';
+import { removeProfilePhoto, setProfilePhoto } from '../services/profilePhoto.service';
 
 const router = Router();
 router.use((req, res, next) => req.method === 'POST' && !['/refresh', '/logout'].includes(req.path) ? authRateLimit(req, res, next) : next());
@@ -17,6 +19,16 @@ router.post('/verify-email', authController.verifyEmail);
 router.post('/resend-verification', authController.resendVerification);
 router.get('/me', authMiddleware, authController.me);
 router.patch('/me', authMiddleware, authController.updateProfile);
+// Profile photo shown next to your messages and in your groups (base64 JPEG/PNG, up to 1 MB).
+router.put('/me/foto', authMiddleware, async (req, res, next) => {
+  try {
+    const { imagen } = z.object({ imagen: z.string().min(1) }).strict().parse(req.body ?? {});
+    res.json(await setProfilePhoto(req.user!.userId, imagen));
+  } catch (error) { next(error); }
+});
+router.delete('/me/foto', authMiddleware, async (req, res, next) => {
+  try { res.json(await removeProfilePhoto(req.user!.userId)); } catch (error) { next(error); }
+});
 router.get('/me/eliminacion', authMiddleware, authController.deletionSummary);
 router.delete('/me', authMiddleware, authRateLimit, authController.deleteAccount);
 router.put('/push-token', authMiddleware, authController.updatePushToken);

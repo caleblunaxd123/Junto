@@ -1,10 +1,9 @@
 import { PaymentDate, todayLocal, validDate } from "../PaymentDate";
 import { PaymentExchange, resolveExchange, type ExchangeDraft } from "../PaymentExchange";
 import React, { useLayoutEffect, useState } from "react";
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, TextInput, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Pressable, TextInput, View } from "react-native";
 import { Avatar, Button, ErrorBox, Label, palette, design } from "../ui/Design";
-import { useResponsiveLayout } from "../ui/responsive";
+import { Sheet } from "../ui/Sheet";
 import { parseMoney } from "../../lib/expensePreview";
 import { firstName } from "../../lib/members";
 import { centavosASoles } from "../../types";
@@ -24,7 +23,6 @@ export function RecordPayment({ person, receiver, moneda = "PEN", grupoId, max, 
   onSave: (monto: number, metodo: Method, conversion?: PaymentConversion, fechaEfectiva?: string) => Promise<void>;
 }) {
   const money = (value: number) => formatMoney(value, moneda);
-  const { tablet } = useResponsiveLayout();
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayLocal);
   const [exchange, setExchange] = useState<ExchangeDraft | null>(null);
@@ -46,11 +44,8 @@ export function RecordPayment({ person, receiver, moneda = "PEN", grupoId, max, 
     finally { setBusy(false); }
   }
   return (
-    <Modal transparent statusBarTranslucent navigationBarTranslucent visible animationType={Platform.OS === "web" ? "none" : "slide"} onShow={() => setShown(true)} onRequestClose={onClose}>
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1, justifyContent: tablet ? "center" : "flex-end", alignItems: tablet ? "center" : "stretch", padding: tablet ? 24 : 0, backgroundColor: "#08264466" }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Cerrar" onPress={onClose} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
-        <SafeAreaView edges={["bottom"]} style={{ width: "100%", maxWidth: tablet ? 520 : undefined, borderRadius: tablet ? 28 : undefined, backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "90%" }}>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 14 }}>
+    <Sheet visible onClose={onClose} onShow={() => setShown(true)} keyboard dismissable={!busy} width={520}
+      header={
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
             <Avatar name={person.nombre} seed={person.id} size={44} />
             <View style={{ flex: 1 }}>
@@ -58,12 +53,13 @@ export function RecordPayment({ person, receiver, moneda = "PEN", grupoId, max, 
               <Label size={13} color={palette.muted}>{receiver ? `Le debe a ${firstName(receiver.nombre)}` : "Te debe"} {money(max)}. Queda confirmado al guardar.</Label>
             </View>
           </View>
+      }>
           <View style={[design.input, { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 0, borderColor: tooMuch || (amount && !cents) ? palette.coral : "#D3DDEA" }]}>
             <Label size={22} weight="extra" color={palette.muted}>{currencyInfo(moneda).symbol}</Label>
             <TextInput accessibilityLabel="Monto que recibiste" value={exchange ? (fx.conversion ? centavosASoles(fx.conversion.monto) : "") : amount} onChangeText={setAmount} editable={shown && !busy && !exchange} keyboardType="decimal-pad" maxLength={13} style={{ flex: 1, minHeight: 56, fontSize: 24, fontWeight: "800", color: palette.ink }} />
           </View>
           {tooMuch && <Label size={12} color={palette.coral}>No puede ser más de lo que {receiver ? `debe a ${firstName(receiver.nombre)}` : "te debe"} ({money(max)}).</Label>}
-          <PaymentDate value={date} onChange={(next) => { setDate(next); if (exchange) setExchange({ ...exchange, cotizacionId: undefined }); }} disabled={busy} />
+          <PaymentDate label="¿Qué día te pagó?" value={date} onChange={(next) => { setDate(next); if (exchange) setExchange({ ...exchange, cotizacionId: undefined }); }} disabled={busy} />
           <PaymentExchange received grupoId={grupoId} fecha={date} value={exchange} onChange={(draft) => { setExchange(draft); if (draft) setMethod("transferencia"); }} target={moneda} disabled={!shown || busy} />
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
             {methods.filter((m) => (exchange?.monedaOrigen ?? moneda) === "PEN" || m.id === "efectivo" || m.id === "transferencia").map((m) => (
@@ -76,11 +72,7 @@ export function RecordPayment({ person, receiver, moneda = "PEN", grupoId, max, 
           {receiver && <Label size={13} color={palette.purple}>Lo registras como administrador por alguien sin cuenta. Confirma con {firstName(receiver.nombre)} que recibió el dinero antes de guardar.</Label>}
           {!!error && <ErrorBox message={error} />}
           <Button title="Guardar pago recibido" loading={busy} disabled={!shown || !cents || tooMuch || !validDate(date)} onPress={() => { void save(); }} />
-          <Button title="Cancelar" secondary disabled={busy} onPress={onClose} />
-          </ScrollView>
-        </SafeAreaView>
-      </KeyboardAvoidingView>
-    </Modal>
+    </Sheet>
   );
 }
 
@@ -90,17 +82,12 @@ export function LinkMember({ member, candidates, onClose, onPick }: {
   candidates: { usuarioId: string; usuario: { nombre: string; fotoUrl?: string | null } }[];
   onClose: () => void; onPick: (usuarioId: string) => Promise<void>;
 }) {
-  const { tablet } = useResponsiveLayout();
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   if (!member) return null;
   return (
-    <Modal transparent statusBarTranslucent navigationBarTranslucent visible animationType="slide" onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: tablet ? "center" : "flex-end", alignItems: tablet ? "center" : "stretch", padding: tablet ? 24 : 0, backgroundColor: "#08264466" }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Cerrar" onPress={onClose} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
-        <SafeAreaView edges={["bottom"]} style={{ width: "100%", maxWidth: tablet ? 520 : undefined, borderRadius: tablet ? 28 : undefined, backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 12 }}>
-          <Label accessibilityRole="header" size={20} weight="extra">¿Quién es {firstName(member.usuario.nombre)}?</Label>
-          <Label size={13} color={palette.muted}>Si {firstName(member.usuario.nombre)} ya se unió con su cuenta, elígela: recibirá sus gastos y pagos. Los totales no cambian.</Label>
+    <Sheet visible onClose={onClose} dismissable={!busy} title={`¿Quién es ${firstName(member.usuario.nombre)}?`} width={520}
+      subtitle={`Si ${firstName(member.usuario.nombre)} ya se unió con su cuenta, elígela: recibirá sus gastos y pagos. Los totales no cambian.`}>
           {!candidates.length && <Label size={13}>Todavía nadie se unió con su cuenta. Envíale su enlace personal.</Label>}
           {candidates.map((c) => (
             <Pressable key={c.usuarioId} accessibilityRole="button" accessibilityLabel={`Es ${c.usuario.nombre}`} disabled={!!busy}
@@ -112,9 +99,6 @@ export function LinkMember({ member, candidates, onClose, onPick }: {
             </Pressable>
           ))}
           {!!error && <ErrorBox message={error} />}
-          <Button title="Cancelar" secondary onPress={onClose} />
-        </SafeAreaView>
-      </View>
-    </Modal>
+    </Sheet>
   );
 }

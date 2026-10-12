@@ -1,12 +1,12 @@
 import React from "react";
-import { Pressable, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { Avatar, Button, Label, palette } from "../ui/Design";
 import { avatarColors } from "../../lib/people";
 import { modeWords } from "../../lib/groupMode";
-import { isEmojiMessage } from "../../lib/chatExpressions";
-import { type ChatItem } from "../../types";
+import { chatReactions, isEmojiMessage } from "../../lib/chatExpressions";
+import { type ChatItem, type Entrega } from "../../types";
 
 import { formatMoney, type CurrencyCode } from "@junto/shared/currency";
 const methods: Record<string, string> = { yape: "Yape", plin: "Plin", transferencia: "transferencia", efectivo: "efectivo" };
@@ -26,27 +26,83 @@ function SystemNote({ icon, children, label }: { icon: keyof typeof Ionicons.gly
 }
 
 /** A bubble aligned by author: yours on the right in green, everyone else's on the left in white. */
-function Bubble({ item, children, onPress, label, showAuthor, wide = false }: { item: ChatItem; children: React.ReactNode; onPress?: () => void; label: string; showAuthor: boolean; wide?: boolean }) {
+/** ✓ sent · ✓✓ received · blue ✓✓ seen, like WhatsApp. */
+function Ticks({ entrega }: { entrega?: Entrega }) {
+  if (!entrega) return null;
+  const label = entrega === "visto" ? "Visto" : entrega === "recibido" ? "Recibido" : "Enviado";
+  return <Ionicons accessibilityLabel={label} name={entrega === "enviado" ? "checkmark" : "checkmark-done"} size={15} color={entrega === "visto" ? "#53BDEB" : palette.muted} />;
+}
+
+function Bubble({ item, children, onPress, onLongPress, onQuickReact, label, showAuthor, wide = false, footer }: { item: ChatItem; children: React.ReactNode; onPress?: () => void; onLongPress?: () => void; onQuickReact?: (emoji: string) => void; label: string; showAuthor: boolean; wide?: boolean; footer?: React.ReactNode }) {
   const mine = item.mio;
+  const entrega = "entrega" in item ? item.entrega : undefined;
+  // With a mouse nobody long-presses: on the web every message has a small ⌄ (and right-click works).
+  const webMenu = Platform.OS === "web" && !!onLongPress;
+  // WhatsApp Web's 🙂 next to the message: one click shows the reactions right above it.
+  const webReact = Platform.OS === "web" && !!onQuickReact;
+  const [picking, setPicking] = React.useState(false);
+  const mineReaction = "reacciones" in item ? item.reacciones?.find((r) => r.mia)?.emoji : undefined;
   const body = (
-    <View style={{ maxWidth: 320, minWidth: 140, width: wide ? 270 : undefined, padding: 10, paddingBottom: 6, gap: 4, borderRadius: 16, borderTopRightRadius: mine ? 4 : 16, borderTopLeftRadius: mine ? 16 : 4, backgroundColor: mine ? chatColors.mine : chatColors.other, borderWidth: 1, borderColor: mine ? chatColors.mineBorder : palette.line }}>
+    <View style={{ maxWidth: 320, minWidth: 140, width: wide ? 270 : undefined, padding: 10, paddingRight: webMenu ? 30 : 10, paddingBottom: 6, gap: 4, borderRadius: 16, borderTopRightRadius: mine ? 4 : 16, borderTopLeftRadius: mine ? 16 : 4, backgroundColor: mine ? chatColors.mine : chatColors.other, borderWidth: 1, borderColor: mine ? chatColors.mineBorder : palette.line }}>
       {!mine && showAuthor && <Label size={12} weight="bold" color={avatarColors(item.autor.id).fg}>{firstName(item.autor.nombre)}</Label>}
+      {webMenu && (
+        <Pressable accessibilityRole="button" accessibilityLabel="Opciones del mensaje" onPress={onLongPress} hitSlop={6}
+          style={{ position: "absolute", top: 4, right: 4, zIndex: 1, width: 26, height: 22, borderRadius: 11, alignItems: "center", justifyContent: "center", backgroundColor: mine ? chatColors.mine : chatColors.other }}>
+          <Ionicons name="chevron-down" size={15} color="#9AA6B8" />
+        </Pressable>
+      )}
       {children}
-      <Label size={10} color={palette.muted} style={{ alignSelf: "flex-end" }}>{time(item.fecha)}</Label>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 3, alignSelf: "flex-end" }}>
+        {"fijado" in item && item.fijado && <Ionicons name="pin" size={11} color={palette.muted} accessibilityLabel="Fijado" />}
+        <Label size={10} color={palette.muted}>{time(item.fecha)}</Label>
+        {mine && <Ticks entrega={entrega} />}
+      </View>
     </View>
   );
   return (
     <View style={{ flexDirection: "row", justifyContent: mine ? "flex-end" : "flex-start", alignItems: "flex-end", gap: 6 }}>
       {!mine && (showAuthor ? <Avatar name={item.autor.nombre} photo={item.autor.fotoUrl ?? undefined} seed={item.autor.id} size={28} /> : <View style={{ width: 28 }} />)}
-      {onPress ? <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} style={{ flexShrink: 1 }}>{body}</Pressable> : <View accessible accessibilityLabel={label} style={{ flexShrink: 1 }}>{body}</View>}
+      {webReact && mine && <ReactButton open={picking} onPress={() => setPicking(!picking)} />}
+      <View style={{ flexShrink: 1, alignItems: mine ? "flex-end" : "flex-start" }}>
+        {webReact && picking && (
+          <View accessibilityRole="radiogroup" accessibilityLabel="Reaccionar al mensaje" style={{ flexDirection: "row", gap: 2, padding: 4, marginBottom: 4, borderRadius: 24, backgroundColor: "white", borderWidth: 1, borderColor: palette.line, shadowColor: palette.ink, shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }}>
+            {chatReactions.map((emoji) => (
+              <Pressable key={emoji} accessibilityRole="button" accessibilityLabel={`Reaccionar ${emoji}`} accessibilityState={{ selected: mineReaction === emoji }}
+                onPress={() => { setPicking(false); onQuickReact?.(emoji); }}
+                style={({ hovered }: { hovered?: boolean }) => ({ width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: mineReaction === emoji ? palette.mint : hovered ? "#F1F4F8" : "transparent", transform: [{ scale: hovered ? 1.15 : 1 }] })}>
+                <Label size={22}>{emoji}</Label>
+              </Pressable>
+            ))}
+          </View>
+        )}
+        {onPress || onLongPress
+          ? <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityHint={onLongPress ? (webMenu ? "Usa el botón de opciones para reaccionar o fijar" : "Mantén presionado para reaccionar o fijar") : undefined}
+              onPress={onPress} onLongPress={onLongPress} delayLongPress={350}
+              {...(webMenu ? { onContextMenu: (event: { preventDefault: () => void }) => { event.preventDefault(); onLongPress?.(); } } : {})}>{body}</Pressable>
+          : <View accessible accessibilityLabel={label}>{body}</View>}
+        {footer}
+      </View>
+      {webReact && !mine && <ReactButton open={picking} onPress={() => setPicking(!picking)} />}
     </View>
   );
 }
 
-export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAnswer, busy, onDelete }: {
+function ReactButton({ open, onPress }: { open: boolean; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={open ? "Cerrar reacciones" : "Reaccionar"} accessibilityState={{ expanded: open }} onPress={onPress} hitSlop={4}
+      style={({ hovered }: { hovered?: boolean }) => ({ alignSelf: "center", width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center", backgroundColor: open || hovered ? "white" : "transparent", borderWidth: open ? 1 : 0, borderColor: palette.line })}>
+      <Ionicons name={open ? "close" : "happy-outline"} size={18} color={open ? palette.ink : "#9AA6B8"} />
+    </Pressable>
+  );
+}
+
+export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAnswer, busy, onDelete, onMessageActions, onReact }: {
   item: ChatItem; meId?: string; modo?: string | null; moneda?: CurrencyCode; showAuthor: boolean; busy: boolean;
   onAnswer: (pagoId: string, persona: string, monto: number, received: boolean) => void;
   onDelete: (comentarioId: string) => void;
+  /** Long press on a message: reactions, pin, delete. */
+  onMessageActions?: (item: Extract<ChatItem, { tipo: "mensaje" }>) => void;
+  onReact?: (comentarioId: string, emoji: string) => void;
 }) {
   const money = (value: number) => formatMoney(value, moneda);
   const who = (person: { id: string; nombre: string }) => (person.id === meId ? "tú" : firstName(person.nombre));
@@ -134,7 +190,20 @@ export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAns
     }
     case "mensaje":
       return (
-        <Bubble item={item} showAuthor={showAuthor} label={`${Who(item.autor)}: ${item.eliminado ? "mensaje eliminado" : item.texto}`} onPress={item.puedeEliminar ? () => onDelete(item.comentarioId) : undefined}>
+        <Bubble item={item} showAuthor={showAuthor} label={`${Who(item.autor)}: ${item.eliminado ? "mensaje eliminado" : item.texto}`}
+          onLongPress={!item.eliminado && onMessageActions ? () => onMessageActions(item) : undefined}
+          onQuickReact={!item.eliminado && onReact ? (emoji) => onReact(item.comentarioId, emoji) : undefined}
+          footer={!!item.reacciones?.length && (
+            <View style={{ flexDirection: "row", gap: 4, marginTop: -6, paddingHorizontal: 8 }}>
+              {item.reacciones.map((r) => (
+                <Pressable key={r.emoji} accessibilityRole="button" accessibilityLabel={`${r.emoji} ${r.total}${r.mia ? ", tu reacción" : ""}`} onPress={() => onReact?.(item.comentarioId, r.emoji)}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 12, backgroundColor: "white", borderWidth: 1, borderColor: r.mia ? "#53BDEB" : palette.line }}>
+                  <Label size={13}>{r.emoji}</Label>
+                  {r.total > 1 && <Label size={11} weight="bold" color={palette.muted}>{r.total}</Label>}
+                </Pressable>
+              ))}
+            </View>
+          )}>
           {item.eliminado
             ? <Label size={14} color={palette.muted} style={{ fontStyle: "italic" }}>Mensaje eliminado</Label>
             : <Label size={isEmojiMessage(item.texto) ? 34 : 15}>{item.texto}</Label>}

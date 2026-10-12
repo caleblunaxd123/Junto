@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { Modal, Platform, Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { countries, currencies, currencyInfo, type CountryCode, type CurrencyCode } from "@junto/shared/currency";
-import { Button, Label, palette } from "./ui/Design";
+import { Label, palette } from "./ui/Design";
+import { Sheet } from "./ui/Sheet";
 
 /** Destination is explicit; the suggestion never overrides a chosen currency silently. */
 export function GroupCurrencyPicker({ country, currency, onChange, disabled }: {
@@ -30,12 +31,9 @@ export function GroupCurrencyPicker({ country, currency, onChange, disabled }: {
         ))}
       </View>
       <Label size={12} color="#007B60">{selectedCountry.currency ? `Sugerida para ${selectedCountry.name}: ${selectedCountry.currency}. ` : "Elige la moneda en que pagaron. "}Los saldos se llevarán en {currency}; no se podrá cambiar después. Si alguien paga en otra moneda, registrará el cambio acordado.</Label>
-      <Modal visible={!!picking} transparent animationType={Platform.OS === "web" ? "none" : "fade"} onRequestClose={() => setPicking(null)}>
-        <View style={{ flex: 1, backgroundColor: "rgba(8,38,68,0.45)", justifyContent: "center", padding: 20 }}>
-          <View style={{ width: "100%", maxWidth: 480, maxHeight: "85%", alignSelf: "center", backgroundColor: "#FFFCF7", borderRadius: 24, padding: 20, gap: 16 }}>
-            <Label size={23} weight="bold">{picking === "country" ? "País del plan" : "Moneda del grupo"}</Label>
-            <Label size={13} color={palette.muted}>{picking === "country" ? "No necesitamos tu ubicación. Elegir el país actualizará la sugerencia; revisa la moneda antes de crear." : "Los gastos y saldos usan esta moneda. Los pagos en otra moneda conservan su importe original y el equivalente acordado."}</Label>
-            <ScrollView contentContainerStyle={{ gap: 8 }}>
+      <Sheet visible={!!picking} onClose={() => setPicking(null)} closeLabel="Cerrar sin cambiar" width={480}
+        title={picking === "country" ? "País del plan" : "Moneda del grupo"}
+        subtitle={picking === "country" ? "No necesitamos tu ubicación. Elegir el país actualizará la sugerencia; revisa la moneda antes de crear." : "Los gastos y saldos usan esta moneda. Los pagos en otra moneda conservan su importe original y el equivalente acordado."}>
               {options.map((item) => {
                 const checked = item.code === (picking === "country" ? country : currency);
                 return <Pressable key={item.code} accessibilityRole="radio" accessibilityState={{ checked }} accessibilityLabel={`${item.name} (${item.code})`}
@@ -51,11 +49,7 @@ export function GroupCurrencyPicker({ country, currency, onChange, disabled }: {
                   {checked && <Label color="#007B60">✓</Label>}
                 </Pressable>;
               })}
-            </ScrollView>
-            <Button title="Cerrar sin cambiar" secondary onPress={() => setPicking(null)} />
-          </View>
-        </View>
-      </Modal>
+      </Sheet>
     </View>
   );
 }

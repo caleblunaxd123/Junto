@@ -107,7 +107,45 @@ async function loadComment(userId: string, id: string) {
 export async function deleteComment(userId: string, id: string) {
   const { row, esAdmin } = await loadComment(userId, id);
   if (row.autorId !== userId && !esAdmin) throw new UserError("Solo quien lo escribió o un administrador del grupo puede eliminarlo.", 403);
-  await prisma.comentario.update({ where: { id }, data: { eliminado: true, texto: "" } });
+  await prisma.$transaction([
+    prisma.comentario.update({ where: { id }, data: { eliminado: true, texto: "" } }),
+    prisma.reaccionComentario.deleteMany({ where: { comentarioId: id } }),
+    // A deleted message is never left pinned.
+    prisma.grupo.updateMany({ where: { id: row.grupoId, mensajeFijadoId: id }, data: { mensajeFijadoId: null, fijadoPor: null } }),
+  ]);
+}
+
+export const REACTIONS = ["👍", "❤️", "😂", "😮", "🙏", "✅", "🎉"] as const;
+
+/** One reaction per person per group message; the same emoji again (or null) removes it. */
+export async function reactToComment(userId: string, id: string, emoji: string | null) {
+  if (emoji !== null && !(REACTIONS as readonly string[]).includes(emoji)) throw new UserError("Esa reacción no está disponible.");
+  const { row } = await loadComment(userId, id);
+  const message = await prisma.comentario.findUnique({ where: { id }, select: { gastoId: true, pagoId: true } });
+  if (row.eliminado || message?.gastoId || message?.pagoId) throw new UserError("Solo puedes reaccionar a mensajes del chat del grupo.", 409);
+  const current = await prisma.reaccionComentario.findUnique({ where: { comentarioId_usuarioId: { comentarioId: id, usuarioId: userId } }, select: { emoji: true } });
+  if (emoji === null || current?.emoji === emoji) {
+    await prisma.reaccionComentario.deleteMany({ where: { comentarioId: id, usuarioId: userId } });
+    return { emoji: null };
+  }
+  await prisma.reaccionComentario.upsert({
+    where: { comentarioId_usuarioId: { comentarioId: id, usuarioId: userId } },
+    create: { comentarioId: id, usuarioId: userId, emoji },
+    update: { emoji, fecha: new Date() },
+  });
+  return { emoji };
+}
+
+/** Any member pins one group message (replacing the previous one) or unpins it with null. */
+export async function pinMessage(userId: string, grupoId: string, comentarioId: string | null) {
+  const member = await prisma.grupoMiembro.count({ where: { grupoId, usuarioId: userId, activo: true, grupo: { activo: true } } });
+  if (!member) throw new UserError("No perteneces a este grupo", 403);
+  if (comentarioId) {
+    const message = await prisma.comentario.findFirst({ where: { id: comentarioId, grupoId, gastoId: null, pagoId: null, eliminado: false }, select: { id: true } });
+    if (!message) throw new UserError("No encontramos ese mensaje en el grupo.", 404);
+  }
+  await prisma.grupo.update({ where: { id: grupoId }, data: { mensajeFijadoId: comentarioId, fijadoPor: comentarioId ? userId : null } });
+  return { mensajeFijadoId: comentarioId };
 }
 
 /** Stored for review by the JUNTO team; the reporter is never revealed to the author. */

@@ -67,7 +67,14 @@ export interface Grupo {
   miembros: GrupoMiembro[];
 }
 
+/** WhatsApp ticks on what I post: ✓ sent, ✓✓ received (they used JUNTO after), blue ✓✓ seen. */
+export type Entrega = "enviado" | "recibido" | "visto";
+export type Reaccion = { emoji: string; total: number; mia: boolean };
+export type Presencia = { usuarioId: string; enLinea: boolean; ultimaConexion: string | null };
+
 export interface GrupoConBalance extends Grupo {
+  /** The pinned group message, shown above the chat. */
+  mensajeFijado?: { id: string; texto: string; fechaCreacion: string; autor: { id: string; nombre: string } } | null;
   resumen: {
     totalGastado: number;
     cantidadGastos: number;
@@ -120,10 +127,10 @@ type ChatBase = { id: string; fecha: string; autor: ChatPersona; mio: boolean };
 export type ChatItem = ChatBase & (
   | { tipo: "creado" }
   | { tipo: "union"; parte: number | null; activo: boolean; sinCuenta?: boolean }
-  | { tipo: "cuenta" | "gasto"; gastoId: string; descripcion: string; monto: number; pagador: ChatPersona; comentarios: number; tuParte: number | null; partes?: number; parte?: number; libres?: number }
+  | { tipo: "cuenta" | "gasto"; gastoId: string; descripcion: string; monto: number; pagador: ChatPersona; comentarios: number; tuParte: number | null; partes?: number; parte?: number; libres?: number; entrega?: Entrega }
   | { tipo: "pago"; pagoId: string; monto: number; monedaOrigen?: CurrencyCode | null; montoOrigen?: number | null; tipoCambio?: string | null; metodo: string | null; estado: string; receptor: ChatPersona; resolutor: ChatPersona | null; fechaResolucion: string | null; comentarios: number; apruebaComo: "receptor" | "administrador" | null }
   | { tipo: "recordatorio"; para: ChatPersona; monto: number | null; aviso: string | null }
-  | { tipo: "mensaje"; comentarioId: string; texto: string; eliminado: boolean; puedeEliminar: boolean }
+  | { tipo: "mensaje"; comentarioId: string; texto: string; eliminado: boolean; puedeEliminar: boolean; entrega?: Entrega; reacciones?: Reaccion[]; fijado?: boolean }
 );
 
 // ─── Expenses ─────────────────────────────────────────────────────────────────

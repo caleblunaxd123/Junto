@@ -29,6 +29,8 @@ model Usuario {
   // Someone added to a group by name only ("Ana"): no login, no e-mail, no push. When the real
   // person joins they take over this row's place in the group (see integrantes.service).
   sinCuenta        Boolean   @default(false) @map("sin_cuenta")
+  // Last authenticated activity, for "en línea" / "visto hace…" in groups (written at most every 30 s).
+  ultimaConexion   DateTime? @map("ultima_conexion")
 
   // Relations
   gruposCreados       Grupo[]           @relation("GrupoCreador")
@@ -51,6 +53,8 @@ model Usuario {
   comentarios         Comentario[]
   reportesComentarios ReporteComentario[]
   recibosPush         ReciboPush[]
+  reacciones          ReaccionComentario[]
+  fotoPerfil          FotoPerfil?
   avisosRecibidos     AvisoGrupo[] @relation("AvisoDestinatario")
   avisosOriginados    AvisoGrupo[] @relation("AvisoIntegrante")
 
@@ -97,6 +101,9 @@ model CuentaRapida {
 
 model Grupo {
   id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  // One pinned group message (a comment without expense or payment), shown above the chat.
+  mensajeFijadoId String?   @map("mensaje_fijado_id") @db.Uuid
+  fijadoPor       String?   @map("fijado_por") @db.Uuid
   nombre          String    @db.VarChar(100)
   descripcion     String?   @db.Text
   tipo            String    @default("amigos") @db.VarChar(20)
@@ -187,6 +194,8 @@ model Gasto {
   pagadoPor    String    @map("pagado_por") @db.Uuid
   categoria    String    @default("otro") @db.VarChar(30)
   fecha        DateTime  @default(now())
+  // When it was written down (the chat order); `fecha` is the day of the expense, often midnight.
+  fechaRegistro DateTime @default(now()) @map("fecha_registro")
   creadoPor    String    @map("creado_por") @db.Uuid
   fotoUrl      String?   @map("foto_url") @db.VarChar(500)
   notas        String?   @db.Text
@@ -415,6 +424,7 @@ model Comentario {
   pago     Pago?               @relation(fields: [pagoId], references: [id])
   autor    Usuario             @relation(fields: [autorId], references: [id])
   reportes ReporteComentario[]
+  reacciones ReaccionComentario[]
 
   @@index([gastoId, fechaCreacion])
   @@index([pagoId, fechaCreacion])
@@ -456,4 +466,31 @@ model Invitacion {
   @@index([invitadoId, estado])
   @@index([invitadoPor, fechaCreacion])
   @@map("invitaciones")
+}
+
+// One reaction per person per group message, like WhatsApp: choosing another emoji replaces it.
+model ReaccionComentario {
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  comentarioId String     @map("comentario_id") @db.Uuid
+  usuarioId    String     @map("usuario_id") @db.Uuid
+  emoji        String     @db.VarChar(16)
+  fecha        DateTime   @default(now())
+  comentario   Comentario @relation(fields: [comentarioId], references: [id], onDelete: Cascade)
+  usuario      Usuario    @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([comentarioId, usuarioId])
+  @@map("reacciones_comentarios")
+}
+
+/// Profile photo uploaded in JUNTO (Google photos stay as their URL). Served at /api/fotos/:id; a new
+/// upload gets a new id, so clients can cache each URL forever.
+model FotoPerfil {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  usuarioId String   @unique @map("usuario_id") @db.Uuid
+  mime      String   @db.VarChar(20)
+  datos     Bytes
+  fecha     DateTime @default(now())
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("fotos_perfil")
 }

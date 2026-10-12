@@ -61,7 +61,8 @@ async function run() {
       await page.getByRole('button', { name: 'Moneda del grupo: Euros, EUR', exact: true }).waitFor();
       await page.goto(`http://127.0.0.1:8090/app/grupos/${group.id}`, { waitUntil: 'networkidle' });
       await page.getByRole('button', { name: 'Ya pagué', exact: true }).click();
-      await page.getByLabel('Fecha real del pago, año mes día').waitFor();
+      // The payment day is picked (Hoy / Ayer / calendar), today by default.
+      assert.equal(await page.getByRole('radio', { name: 'Hoy', exact: true }).getAttribute('aria-checked'), 'true');
       await page.getByRole('button', { name: '¿Pagaste en otra moneda?', exact: true }).click();
       await page.getByLabel('Monto pagado en USD', { exact: true }).fill('1');
       await page.getByRole('button', { name: 'Usar esta referencia', exact: true }).click();

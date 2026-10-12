@@ -2,6 +2,10 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { prisma } from "../lib/prisma";
 import { credentialsTag } from "../domain/credentials";
+import { shouldRecord } from "../domain/presence";
+
+// Throttle for "last seen" writes (see domain/presence).
+const lastSeenWrites = new Map<string, number>();
 
 export interface AuthPayload {
   userId: string;
@@ -62,6 +66,9 @@ export async function authMiddleware(
       return;
     }
     req.user = payload;
+    // "En línea": record activity without delaying the request or failing it.
+    if (shouldRecord(lastSeenWrites, payload.userId))
+      void prisma.usuario.update({ where: { id: payload.userId }, data: { ultimaConexion: new Date() }, select: { id: true } }).catch(() => undefined);
     // Older APKs hard-code soles: never let them mislabel a foreign-currency ledger.
     // Authentication and account settings remain available to update safely.
     if (req.baseUrl !== '/api/auth' && req.get('X-Junto-Currency-Version') !== '1' && (

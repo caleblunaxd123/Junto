@@ -20,6 +20,8 @@ import notificacionesRoutes from './routes/notificaciones.routes';
 import { emailProvider } from './lib/email';
 import { authMiddleware } from './middleware/auth';
 import { getActivity } from './services/activity.service';
+import { getProfilePhoto } from './services/profilePhoto.service';
+import { z } from 'zod';
 import { errorHandler } from './middleware/errorHandler';
 import { initPushReceiptsJob } from './jobs/pushReceipts.job';
 import { initRemindersJob } from './jobs/reminders.job';
@@ -51,6 +53,7 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 // Body parsing. Only the two image readers take large bodies (a 3–4 MB photo in base64); every
 // other route, including sign-in, stays small so nobody can make the API parse megabytes for free.
 app.use(['/api/pagos/comprobantes', '/api/cuentas-rapidas/leer-boleta'], express.json({ limit: '6mb' }));
+app.use('/api/auth/me/foto', express.json({ limit: '1600kb' }));
 app.use(express.json({ limit: '256kb' }));
 
 // Routes
@@ -67,6 +70,17 @@ app.use('/api/notificaciones', notificacionesRoutes);
 app.get('/api/actividad', authMiddleware, async (req, res, next) => {
   try { res.json(await getActivity(req.user!.userId, typeof req.query.grupoId === 'string' ? req.query.grupoId : undefined)); }
   catch (error) { next(error); }
+});
+
+// Profile photos are public by random id (like a Google photo URL) and never change: a new upload is a new id.
+app.get('/api/fotos/:id', async (req, res, next) => {
+  try {
+    const id = z.string().uuid().safeParse(req.params.id);
+    const photo = id.success ? await getProfilePhoto(id.data) : null;
+    if (!photo || !photo.usuario.activo) { res.status(404).end(); return; }
+    res.set({ 'Content-Type': photo.mime, 'Cache-Control': 'public, max-age=31536000, immutable', 'Cross-Origin-Resource-Policy': 'cross-origin', 'X-Content-Type-Options': 'nosniff' });
+    res.send(Buffer.from(photo.datos));
+  } catch (error) { next(error); }
 });
 
 // Health check

@@ -1,4 +1,7 @@
 import React, { useState } from "react";
+import { Platform, Pressable, View } from "react-native";
+import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
+import { pickProfilePhoto } from "../../../src/lib/media";
 import { FormField } from "../../../src/components/ui/Reference";
 import { nameError, phoneError } from "../../../src/lib/authValidation";
 import { errorMessage } from "../../../src/lib/errorMessage";
@@ -12,6 +15,7 @@ import {
   Card,
   Button,
   ErrorBox,
+  Avatar,
   palette,
 } from "../../../src/components/ui/Design";
 export default function EditProfile() {
@@ -22,6 +26,46 @@ export default function EditProfile() {
   const [error, setError] = useState("");
   const [touched, setTouched] = useState(false);
   const invalidName = nameError(name), invalidPhone = phoneError(phone);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  // Your photo appears next to your messages in the group chat, like WhatsApp.
+  async function choosePhoto(camera: boolean) {
+    setError("");
+    const picked = await pickProfilePhoto(camera);
+    if (!picked) return;
+    if ("error" in picked) { setError(picked.error); return; }
+    try {
+      setPhotoBusy(true);
+      const { data } = await api.put<{ fotoUrl: string }>("/auth/me/foto", { imagen: picked.base64 });
+      if (usuario) updateUsuario({ ...usuario, fotoUrl: data.fotoUrl });
+    } catch (err) {
+      setError(errorMessage(err, "No pudimos subir tu foto. Revisa tu conexión y reintenta."));
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+  async function removePhoto() {
+    try {
+      setPhotoBusy(true);
+      setError("");
+      await api.delete("/auth/me/foto");
+      if (usuario) updateUsuario({ ...usuario, fotoUrl: null });
+    } catch (err) {
+      setError(errorMessage(err, "No pudimos quitar tu foto. Reintenta."));
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+  function changePhoto() {
+    if (photoBusy) return;
+    const web = Platform.OS === "web";
+    Alert.alert(usuario?.fotoUrl ? "Cambiar tu foto" : "Pon tu foto", "Saldrá junto a tus mensajes y en tus grupos, como en WhatsApp.", [
+      ...(web ? [] : [{ text: "Tomar foto", onPress: () => { void choosePhoto(true); } }]),
+      { text: web ? "Elegir foto" : "Elegir de la galería", onPress: () => { void choosePhoto(false); } },
+      ...(usuario?.fotoUrl ? [{ text: "Quitar foto", style: "destructive" as const, onPress: () => { void removePhoto(); } }] : []),
+      { text: "Cancelar", style: "cancel" as const },
+    ], { tone: "info", eyebrow: "FOTO DE PERFIL" });
+  }
+
   async function save() {
     if (busy) return;
     setTouched(true);
@@ -47,6 +91,18 @@ export default function EditProfile() {
       subtitle="Los cambios se guardan en tu cuenta."
       back
     >
+      <View style={{ alignItems: "center", gap: 8 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Cambiar foto de perfil" onPress={changePhoto} disabled={photoBusy}
+          style={{ opacity: photoBusy ? 0.5 : 1 }}>
+          <Avatar name={usuario?.nombre || name || "Tú"} photo={usuario?.fotoUrl} seed={usuario?.id} size={96} />
+          <View style={{ position: "absolute", right: 0, bottom: 0, width: 32, height: 32, borderRadius: 16, backgroundColor: palette.purple, borderWidth: 3, borderColor: "white", alignItems: "center", justifyContent: "center" }}>
+            <Label size={15} color="white" weight="bold">{photoBusy ? "…" : "✎"}</Label>
+          </View>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={changePhoto} disabled={photoBusy} hitSlop={8}>
+          <Label weight="bold" color={palette.purple}>{photoBusy ? "Subiendo foto…" : usuario?.fotoUrl ? "Cambiar foto" : "Poner foto"}</Label>
+        </Pressable>
+      </View>
       <FormField label="Nombre completo" icon="person-outline"
         accessibilityLabel="Nombre completo"
         value={name}

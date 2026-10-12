@@ -1,4 +1,6 @@
 export const chatEmojis = ["😀", "😊", "😂", "🥳", "😍", "😅", "👍", "🙌", "👏", "🙏", "💚", "🎉", "🍽️", "🎂", "☕", "💸", "✅", "🕒", "🤝", "👋"];
+/** Same set as the API (comentarios.service REACTIONS). */
+export const chatReactions = ["👍", "❤️", "😂", "😮", "🙏", "✅", "🎉"] as const;
 export const chatReplies = ["¡Gracias! 🙌", "Lo reviso y te aviso 👀", "Un momento, por favor 🕒", "¡Qué buen plan! 🎉"];
 /** Emoji-only messages get a larger bubble; ordinary text remains readable. */
 export function isEmojiMessage(text: string) {

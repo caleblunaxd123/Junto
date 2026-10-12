@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { avatarColors, initials } from "../../lib/people";
+import { photoUri } from "../../lib/media";
 import { feedbackTitle } from "../../lib/errorMessage";
 import { useResponsiveLayout } from "./responsive";
 
@@ -247,6 +248,9 @@ export function Avatar({
   seed?: string;
 }) {
   const colors = avatarColors(seed || name);
+  // A photo that no longer exists (or no connection) falls back to the initials.
+  const uri = photoUri(photo);
+  const [failed, setFailed] = React.useState<string | undefined>();
   return (
     <View
       accessible
@@ -262,8 +266,8 @@ export function Avatar({
         overflow: "hidden",
       }}
     >
-      {photo ? (
-        <Image source={{ uri: photo }} style={{ width: size, height: size }} resizeMode="cover" />
+      {uri && failed !== uri ? (
+        <Image source={{ uri }} style={{ width: size, height: size }} resizeMode="cover" onError={() => setFailed(uri)} />
       ) : (
         <Text
           allowFontScaling={false}

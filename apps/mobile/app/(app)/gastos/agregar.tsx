@@ -5,8 +5,6 @@ import {
   Pressable,
   ActivityIndicator,
   Image,
-  Modal,
-  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
@@ -14,7 +12,7 @@ import DateTimePicker from "../../../src/components/ui/ExpenseDatePicker";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../src/lib/api";
 import { errorMessage } from "../../../src/lib/errorMessage";
-import { useResponsiveLayout } from "../../../src/components/ui/responsive";
+import { Sheet } from "../../../src/components/ui/Sheet";
 import { router, useLocalSearchParams } from "expo-router";
 import {
   useGrupos,
@@ -58,7 +56,6 @@ function Field({
   );
 }
 export default function Expense({ editing = false }: { editing?: boolean }) {
-  const { tablet } = useResponsiveLayout();
   const rawParams = useLocalSearchParams<{
     grupoId?: string;
     texto?: string;
@@ -559,9 +556,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
               </Pressable>
             </Field>
             <Field label="¿Entre quiénes se divide?">
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
+              {/* Everyone visible at once (wrapping rows): nobody hides past the edge of the screen. */}
+              <View
                 style={{
                   borderRadius: 16,
                   borderWidth: 1,
@@ -569,7 +565,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                   padding: 8,
                 }}
               >
-                <View style={{ flexDirection: "row", gap: 12 }}>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
                   {orderedMembers.map((m) => (
                     <Pressable
                       key={m.usuarioId}
@@ -622,7 +618,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                     </Pressable>
                   ))}
                 </View>
-              </ScrollView>
+              </View>
               <Label size={12} color={palette.muted}>
                 Toca a alguien para sacarlo. Ejemplo: el cumpleañero no paga y su parte se reparte entre los demás.
               </Label>
@@ -790,39 +786,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
             loading={create.isPending}
             disabled={!valid || !description.trim() || !payer}
           />
-          <Modal
-            visible={picker !== null}
-            transparent
-            animationType="slide"
-            onRequestClose={() => setPicker(null)}
-          >
-            <View
-              style={{
-                flex: 1,
-                backgroundColor: "#08264455",
-                justifyContent: tablet ? "center" : "flex-end",
-                alignItems: tablet ? "center" : "stretch",
-                padding: tablet ? 24 : 0,
-              }}
-            >
-              <View
-                style={{
-                  backgroundColor: "white",
-                  width: "100%",
-                  maxWidth: tablet ? 560 : undefined,
-                  borderRadius: tablet ? 28 : undefined,
-                  padding: 24,
-                  borderTopLeftRadius: 28,
-                  borderTopRightRadius: 28,
-                  gap: 15,
-                  maxHeight: "75%",
-                  paddingBottom: 35,
-                }}
-              >
-                <Label size={20} weight="extra">
-                  {picker === "grupo" ? "Elige el grupo" : "¿Quién pagó?"}
-                </Label>
-                <ScrollView>
+          <Sheet visible={picker !== null} onClose={() => setPicker(null)} title={picker === "grupo" ? "Elige el grupo" : "¿Quién pagó?"} width={560}>
                   {picker === "grupo"
                     ? groups.map((g) => (
                         <Pressable
@@ -860,15 +824,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                           {payer === m.usuarioId && <Ionicons name="checkmark-circle" size={22} color={palette.primary} />}
                         </Pressable>
                       ))}
-                </ScrollView>
-                <Button
-                  title="Cancelar"
-                  secondary
-                  onPress={() => setPicker(null)}
-                />
-              </View>
-            </View>
-          </Modal>
+          </Sheet>
         </>
       )}
     </Screen>

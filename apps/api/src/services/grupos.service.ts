@@ -177,12 +177,16 @@ export async function getGrupoDetalle(grupoId: string, usuarioId: string) {
   });
 
   if (!grupo || !grupo.activo) throw new Error('Grupo no encontrado');
+  // The pinned message, shown above the chat.
+  const fijado = grupo.mensajeFijadoId
+    ? await prisma.comentario.findFirst({ where: { id: grupo.mensajeFijadoId, grupoId, eliminado: false }, select: { id: true, texto: true, fechaCreacion: true, autor: { select: { id: true, nombre: true } } } })
+    : null;
 
   const resumen = await resumenCuentasGrupo(grupoId);
   const neto = resumen.cuentas.find((account) => account.usuarioId === usuarioId)?.neto || 0;
   // Every payment waiting for confirmation in the group, not only the viewer's: shared summaries cite it.
   const [pagosPorConfirmar, cuentasPorPartesDelGrupo] = await Promise.all([prisma.pago.count({ where: { grupoId, estado: 'reportado' } }), cuentasPorPartes(grupoId)]);
-  return { ...grupo, resumen, saldos: resumen.saldos, pagosPorConfirmar, cuenta: cuentasPorPartesDelGrupo[0] ?? null, cuentasPorPartes: cuentasPorPartesDelGrupo, balanceUsuario: { neto, teDeben: Math.max(neto, 0), debes: Math.max(-neto, 0) }, rolUsuario: miembro.rol };
+  return { ...grupo, resumen, saldos: resumen.saldos, pagosPorConfirmar, cuenta: cuentasPorPartesDelGrupo[0] ?? null, mensajeFijado: fijado, cuentasPorPartes: cuentasPorPartesDelGrupo, balanceUsuario: { neto, teDeben: Math.max(neto, 0), debes: Math.max(-neto, 0) }, rolUsuario: miembro.rol };
 }
 
 /**

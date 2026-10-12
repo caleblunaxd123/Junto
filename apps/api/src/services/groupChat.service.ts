@@ -1,5 +1,7 @@
 import { prisma } from "../lib/prisma";
 import { UserError } from "../domain/errors";
+import { isOnline } from "../domain/presence";
+import { deliveryState, reactionSummary } from "../domain/chatState";
 import { partsSummary } from "../domain/billParts";
 
 const person = { select: { id: true, nombre: true, fotoUrl: true } } as const;
@@ -12,22 +14,26 @@ const LIMIT = 150;
 export async function getGroupChat(userId: string, grupoId: string) {
   // Never mark an event arriving during these queries as already read.
   const readThrough = new Date();
-  const viewer = await prisma.grupoMiembro.findFirst({ where: { grupoId, usuarioId: userId, activo: true, grupo: { activo: true } }, select: { rol: true, grupo: { select: { aprobacionPagos: true, creadoPor: true, fechaCreacion: true, creador: person } } } });
+  const viewer = await prisma.grupoMiembro.findFirst({ where: { grupoId, usuarioId: userId, activo: true, grupo: { activo: true } }, select: { rol: true, grupo: { select: { aprobacionPagos: true, creadoPor: true, fechaCreacion: true, creador: person, mensajeFijadoId: true } } } });
   if (!viewer) throw new UserError("No perteneces a este grupo", 403);
   const approves = viewer.rol === "admin" && viewer.grupo.aprobacionPagos === "administrador";
   const [members, notices, expenses, payments, reminders, messages] = await Promise.all([
-    prisma.grupoMiembro.findMany({ where: { grupoId }, include: { usuario: { select: { id: true, nombre: true, fotoUrl: true, sinCuenta: true } } }, orderBy: { fechaUnion: "desc" }, take: LIMIT }),
+    prisma.grupoMiembro.findMany({ where: { grupoId }, include: { usuario: { select: { id: true, nombre: true, fotoUrl: true, sinCuenta: true, ultimaConexion: true } } }, orderBy: { fechaUnion: "desc" }, take: LIMIT }),
     prisma.avisoGrupo.findMany({ where: { grupoId, parte: { not: null } }, select: { integranteId: true, parte: true }, orderBy: { fecha: "desc" }, distinct: ["integranteId"] }),
-    prisma.gasto.findMany({ where: { grupoId, activo: true }, include: { creador: person, pagador: person, participantes: { select: { usuarioId: true, montoAsignado: true } }, _count: { select: { comentarios: { where: { eliminado: false } } } } }, orderBy: { fecha: "desc" }, take: LIMIT }),
+    prisma.gasto.findMany({ where: { grupoId, activo: true }, include: { creador: person, pagador: person, participantes: { select: { usuarioId: true, montoAsignado: true } }, _count: { select: { comentarios: { where: { eliminado: false } } } } }, orderBy: { fechaRegistro: "desc" }, take: LIMIT }),
     prisma.pago.findMany({ where: { grupoId }, include: { pagador: person, receptor: { select: { id: true, nombre: true, fotoUrl: true, sinCuenta: true } }, resolutor: person, _count: { select: { comentarios: { where: { eliminado: false } } } } }, orderBy: { fechaPago: "desc" }, take: LIMIT }),
     // A reminder is between who owes and who collects: the rest of the group never sees it.
     prisma.recordatorio.findMany({ where: { grupoId, OR: [{ enviadoPor: userId }, { enviadoA: userId }] }, include: { enviador: person, receptor: person }, orderBy: { fechaEnvio: "desc" }, take: LIMIT }),
-    prisma.comentario.findMany({ where: { grupoId, gastoId: null, pagoId: null }, include: { autor: person }, orderBy: { fechaCreacion: "desc" }, take: LIMIT }),
+    prisma.comentario.findMany({ where: { grupoId, gastoId: null, pagoId: null }, include: { autor: person, reacciones: { select: { usuarioId: true, emoji: true } } }, orderBy: { fechaCreacion: "desc" }, take: LIMIT }),
   ]);
   const parts = new Map(notices.map((n) => [n.integranteId, n.parte!]));
   // Opening the chat reads it, like WhatsApp.
   await prisma.grupoMiembro.updateMany({ where: { grupoId, usuarioId: userId, activo: true, OR: [{ ultimaLectura: null }, { ultimaLectura: { lt: readThrough } }] }, data: { ultimaLectura: readThrough } });
   const mine = (id: string) => id === userId;
+  // Who could have received/seen what I post: active members with an account, other than me.
+  const audience = members.filter((m) => m.activo && !m.usuario.sinCuenta && m.usuarioId !== userId)
+    .map((m) => ({ fechaUnion: m.fechaUnion, ultimaLectura: m.ultimaLectura, ultimaConexion: m.usuario.ultimaConexion }));
+  const ticks = (own: boolean, fecha: Date) => (own ? { entrega: deliveryState(fecha, audience) } : {});
   const items = [
     { id: `grupo-${grupoId}`, tipo: "creado" as const, fecha: viewer.grupo.fechaCreacion, autor: viewer.grupo.creador, mio: mine(viewer.grupo.creadoPor) },
     ...members.filter((m) => m.usuarioId !== viewer.grupo.creadoPor || m.fechaUnion.getTime() - viewer.grupo.fechaCreacion.getTime() > 60_000).map((m) => ({
@@ -36,7 +42,7 @@ export async function getGroupChat(userId: string, grupoId: string) {
       sinCuenta: m.usuario.sinCuenta,
     })),
     ...expenses.map((e) => ({
-      id: `gasto-${e.id}`, tipo: e.partes ? "cuenta" as const : "gasto" as const, fecha: e.fecha, autor: e.creador, mio: mine(e.creadoPor),
+      id: `gasto-${e.id}`, tipo: e.partes ? "cuenta" as const : "gasto" as const, fecha: e.fechaRegistro, autor: e.creador, mio: mine(e.creadoPor), ...ticks(mine(e.creadoPor), e.fechaRegistro),
       gastoId: e.id, descripcion: e.descripcion, monto: e.montoTotal, pagador: e.pagador, comentarios: e._count.comentarios,
       tuParte: e.participantes.find((p) => p.usuarioId === userId)?.montoAsignado ?? null,
       ...(e.partes ? partsSummary(e.montoTotal, e.partes, e.pagadoPor, e.participantes) : {}),
@@ -48,7 +54,8 @@ export async function getGroupChat(userId: string, grupoId: string) {
       apruebaComo: p.estado !== "reportado" || mine(p.pagadorId) ? null : mine(p.receptorId) ? "receptor" : approves || (viewer.rol === "admin" && p.receptor.sinCuenta) ? "administrador" : null,
     })),
     ...reminders.map((r) => ({ id: `recordatorio-${r.id}`, tipo: "recordatorio" as const, fecha: r.fechaEnvio, autor: r.enviador, mio: mine(r.enviadoPor), para: r.receptor, monto: r.monto, aviso: r.tipo === "manual" ? null : r.tipo })),
-    ...messages.map((c) => ({ id: `mensaje-${c.id}`, tipo: "mensaje" as const, fecha: c.fechaCreacion, autor: c.autor, mio: mine(c.autorId), comentarioId: c.id, texto: c.eliminado ? "" : c.texto, eliminado: c.eliminado, puedeEliminar: !c.eliminado && (mine(c.autorId) || viewer.rol === "admin") })),
+    ...messages.map((c) => ({ id: `mensaje-${c.id}`, tipo: "mensaje" as const, fecha: c.fechaCreacion, autor: c.autor, mio: mine(c.autorId), ...ticks(mine(c.autorId) && !c.eliminado, c.fechaCreacion), comentarioId: c.id, texto: c.eliminado ? "" : c.texto, eliminado: c.eliminado, puedeEliminar: !c.eliminado && (mine(c.autorId) || viewer.rol === "admin"),
+      reacciones: c.eliminado ? [] : reactionSummary(c.reacciones, userId), fijado: viewer.grupo.mensajeFijadoId === c.id })),
   ];
   return items.sort((a, b) => a.fecha.getTime() - b.fecha.getTime()).slice(-200);
 }
@@ -62,8 +69,20 @@ export async function unreadInGroup(grupoId: string, userId: string, since: Date
       { pagadorId: { not: userId }, fechaPago: after },
       { resueltoPor: { not: userId }, fechaResolucion: after },
     ] } }),
-    prisma.gasto.count({ where: { grupoId, activo: true, creadoPor: { not: userId }, fecha: after } }),
+    prisma.gasto.count({ where: { grupoId, activo: true, creadoPor: { not: userId }, fechaRegistro: after } }),
     prisma.grupoMiembro.count({ where: { grupoId, usuarioId: { not: userId }, fechaUnion: after } }),
   ]);
   return messages + payments + expenses + joins;
+}
+
+/** "En línea" / last seen for the group's members with an account, for members only. */
+export async function groupPresence(userId: string, grupoId: string) {
+  const viewer = await prisma.grupoMiembro.count({ where: { grupoId, usuarioId: userId, activo: true, grupo: { activo: true } } });
+  if (!viewer) throw new UserError("No perteneces a este grupo", 403);
+  const members = await prisma.grupoMiembro.findMany({
+    where: { grupoId, activo: true, usuario: { activo: true, sinCuenta: false } },
+    select: { usuarioId: true, usuario: { select: { ultimaConexion: true } } },
+  });
+  const now = new Date();
+  return members.map((m) => ({ usuarioId: m.usuarioId, enLinea: isOnline(m.usuario.ultimaConexion, now), ultimaConexion: m.usuario.ultimaConexion }));
 }

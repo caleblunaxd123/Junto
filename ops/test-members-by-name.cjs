@@ -113,6 +113,51 @@ async function run() {
     await call(`/grupos/${group.id}/integrantes/${pedro.usuarioId}`, caleb, 'DELETE', undefined, 204);
     await call(`/grupos/${group.id}/integrantes/${marta.usuarioId}`, caleb, 'DELETE', undefined, 404);
 
+    // Presence: members see who is online; people added by name have none; outsiders see nothing.
+    const presence = await call(`/grupos/${group.id}/presencia`, caleb);
+    assert.equal(presence.find((p) => p.usuarioId === caleb.usuario.id).enLinea, true, 'whoever is using the app is online');
+    assert.ok(!presence.some((p) => p.usuarioId === pedro.usuarioId), 'names without an account have no presence');
+    assert.deepEqual(Object.keys(presence[0]).sort(), ['enLinea', 'ultimaConexion', 'usuarioId']);
+    await call(`/grupos/${group.id}/presencia`, stranger, 'GET', undefined, 403);
+
+    // Chat like WhatsApp: ticks on what I post, one reaction per person, one pinned message.
+    const sent = await call(`/grupos/${group.id}/mensajes`, caleb, 'POST', { texto: 'Recuerden yapearme hoy 🙏' }, 201);
+    const myMessage = async () => (await call(`/grupos/${group.id}/chat`, caleb)).find((i) => i.comentarioId === sent.id);
+    assert.notEqual((await myMessage()).entrega, 'visto', 'nobody has opened the chat yet');
+    for (const p of [luisReal, martaReal, anaReal]) await call(`/grupos/${group.id}/chat`, p);
+    assert.equal((await myMessage()).entrega, 'visto', 'everyone with the app opened the chat after it');
+    await call(`/comentarios/${sent.id}/reaccion`, martaReal, 'POST', { emoji: '💩' }, 400);
+    await call(`/comentarios/${sent.id}/reaccion`, martaReal, 'POST', { emoji: '👍' });
+    await call(`/comentarios/${sent.id}/reaccion`, luisReal, 'POST', { emoji: '👍' });
+    await call(`/comentarios/${sent.id}/reaccion`, anaReal, 'POST', { emoji: '❤️' });
+    assert.deepEqual((await myMessage()).reacciones, [{ emoji: '👍', total: 2, mia: false }, { emoji: '❤️', total: 1, mia: false }]);
+    await call(`/comentarios/${sent.id}/reaccion`, martaReal, 'POST', { emoji: '👍' });
+    assert.deepEqual((await myMessage()).reacciones.map((r) => [r.emoji, r.total]), [['👍', 1], ['❤️', 1]], 'the same emoji again removes it');
+    await call(`/grupos/${group.id}/fijar`, stranger, 'POST', { comentarioId: sent.id }, 403);
+    await call(`/grupos/${group.id}/fijar`, martaReal, 'POST', { comentarioId: sent.id });
+    assert.equal((await detail(caleb, group.id)).mensajeFijado.id, sent.id);
+    assert.equal((await myMessage()).fijado, true);
+    await call(`/comentarios/${sent.id}`, caleb, 'DELETE', undefined, 204);
+    assert.equal((await detail(caleb, group.id)).mensajeFijado, null, 'a deleted message is unpinned');
+
+    // Profile photo: upload, shown next to my messages, public by random id, replaced and removed.
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    await call('/auth/me/foto', caleb, 'PUT', { imagen: 'bm90IGFuIGltYWdl' }, 400);
+    const first = await call('/auth/me/foto', caleb, 'PUT', { imagen: png });
+    assert.match(first.fotoUrl, /^\/api\/fotos\/[0-9a-f-]{36}$/);
+    const photo = await fetch(`http://127.0.0.1:3034${first.fotoUrl}`);
+    assert.equal(photo.status, 200);
+    assert.equal(photo.headers.get('content-type'), 'image/png');
+    assert.match(photo.headers.get('cache-control'), /immutable/);
+    const note = await call(`/grupos/${group.id}/mensajes`, caleb, 'POST', { texto: 'Con foto' }, 201);
+    assert.equal((await call(`/grupos/${group.id}/chat`, luisReal)).find((i) => i.comentarioId === note.id).autor.fotoUrl, first.fotoUrl);
+    const second = await call('/auth/me/foto', caleb, 'PUT', { imagen: png });
+    assert.notEqual(second.fotoUrl, first.fotoUrl, 'a new upload gets a new URL');
+    assert.equal((await fetch(`http://127.0.0.1:3034${first.fotoUrl}`)).status, 404, 'the old photo is gone');
+    assert.equal((await call('/auth/me/foto', caleb, 'DELETE')).fotoUrl, null);
+    assert.equal((await fetch(`http://127.0.0.1:3034${second.fotoUrl}`)).status, 404);
+    assert.equal((await fetch('http://127.0.0.1:3034/api/fotos/no-es-uuid')).status, 404);
+
     // 9. The last person with an account leaving closes the group; admin never goes to a name.
     const solo = await call('/grupos', stranger, 'POST', { nombre: `Solo ${suffix}`, integrantes: ['Nadie'] }, 201);
     await call(`/grupos/${solo.id}/salir`, stranger, 'DELETE');

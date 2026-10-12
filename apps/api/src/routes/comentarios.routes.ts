@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { authMiddleware } from "../middleware/auth";
-import { createComment, deleteComment, listComments, reportComment, type CommentTarget } from "../services/comentarios.service";
+import { createComment, deleteComment, listComments, reactToComment, reportComment, type CommentTarget } from "../services/comentarios.service";
 
 const router = Router();
 router.use(authMiddleware);
@@ -33,6 +33,14 @@ router.delete("/:id", async (req, res, next) => {
   try {
     await deleteComment(req.user!.userId, z.string().uuid().parse(req.params.id));
     res.status(204).end();
+  } catch (error) { next(error); }
+});
+
+// WhatsApp-like reaction on a group message; null (or the same emoji) removes it.
+router.post("/:id/reaccion", async (req, res, next) => {
+  try {
+    const { emoji } = z.object({ emoji: z.string().max(16).nullable() }).strict().parse(req.body ?? {});
+    res.json(await reactToComment(req.user!.userId, z.string().uuid().parse(req.params.id), emoji));
   } catch (error) { next(error); }
 });
 

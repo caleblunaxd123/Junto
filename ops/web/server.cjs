@@ -2,6 +2,8 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+// Local QA can point the build at http://localhost:<api>; production keeps the public API.
+const apiOrigin = process.env.WEB_API_ORIGIN || 'https://junto.lunalav.pe';
 const root = path.resolve(process.env.WEB_ROOT || path.join(__dirname, '../../apps/mobile/dist-beta'));
 const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.json':'application/json', '.webmanifest':'application/manifest+json', '.png':'image/png', '.ico':'image/x-icon', '.svg':'image/svg+xml', '.ttf':'font/ttf', '.woff2':'font/woff2', '.apk':'application/vnd.android.package-archive' };
 function createServer() {
@@ -11,7 +13,7 @@ function createServer() {
     res.setHeader('X-Frame-Options','DENY');
     res.setHeader('Cache-Control','no-store');
     // RN web needs inline styles, but scripts come only from the same-origin export.
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://junto.lunalav.pe; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+    res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: ${apiOrigin}; font-src 'self' data:; connect-src 'self' ${apiOrigin}; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`);
     if (!['GET','HEAD'].includes(req.method)) { res.writeHead(405,{Allow:'GET, HEAD'}); res.end(); return; }
     let pathname;
     try { pathname=decodeURIComponent(new URL(req.url,'http://localhost').pathname); } catch {res.writeHead(400);res.end();return;}

@@ -4,14 +4,35 @@
     {
       "name": "API (Express)",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--workspace=apps/api"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--workspace=apps/api"
+      ],
       "port": 3000
     },
     {
       "name": "Mobile (Expo)",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "start", "--workspace=apps/mobile"],
+      "runtimeArgs": [
+        "run",
+        "start",
+        "--workspace=apps/mobile"
+      ],
       "port": 8081
+    },
+    {
+      "name": "Web local QA",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "ops/web/server.cjs"
+      ],
+      "port": 8095,
+      "env": {
+        "PORT": "8095",
+        "WEB_ROOT": "apps/mobile/dist-local",
+        "WEB_API_ORIGIN": "http://localhost:3005"
+      }
     }
   ]
 }

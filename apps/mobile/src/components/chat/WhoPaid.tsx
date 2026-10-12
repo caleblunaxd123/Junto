@@ -1,54 +1,62 @@
 import React from "react";
-import { Modal, Platform, Pressable, ScrollView, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Avatar, Button, Label, palette } from "../ui/Design";
-import { useResponsiveLayout } from "../ui/responsive";
+import { Sheet } from "../ui/Sheet";
 import { meFirst } from "../../lib/people";
 import { firstName, sinCuenta } from "../../lib/members";
 import { freeParts } from "../../lib/groupProgress";
-import { type GrupoConBalance } from "../../types";
+import { type GrupoConBalance, type Presencia } from "../../types";
 import { router } from "expo-router";
 
 import { formatMoney } from "@junto/shared/currency";
 type Member = GrupoConBalance["miembros"][number];
 
+/** "en línea", "visto hace 5 min", "visto hoy 18:20", "visto el 3 oct". */
+function lastSeen(p?: Presencia) {
+  if (p?.enLinea) return "en línea";
+  if (!p?.ultimaConexion) return "aún no abre JUNTO";
+  const date = new Date(p.ultimaConexion);
+  const minutes = Math.round((Date.now() - date.getTime()) / 60_000);
+  if (minutes < 60) return `visto hace ${Math.max(1, minutes)} min`;
+  const time = date.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" });
+  if (date.toDateString() === new Date().toDateString()) return `visto hoy ${time}`;
+  if (date.toDateString() === new Date(Date.now() - 86_400_000).toDateString()) return `visto ayer ${time}`;
+  return `visto el ${date.toLocaleDateString("es-PE", { day: "numeric", month: "short" })}`;
+}
+
 /**
  * The group's accounts in two parts: who pays whom to be even (with the action right there),
  * and each person's numbers (what they paid, their share).
  */
-export function WhoPaid({ group, payments = [], userId, visible, onClose, onPay, onRecord, onRemind, onShare, onLink }: {
+export function WhoPaid({ group, payments = [], userId, visible, onClose, onPay, onRecord, onRemind, onShare, onLink, presence = [] }: {
   group: GrupoConBalance; userId?: string; visible: boolean; onClose: () => void;
   payments?: { id: string; estado: string; pagadorId: string; receptorId: string; permisos?: { aprobar: boolean } }[];
   onPay: () => void;
   onRecord: (person: { id: string; nombre: string }, max: number, receiver?: { id: string; nombre: string }) => void;
-  onRemind: () => void;
+  /** A debtor with the app: a friendly reminder (push + chat note). Without the app, onShare (WhatsApp). */
+  onRemind: (person: { id: string; nombre: string }, monto: number) => void;
+  presence?: Presencia[];
   onShare: (member: Member) => void;
   onLink: (member: Member) => void;
 }) {
   const money = (value: number) => formatMoney(value, group.moneda);
-  const { tablet } = useResponsiveLayout();
   const members = new Map(group.miembros.map((m) => [m.usuarioId, m]));
   const name = (id: string, fallback: string) => (id === userId ? "Tú" : firstName(members.get(id)?.usuario.nombre ?? fallback));
   const accounts = meFirst(group.resumen.cuentas.filter((a) => members.has(a.usuarioId)), (a) => a.usuarioId, userId);
   const saldos = group.resumen.saldos ?? [];
   const admin = group.rolUsuario === "admin";
   const legacyFree = group.cuenta?.libres ? freeParts(group.cuenta) : [];
+  const seen = new Map(presence.map((p) => [p.usuarioId, p]));
   return (
-    <Modal transparent statusBarTranslucent navigationBarTranslucent visible={visible} animationType={Platform.OS === "web" ? "none" : "slide"} onRequestClose={onClose}>
-      <View style={{ flex: 1, justifyContent: tablet ? "center" : "flex-end", alignItems: tablet ? "center" : "stretch", padding: tablet ? 24 : 0, backgroundColor: "#08264466" }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Cerrar" onPress={onClose} style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
-        <SafeAreaView edges={["bottom"]} style={{ width: "100%", maxWidth: tablet ? 600 : undefined, maxHeight: "90%", borderRadius: tablet ? 28 : undefined, backgroundColor: palette.background, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 12 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <View style={{ flex: 1 }}>
-              <Label accessibilityRole="header" size={22} weight="extra">Cuentas del grupo</Label>
-              <Label size={13} color={palette.muted}>
-                {group.resumen.cantidadGastos ? `Total gastado ${money(group.resumen.totalGastado)} en ${group.resumen.cantidadGastos} ${group.resumen.cantidadGastos === 1 ? "gasto" : "gastos"}` : "Aún no hay gastos"}
-              </Label>
-            </View>
-            <Pressable accessibilityRole="button" accessibilityLabel="Cerrar panel" hitSlop={12} onPress={onClose} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}><Ionicons name="close" size={26} color={palette.muted} /></Pressable>
-          </View>
-          <ScrollView contentContainerStyle={{ gap: 10 }}>
+    <Sheet visible={visible} onClose={onClose} closeLabel="Cerrar panel" title="Cuentas del grupo" width={600}
+      subtitle={group.resumen.cantidadGastos ? `Total gastado ${money(group.resumen.totalGastado)} en ${group.resumen.cantidadGastos} ${group.resumen.cantidadGastos === 1 ? "gasto" : "gastos"}` : "Aún no hay gastos"}
+      footer={
+        <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-start", padding: 12, borderRadius: 14, backgroundColor: palette.lilac }}>
+          <Ionicons name="information-circle-outline" size={18} color={palette.purple} />
+          <Label style={{ flex: 1 }} size={12}>JUNTO no mueve dinero: cada uno paga por fuera de la app y quien recibe lo confirma. Un pago cuenta cuando se confirma.</Label>
+        </View>
+      }>
             {/* 1. What has to happen for everyone to be even. */}
             <Label weight="extra" size={16}>Para quedar a mano</Label>
             {!saldos.length ? (
@@ -64,10 +72,10 @@ export function WhoPaid({ group, payments = [], userId, visible, onClose, onPay,
               return (
                 <View key={`${s.deudorId}-${s.acreedorId}`} style={{ padding: 12, gap: 8, borderRadius: 16, backgroundColor: "white", borderWidth: 1, borderColor: iOwe ? "#F5C2C7" : owedToMe ? "#A4EDD7" : palette.line }}>
                   <View accessible accessibilityLabel={`${name(s.deudorId, s.deudorNombre)} le paga ${money(s.monto)} a ${name(s.acreedorId, s.acreedorNombre)}`} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Avatar name={s.deudorNombre} seed={s.deudorId} size={32} />
+                    <Avatar name={s.deudorNombre} photo={members.get(s.deudorId)?.usuario.fotoUrl} seed={s.deudorId} size={32} />
                     <Label size={14} weight="bold" style={{ flexShrink: 1 }} numberOfLines={1}>{name(s.deudorId, s.deudorNombre)}</Label>
                     <Ionicons name="arrow-forward" size={16} color={palette.muted} />
-                    <Avatar name={s.acreedorNombre} seed={s.acreedorId} size={32} />
+                    <Avatar name={s.acreedorNombre} photo={members.get(s.acreedorId)?.usuario.fotoUrl} seed={s.acreedorId} size={32} />
                     <Label size={14} weight="bold" style={{ flex: 1 }} numberOfLines={1}>{name(s.acreedorId, s.acreedorNombre)}</Label>
                     <Label size={17} weight="extra" color={iOwe ? palette.coral : owedToMe ? "#007B60" : palette.ink}>{money(s.monto)}</Label>
                   </View>
@@ -79,8 +87,8 @@ export function WhoPaid({ group, payments = [], userId, visible, onClose, onPay,
                     <View style={{ flexDirection: "row", gap: 8 }}>
                       <View style={{ flex: 1 }}><Button compact title="Ya me pagó" onPress={() => onRecord({ id: s.deudorId, nombre: s.deudorNombre }, s.monto)} /></View>
                       <View style={{ flex: 1 }}>{debtor && sinCuenta(debtor)
-                        ? <Button compact secondary title="WhatsApp" onPress={() => onShare(debtor)} />
-                        : <Button compact secondary title="Recordar" onPress={() => { onClose(); onRemind(); }} />}</View>
+                        ? <Button compact secondary title="Recordar" accessibilityHint="Sin app: abre WhatsApp con lo que debe y su enlace" onPress={() => onShare(debtor)} />
+                        : <Button compact secondary title="Recordar" accessibilityHint="Le llega un aviso de JUNTO y queda anotado en el chat" onPress={() => onRemind({ id: s.deudorId, nombre: s.deudorNombre }, s.monto)} />}</View>
                     </View>
                   )}
                 </View>
@@ -101,13 +109,17 @@ export function WhoPaid({ group, payments = [], userId, visible, onClose, onPay,
               return (
                 <View key={account.usuarioId} style={{ padding: 12, gap: 8, borderRadius: 16, backgroundColor: "white", borderWidth: 1, borderColor: mine ? "#A4EDD7" : palette.line }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                    <Avatar name={account.nombre} photo={member.usuario.fotoUrl} seed={account.usuarioId} size={40} />
+                    <View>
+                      <Avatar name={account.nombre} photo={member.usuario.fotoUrl} seed={account.usuarioId} size={40} />
+                      {seen.get(account.usuarioId)?.enLinea && !mine && <View accessibilityLabel="En línea" style={{ position: "absolute", right: -1, bottom: -1, width: 13, height: 13, borderRadius: 7, backgroundColor: "#25D366", borderWidth: 2, borderColor: "white" }} />}
+                    </View>
                     <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                         <Label weight="bold" size={14} numberOfLines={1} style={{ flexShrink: 1 }}>{mine ? "Tú" : account.nombre}</Label>
                         {noApp && <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, backgroundColor: palette.yellow }}><Label size={11} weight="bold" color="#8A5A00">sin app</Label></View>}
                       </View>
                       <Label size={12} color={palette.muted}>Pagó {money(account.pagaste)} · Su parte {money(account.tuParte)}</Label>
+                      {!mine && !noApp && <Label size={11} color={seen.get(account.usuarioId)?.enLinea ? "#007B60" : palette.muted}>{lastSeen(seen.get(account.usuarioId))}</Label>}
                     </View>
                     <Label size={13} weight="bold" color={state.color} style={{ textAlign: "right", maxWidth: 120 }}>{state.text}</Label>
                   </View>
@@ -126,13 +138,6 @@ export function WhoPaid({ group, payments = [], userId, visible, onClose, onPay,
                 <Label size={13} style={{ flex: 1 }}>Parte libre de {money(amount)}: la toma quien se una.</Label>
               </View>
             ))}
-          </ScrollView>
-          <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-start", padding: 12, borderRadius: 14, backgroundColor: palette.lilac }}>
-            <Ionicons name="information-circle-outline" size={18} color={palette.purple} />
-            <Label style={{ flex: 1 }} size={12}>JUNTO no mueve dinero: cada uno paga por fuera de la app y quien recibe lo confirma. Un pago cuenta cuando se confirma.</Label>
-          </View>
-        </SafeAreaView>
-      </View>
-    </Modal>
+    </Sheet>
   );
 }

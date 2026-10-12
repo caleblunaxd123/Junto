@@ -87,6 +87,7 @@ export async function deleteAccount(userId: string, confirmation: { password?: s
     await tx.recordatorio.deleteMany({ where: { OR: [{ enviadoPor: userId }, { enviadoA: userId }] } });
     await tx.configRecordatorio.deleteMany({ where: { configuradoPor: userId } });
     await tx.refreshToken.deleteMany({ where: { usuarioId: userId } });
+    await tx.fotoPerfil.deleteMany({ where: { usuarioId: userId } });
     await tx.usuario.update({
       where: { id: userId },
       data: {

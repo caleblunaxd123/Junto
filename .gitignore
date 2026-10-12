@@ -44,4 +44,5 @@ Thumbs.db
 __pycache__/
 /ai/deepseek-benchmark-*.local.json
 apps/mobile/dist-beta/
+apps/mobile/dist-local/
 ops/artifacts/

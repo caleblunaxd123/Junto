@@ -12,7 +12,7 @@ test('read cursor cannot skip an event arriving during the request or rewind aft
   prisma.comentario.findMany = async () => {
     await new Promise(resolve => setTimeout(resolve, 20));
     arrived = new Date();
-    return [{ id: 'message', fechaCreacion: arrived, autor: person, autorId: 'owner', texto: 'new', eliminado: false }];
+    return [{ id: 'message', fechaCreacion: arrived, autor: person, autorId: 'owner', texto: 'new', eliminado: false, reacciones: [] }];
   };
   prisma.grupoMiembro.updateMany = async (args) => { saved = args; return { count: 1 }; };
   await getGroupChat('owner', 'group');
