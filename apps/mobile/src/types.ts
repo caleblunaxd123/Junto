@@ -130,7 +130,7 @@ export type ChatItem = ChatBase & (
   | { tipo: "creado" }
   | { tipo: "union"; parte: number | null; activo: boolean; sinCuenta?: boolean }
   | { tipo: "cuenta" | "gasto"; gastoId: string; descripcion: string; monto: number; pagador: ChatPersona; comentarios: number; tuParte: number | null; partes?: number; parte?: number; libres?: number; entrega?: Entrega }
-  | { tipo: "pago"; pagoId: string; monto: number; monedaOrigen?: CurrencyCode | null; montoOrigen?: number | null; tipoCambio?: string | null; metodo: string | null; estado: string; receptor: ChatPersona; resolutor: ChatPersona | null; fechaResolucion: string | null; comentarios: number; apruebaComo: "receptor" | "administrador" | null }
+  | { tipo: "pago"; pagoId: string; monto: number; monedaOrigen?: CurrencyCode | null; montoOrigen?: number | null; tipoCambio?: string | null; metodo: string | null; estado: string; receptor: ChatPersona; resolutor: ChatPersona | null; fechaResolucion: string | null; comentarios: number; tieneComprobante?: boolean; puedeVerComprobante?: boolean; apruebaComo: "receptor" | "administrador" | null }
   | { tipo: "recordatorio"; para: ChatPersona; monto: number | null; aviso: string | null }
   | { tipo: "mensaje"; comentarioId: string; texto: string; eliminado: boolean; puedeEliminar: boolean; entrega?: Entrega; reacciones?: Reaccion[]; fijado?: boolean; respuesta?: Respuesta }
 );

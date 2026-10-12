@@ -3,7 +3,7 @@ module.exports = ({ config }) => {
   validateReleaseEnvironment(process.env);
   const host = appLinkHost(process.env);
   const android = { ...config.android };
-  android.blockedPermissions = [...new Set([...(android.blockedPermissions || []), "android.permission.RECORD_AUDIO", "android.permission.WRITE_CONTACTS"])];
+  android.blockedPermissions = [...new Set([...(android.blockedPermissions || []), "android.permission.WRITE_CONTACTS"])];
   // Opens https://<dominio>/unirse/CODE directly in the app (Android App Links).
   if (host)
     android.intentFilters = [
@@ -19,7 +19,11 @@ module.exports = ({ config }) => {
   // Google Sign-In: Android needs no plugin (only the OAuth clients in Google Cloud); iOS needs its URL scheme.
   const plugins = [...(config.plugins || [])];
   if (!plugins.includes("expo-mail-composer")) plugins.push("expo-mail-composer");
-  plugins.push("./plugins/withShareTargets", "./plugins/withQaSigning");
+  plugins.push(["expo-speech-recognition", {
+    microphonePermission: "Permite a JUNTO usar el micrófono solo para dictar un gasto cuando tú lo elijas.",
+    speechRecognitionPermission: "Permite convertir tu voz en texto para preparar un gasto. Siempre revisas antes de guardar.",
+  }]);
+  plugins.push("./plugins/withShareTargets", "./plugins/withQaSigning", "./plugins/withDictationPermission");
   if (process.env.GOOGLE_IOS_URL_SCHEME)
     plugins.push(["@react-native-google-signin/google-signin", { iosUrlScheme: process.env.GOOGLE_IOS_URL_SCHEME }]);
   const extra = { ...config.extra };

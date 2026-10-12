@@ -74,3 +74,13 @@ test('recognizes the common instant-entry signals without an LLM', () => {
     ['2', '3']
   );
 });
+
+test('dictated totals reject multiple prices, foreign currency and incomplete decimals', () => {
+  assert.equal(extractLikelyAmountCents('Pagué ciento veinte soles por la cena con Ana'), 12000);
+  assert.equal(extractLikelyAmountCents('Pagué veintitrés soles con cincuenta céntimos'), 2350);
+  for (const text of ['Pagué 120 soles y 50 soles', 'Pagué S/120 y S/50', 'Pagué veinte soles y 50 soles',
+    'Pagué ciento veinte con cincuenta soles', 'Pagué veinte punto cincuenta soles',
+    'Pagué 120 soles con 50 céntimos', 'Pagué 5000 pesos', 'Pagué 20 dólares']) {
+    assert.equal(extractLikelyAmountCents(text), null, text);
+  }
+});

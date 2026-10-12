@@ -1,5 +1,9 @@
 # JUNTO — controles previos a publicación
 
+## Candidata 1.4.0: voz y capturas desde chat
+
+Ver `ops/web/FLOW-VOICE-CHAT-20261011.md`. Antes de publicar: CI, respaldo/restauración, permiso RECORD_AUDIO en el APK real sin activar grabación al inicio, misma firma/code 9, CSP/Google y regresión de pagos. Dictado físico y reconocimiento de nombres/montos con ruido siguen como prueba del propietario. Capturas nunca confirman dinero ni se muestran a todo el grupo; push real sigue pendiente.
+
 ## Beta 1.3.1 publicada: Google web
 
 Ver `ops/web/DEPLOY-20261011-GOOGLE131.md`: fuente `55090e9`, CI verde, respaldo restaurable/cifrado, API/web/APK activados, 22 migraciones y rol runtime restringido. Google web real y sesión tras recarga comprobados; API/TypeScript/lint, pruebas locales de chat/fotos y Chrome/WebKit responsive correctos. APK mismo firmante/code 8 instalado sin desinstalar, sesión conservada. Publicada como beta interna, no tienda; faltan Google físico de este APK, WhatsApp/TalkBack y FCM/Expo con entrega real.

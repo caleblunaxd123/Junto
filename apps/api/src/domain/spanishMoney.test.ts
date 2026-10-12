@@ -12,5 +12,6 @@ test('Exact written soles, not model arithmetic',()=>{
 test('Unsupported or ambiguous money asks for clarification instead of guessing',()=>{
   for (const text of ['Cena para tres', 'Cien veinte soles','Veinte treinta soles','Ciento soles',
     'Veinte soles y treinta soles','Veinte soles con cien centavos','Veinte soles con propina',
-    'Cero soles','Dos mil mil soles']) assert.equal(extractSpanishAmountCents(text),null,text);
+    'Cero soles','Dos mil mil soles', 'Veinte, treinta soles', 'Ciento veinte con cincuenta soles',
+    'Veinte punto cincuenta soles']) assert.equal(extractSpanishAmountCents(text),null,text);
 });

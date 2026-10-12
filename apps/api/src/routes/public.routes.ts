@@ -80,13 +80,15 @@ ${playStoreUrl() ? `<a class="btn secondary" href="${escapeHTML(playStoreUrl())}
 
 router.get('/privacidad', (_req, res) => {
   page(res, 'Política de privacidad', `<h1>Política de privacidad</h1>
-<p class="muted">Última actualización: 7 de octubre de 2026. Responsable del tratamiento: ${escapeHTML(legalOwner())}.</p>
+<p class="muted">Última actualización: 11 de octubre de 2026. Responsable del tratamiento: ${escapeHTML(legalOwner())}.</p>
 <h2>Qué datos usamos</h2>
 <p>Tu nombre, correo, contraseña (guardada solo como hash), y si los agregas, tu celular y foto de perfil. También los grupos a los que perteneces, los gastos y pagos que registras o que otros registran contigo, y las cuentas puntuales que organizas (con los nombres de tus invitados). Si entras con Google, recibimos de Google tu nombre, correo y foto de perfil; nunca tu contraseña de Google. Si activas las notificaciones guardamos el identificador de notificaciones de tu teléfono.</p>
 <h2>Para qué</h2>
 <p>Para crear tu cuenta, verificar tu correo, calcular quién le debe a quién, avisarte de pagos por confirmar y darte soporte. No vendemos tus datos ni mostramos publicidad.</p>
 <h2>Fotos de boletas y textos</h2>
 <p>Las fotos de boletas se procesan en el servidor para leer el total y no se guardan. Si describes un gasto con texto, se procesa para proponer el reparto; siempre revisas la propuesta antes de guardar.</p>
+<h2>Dictado de gastos</h2>
+<p>El micrófono se usa solo cuando eliges dictar un gasto, con tu permiso. La voz la convierte en texto el servicio del sistema operativo o del navegador, que puede procesar el audio en sus servidores según sus propias condiciones y ajustes. JUNTO no guarda ni recibe el archivo de audio. Puedes corregir la frase y solo enviamos su texto a nuestro asistente cuando pides completar el formulario; revisas el reparto antes de guardar. El dictado es opcional y siempre puedes escribir.</p>
 <h2>Comprobantes de pago (Yape, Plin, transferencias)</h2>
 <p>Si adjuntas la captura de un pago, la leemos en nuestro servidor (sin enviarla a terceros) para proponer el monto, la app, el número de operación, la fecha y el nombre de quien recibe. La imagen se guarda junto al pago para que pueda revisarla quien lo aprueba: solo la ven quien pagó, quien recibe y, si el grupo lo permite, sus administradores. Las capturas que no terminas de registrar se borran en 24 horas, y la imagen de un pago ya resuelto se borra a los 180 días (conservamos solo el monto y el número de operación leídos). JUNTO no se conecta con Yape, Plin ni bancos y no puede comprobar una transferencia por su cuenta: por eso un pago solo baja la deuda cuando una persona lo aprueba.</p>
 <h2>Comentarios</h2>

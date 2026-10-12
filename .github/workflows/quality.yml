@@ -28,6 +28,7 @@ jobs:
       - run: node --test ops/test-home-ux.cjs
       - run: node --test ops/test-notification-ux.cjs
       - run: node --test ops/test-first-steps-chat.cjs
+      - run: node --test ops/test-dictation.cjs
       - run: node --test ops/test-group-contribution.cjs
       - run: node --test ops/test-group-chat-read.cjs
       - run: npm run build:api

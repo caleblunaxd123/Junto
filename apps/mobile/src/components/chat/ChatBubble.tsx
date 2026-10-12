@@ -198,6 +198,7 @@ export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAns
             <Ionicons name={status.icon} size={15} color={status.color} />
             <Label size={12} weight="bold" color={status.color} style={{ flexShrink: 1 }}>{status.text}</Label>
           </View>
+          {item.tieneComprobante && (item.puedeVerComprobante ? <Button compact secondary title="Ver comprobante" onPress={() => router.push(`/(app)/pagos/${item.pagoId}`)} /> : <Label size={12} color={palette.muted}>Comprobante adjunto · imagen privada</Label>)}
           {item.apruebaComo === "receptor" && (
             <View style={{ gap: 6, marginTop: 4 }}>
               <Button compact title="Sí, lo recibí" disabled={busy} onPress={() => onAnswer(item.pagoId, firstName(item.autor.nombre), item.monto, true)} />

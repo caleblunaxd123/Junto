@@ -39,6 +39,9 @@ export function extractSpanishAmountCents(text: string): number | null {
   let start = position;
   while (start > 0 && allowed.has(tokens[start-1])) start--;
   if (start === position || position-start > 10) return null;
+  // A number fragment after a decimal phrase or punctuation is not the whole amount.
+  if (['con', 'punto', 'coma'].includes(tokens[start-1] ?? '') ||
+      (/[.,]/.test(tokens[start-1] ?? '') && (allowed.has(tokens[start-2]) || /^\d+$/.test(tokens[start-2] ?? '')))) return null;
   const whole = integer(tokens.slice(start,position));
   if (whole === null || whole < 0) return null;
   let cents = 0;

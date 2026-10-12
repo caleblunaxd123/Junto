@@ -3,6 +3,7 @@ import { UserError } from "../domain/errors";
 import { isOnline } from "../domain/presence";
 import { deliveryState, reactionSummary } from "../domain/chatState";
 import { partsSummary } from "../domain/billParts";
+import { paymentPermissions } from "./pagos.service";
 
 const person = { select: { id: true, nombre: true, fotoUrl: true } } as const;
 const LIMIT = 150;
@@ -21,7 +22,7 @@ export async function getGroupChat(userId: string, grupoId: string) {
     prisma.grupoMiembro.findMany({ where: { grupoId }, include: { usuario: { select: { id: true, nombre: true, fotoUrl: true, sinCuenta: true, ultimaConexion: true } } }, orderBy: { fechaUnion: "desc" }, take: LIMIT }),
     prisma.avisoGrupo.findMany({ where: { grupoId, parte: { not: null } }, select: { integranteId: true, parte: true }, orderBy: { fecha: "desc" }, distinct: ["integranteId"] }),
     prisma.gasto.findMany({ where: { grupoId, activo: true }, include: { creador: person, pagador: person, participantes: { select: { usuarioId: true, montoAsignado: true } }, _count: { select: { comentarios: { where: { eliminado: false } } } } }, orderBy: { fechaRegistro: "desc" }, take: LIMIT }),
-    prisma.pago.findMany({ where: { grupoId }, include: { pagador: person, receptor: { select: { id: true, nombre: true, fotoUrl: true, sinCuenta: true } }, resolutor: person, _count: { select: { comentarios: { where: { eliminado: false } } } } }, orderBy: { fechaPago: "desc" }, take: LIMIT }),
+    prisma.pago.findMany({ where: { grupoId }, include: { pagador: person, receptor: { select: { id: true, nombre: true, fotoUrl: true, sinCuenta: true } }, resolutor: person, comprobante: { select: { id: true } }, _count: { select: { comentarios: { where: { eliminado: false } } } } }, orderBy: { fechaPago: "desc" }, take: LIMIT }),
     // A reminder is between who owes and who collects: the rest of the group never sees it.
     prisma.recordatorio.findMany({ where: { grupoId, OR: [{ enviadoPor: userId }, { enviadoA: userId }] }, include: { enviador: person, receptor: person }, orderBy: { fechaEnvio: "desc" }, take: LIMIT }),
     prisma.comentario.findMany({ where: { grupoId, gastoId: null, pagoId: null }, include: { autor: person, reacciones: { select: { usuarioId: true, emoji: true } }, respondeA: { select: { id: true, texto: true, eliminado: true, autor: person } } }, orderBy: { fechaCreacion: "desc" }, take: LIMIT }),
@@ -50,6 +51,8 @@ export async function getGroupChat(userId: string, grupoId: string) {
     ...payments.map((p) => ({
       id: `pago-${p.id}`, tipo: "pago" as const, fecha: p.fechaPago, autor: p.pagador, mio: mine(p.pagadorId),
       pagoId: p.id, monto: p.monto, monedaOrigen: p.monedaOrigen, montoOrigen: p.montoOrigen, tipoCambio: p.tipoCambio, metodo: p.metodo, estado: p.estado, receptor: p.receptor, resolutor: p.resolutor, fechaResolucion: p.fechaResolucion, comentarios: p._count.comentarios,
+      tieneComprobante: !!p.comprobante,
+      puedeVerComprobante: !!p.comprobante && paymentPermissions({ ...p, grupo: { aprobacionPagos: viewer.grupo.aprobacionPagos } }, userId, viewer.rol === "admin").verComprobante,
       // As who the viewer decides a waiting payment; null when it is not theirs to decide.
       apruebaComo: p.estado !== "reportado" || mine(p.pagadorId) ? null : mine(p.receptorId) ? "receptor" : approves || (viewer.rol === "admin" && p.receptor.sinCuenta) ? "administrador" : null,
     })),

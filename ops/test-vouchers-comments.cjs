@@ -88,6 +88,13 @@ async function run() {
   assert.match(again.duplicado, /ya se usó/);
   await ok("/pagos/reportar", pedro.accessToken, "POST", { grupoId: group.id, receptorId: marta.usuario.id, monto: 2500, metodo: "yape", comprobanteId: again.comprobanteId }, 409);
 
+  // Chat exposes only presence/permission, never OCR identifiers or image bytes.
+  for (const [viewer, allowed] of [[luis, true], [marta, true], [ana, true], [pedro, false]]) {
+    const item = (await ok(`/grupos/${group.id}/chat`, viewer.accessToken)).find(i => i.pagoId === pago.id);
+    assert.equal(item.tieneComprobante, true);
+    assert.equal(item.puedeVerComprobante, allowed);
+    for (const key of ["imagen", "comprobante", "operacion", "codigoSeguridad", "comprobanteId"]) assert.equal(item[key], undefined);
+  }
   // Who sees the image: payer, receiver and the approving admin. Not other members, not outsiders.
   for (const viewer of [luis, marta, ana]) {
     const image = await ok(`/pagos/${pago.id}/comprobante`, viewer.accessToken);

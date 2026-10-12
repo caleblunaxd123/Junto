@@ -72,7 +72,7 @@ export async function interpretarGasto(
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase("es-PE");
-  if (/\b(?:invitad[oa]s?|cumplean(?:os|ero)|propina|consumio|consumimos|porcentaje|por montos|partes distintas|reparto desigual)\b|%/.test(normalizedText)) {
+  if (/\b(?:invitad[oa]s?|cumplean(?:os|ero)|propina|consumio|consumimos|porcentaje|por montos|partes distintas|reparto desigual|excepto|menos|excluir|excluye)\b|\bno\s+paga\b|%/.test(normalizedText)) {
     throw new AiServiceError("Este gasto necesita un reparto especial. Usa «Dividir una cuenta» para invitados, consumos y extras, o revisa las partes manualmente en este formulario.", 422);
   }
   if (/\b(?:usd|dolares|euros)\b|[$€]/.test(normalizedText)) {
@@ -92,8 +92,20 @@ export async function interpretarGasto(
     deterministicPayerId &&
     mentionedIds.length === 1 &&
     mentionedIds[0] === deterministicPayerId;
+  // A spoken name outside the group must never silently turn into "everyone".
+  const withClause = normalizedText.match(/.*\bcon\s+(.+)$/)?.[1];
+  if (!allParticipants && withClause && !/\bcent(?:imos|avos)\b[.!]?\s*$/.test(withClause)) {
+    const names = withClause.split(/\s+y\s+|,/).map(name => name.trim().replace(/[.!?]+$/, ""));
+    const exactOrSingle = (name: string) => directory.some(member =>
+      member.nombre.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() === name) || !name.includes(" ");
+    if (names.some(name => !exactOrSingle(name) || !matchMemberId(name, directory, userId)))
+      throw new AiServiceError("No identificamos a todas las personas de tu frase. Revisa sus nombres o selecciónalas en el formulario; no cambiaremos el reparto por nuestra cuenta.", 422);
+  }
+  if (!allParticipants && directory.length > 1 &&
+      (mentionedIds.length === 0 || (payerIsOnlyMention && !withClause && !/\byo sol[oa]\b/.test(normalizedText))))
+    throw new AiServiceError("¿Entre quiénes se divide? Añade «entre todos» o sus nombres, por ejemplo «con Ana y Luis». También puedes seleccionarlos en el formulario.", 422);
   const fastParticipantIds =
-    allParticipants || mentionedIds.length === 0 || payerIsOnlyMention
+    allParticipants || directory.length === 1
       ? directory.map((member) => member.id)
       : [...new Set([...mentionedIds, ...(includesSelf ? [userId] : [])])];
 

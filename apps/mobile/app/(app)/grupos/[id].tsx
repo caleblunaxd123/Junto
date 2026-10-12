@@ -95,6 +95,7 @@ export default function Group() {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [expressions, setExpressions] = useState(false);
+  const [attachment, setAttachment] = useState(false);
   const [shareMessage, setShareMessage] = useState<ShareMessage | null>(null);
   const [recordFor, setRecordFor] = useState<{ person: { id: string; nombre: string }; receiver?: { id: string; nombre: string }; max: number } | null>(null);
   const [linkFor, setLinkFor] = useState<NonNullable<typeof group>["miembros"][number] | null>(null);
@@ -103,7 +104,7 @@ export default function Group() {
   const nearBottom = useRef(true);
   const sendLock = useRef(false);
   const [newMessages, setNewMessages] = useState(false);
-  useEffect(() => { seen.current = null; nearBottom.current = true; setNewMessages(false); setText(""); setExpressions(false); }, [id]);
+  useEffect(() => { seen.current = null; nearBottom.current = true; setNewMessages(false); setText(""); setExpressions(false); setAttachment(false); }, [id]);
   // Opened from "Cobrar" on Home: go straight to the group's accounts.
   const openedAccounts = useRef(false);
   useEffect(() => {
@@ -471,7 +472,8 @@ export default function Group() {
               </Pressable>
             </View>
           )}
-          <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8, paddingHorizontal: 12 }}>
+          <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 4, paddingHorizontal: 8 }}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Adjuntar comprobante de pago" onPress={() => { Keyboard.dismiss(); setAttachment(true); }} style={{ width: 44, height: 48, alignItems: "center", justifyContent: "center" }}><Ionicons name="attach" size={27} color={chatColors.header} /></Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel="Emojis y respuestas rápidas" accessibilityState={{ expanded: expressions }} onPress={() => { Keyboard.dismiss(); setExpressions(!expressions); }} style={{ width: 44, height: 48, alignItems: "center", justifyContent: "center" }}><Ionicons name={expressions ? "close-circle-outline" : "happy-outline"} size={27} color={chatColors.header} /></Pressable>
             <TextInput
               ref={messageBox}
@@ -506,6 +508,13 @@ export default function Group() {
         </View>
       </KeyboardAvoidingView>
 
+      <Sheet visible={attachment && focused} onClose={() => setAttachment(false)} title="Compartir comprobante" subtitle="Yape, Plin o transferencia: primero pagas por fuera." width={520}>
+        <Label size={14}>Elige la captura, revisa a quién pagaste y el monto leído. Al reportarlo aparecerá una tarjeta en este chat y avisaremos a quien recibe.</Label>
+        <Label size={13} color={palette.muted}>La captura no confirma una transferencia. Tu deuda baja solo cuando quien recibe aprueba. La imagen completa es privada: la ven quien pagó, quien recibe y quien puede aprobar.</Label>
+        {group.balanceUsuario.debes > 0
+          ? <Button title="Elegir captura y revisar pago" disabled={shareUnavailable} onPress={() => { setAttachment(false); router.push(`/(app)/pagos/pagar?grupoId=${id}&subir=1`); }} />
+          : <><Label size={13}>No tienes deuda pendiente aquí. Si otra persona te pagó, registra o revisa su pago desde las cuentas.</Label><Button title="Ver cuentas del grupo" onPress={() => { setAttachment(false); setWhoPaid(true); }} /></>}
+      </Sheet>
       <WhoPaid group={group} payments={groupPayments} userId={user?.id} visible={whoPaid} onClose={() => setWhoPaid(false)} onPay={goPay}
         onRecord={(person, max, receiver) => { setWhoPaid(false); setRecordFor({ person, max, receiver }); }}
         onRemind={(person, monto) => { setWhoPaid(false); remindPerson(person, monto); }}

@@ -69,6 +69,9 @@ function currencyTokenToCents(rawToken: string): number | null {
  * intentionally ignored because they may be dates or participant counts.
  */
 export function extractExplicitAmountCents(text: string): number | null {
+  // One total only. Never silently pick the first payment/price from a spoken list.
+  const markers = text.match(/\bsol(?:es)?\b|\bpen\b|s\s*\//gi) ?? [];
+  if (markers.length > 1 || /\bsol(?:es)?\b\s+con\s+/i.test(text)) return null;
   const prefix = text.match(/(?:s\s*\/\s*\.?|pen)\s*(\d[\d.,\s]*)/i)?.[1];
   const suffix = text.match(/(\d[\d.,\s]*)\s*(?:sol(?:es)?|pen)\b/i)?.[1];
   const token = (prefix || suffix)?.trim();
@@ -76,13 +79,16 @@ export function extractExplicitAmountCents(text: string): number | null {
 }
 
 export function extractLikelyAmountCents(text: string): number | null {
+  const normalized = normalizePersonName(text);
+  if (/\b(?:pesos|dolares|euros|usd|eur|cop|mxn|brl|reales)\b/.test(normalized) || /[$€]/.test(text)) return null;
+  const markers = text.match(/\bsol(?:es)?\b|\bpen\b|s\s*\//gi) ?? [];
+  if (markers.length > 1) return null;
   const explicit = extractExplicitAmountCents(text);
   if (explicit) return explicit;
   const written = extractSpanishAmountCents(text);
   if (written) return written;
   if (/\bsol(?:es)?\b|\bpen\b|s\s*\//i.test(text)) return null;
 
-  const normalized = normalizePersonName(text);
   if (!/\b(?:pague|pago|gaste|gasto|costo|salio)\b/.test(normalized)) return null;
   const numericTokens = text.match(/\d+(?:[.,]\d{1,2})?/g) || [];
   if (numericTokens.length !== 1) return null;

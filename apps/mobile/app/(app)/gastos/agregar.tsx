@@ -34,6 +34,7 @@ import {
 import { formatMoney, currencyInfo } from "@junto/shared/currency";
 import { centavosASoles, TipoDivision, Gasto } from "../../../src/types";
 import { parseMoney, parsePercentage, allocatePreview } from "../../../src/lib/expensePreview";
+import { ExpenseDictation } from "../../../src/components/ExpenseDictation";
 import { groupCover } from "../../../src/components/ui/Artwork";
 import { memberLabels, meFirst } from "../../../src/lib/people";
 import { guessCategory } from "../../../src/lib/category";
@@ -128,6 +129,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   const [picker, setPicker] = useState<"grupo" | "pagador" | null>(null);
   const saving = useRef(false);
   const requestId = useRef(newRequestId());
+  const [dictating, setDictating] = useState(false);
+  useEffect(() => { setDictating(false); }, [groupId, focused]);
   const [writeIt, setWriteIt] = useState(!!params.texto);
   useEffect(() => {
     if (params.texto) setWriteIt(true);
@@ -365,12 +368,14 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
             >
               <Ionicons name="sparkles-outline" size={18} color={palette.purple} />
               <Label size={13} weight="bold" color={palette.purple} style={{ flex: 1 }}>
-                {writeIt ? "Ocultar" : "¿Prefieres escribirlo en una frase?"}
+                {writeIt ? "Ocultar" : "Escribir o dictar un gasto"}
               </Label>
             </Pressable>
           )}
           {writeIt && !params.gastoId && moneda === "PEN" && (
             <Card style={{ backgroundColor: palette.lilac, padding: 12, gap: 8 }}>
+              <Button compact secondary title="Dictar gasto con voz" onPress={() => { cancelProposal(); setDictating(true); }} disabled={preparing} />
+              <Label size={12} color={palette.muted}>Escribe o dicta una frase. Solo se preparará una propuesta; tú revisas y guardas.</Label>
               <TextInput
                 accessibilityLabel="Describe el gasto en una frase"
                 value={text}
@@ -443,7 +448,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                   }}
                 />
                 <Label size={10} color={palette.muted}>
-                  PEN
+                  {moneda}
                 </Label>
               </View>
             </Field>
@@ -786,7 +791,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
             loading={create.isPending}
             disabled={!valid || !description.trim() || !payer}
           />
-          <Sheet visible={picker !== null} onClose={() => setPicker(null)} title={picker === "grupo" ? "Elige el grupo" : "¿Quién pagó?"} width={560}>
+          <ExpenseDictation visible={dictating && focused && moneda === "PEN" && !params.gastoId} replacing={!!text.trim()} onClose={() => setDictating(false)} onUse={(value) => { cancelProposal(); setText(value); }} />
+      <Sheet visible={picker !== null} onClose={() => setPicker(null)} title={picker === "grupo" ? "Elige el grupo" : "¿Quién pagó?"} width={560}>
                   {picker === "grupo"
                     ? groups.map((g) => (
                         <Pressable

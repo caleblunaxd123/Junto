@@ -2,7 +2,7 @@ import { PaymentDate, todayLocal, validDate } from "../../../src/components/Paym
 import { PaymentExchange, resolveExchange, type ExchangeDraft } from "../../../src/components/PaymentExchange";
 import React, { useEffect, useRef, useState } from "react";
 import { useIsFocused } from "@react-navigation/native";
-import { ActivityIndicator, Image, Pressable, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, Platform, Pressable, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams, router } from "expo-router";
@@ -54,6 +54,17 @@ export default function Payment() {
   const [error, setError] = useState("");
   const [reported, setReported] = useState<Pago | null>(null);
   const autoOpened = useRef(false);
+  const readRequest = useRef<AbortController | null>(null);
+  const pickLock = useRef(false);
+  const selectionVersion = useRef(0);
+  function cancelReading() { readRequest.current?.abort(); readRequest.current = null; setReading(false); }
+  useEffect(() => {
+    const lifetime = selectionVersion;
+    lifetime.current++;
+    autoOpened.current = false;
+    cancelReading();
+    return () => { lifetime.current++; readRequest.current?.abort(); readRequest.current = null; };
+  }, [grupoId, focused]);
 
   // A new person or group starts a clean form.
   useEffect(() => {
@@ -107,9 +118,13 @@ export default function Payment() {
   const checks = voucherChecks({ lectura, moneda: paymentCurrency, monedaGrupo: moneda, monto: exchange ? fx.conversion?.montoOrigen ?? null : value || null, limite: limit, receptorId: selected, nombre, acreedores: creditors.map((c) => c.acreedorId) });
 
   async function pick(camera: boolean) {
-    if (reading || busy) return;
+    if (reading || busy || pickLock.current) return;
+    pickLock.current = true;
+    const version = selectionVersion.current;
     setVoucherError("");
     const result = await pickVoucherImage(camera).catch(() => ({ error: "No pudimos abrir tus fotos. Reintenta." }));
+    pickLock.current = false;
+    if (version !== selectionVersion.current) return;
     if (!result) return;
     if ("error" in result) { setVoucherError(result.error); return; }
     setImage(result);
@@ -117,11 +132,15 @@ export default function Payment() {
   }
 
   async function read(base64: string) {
+    readRequest.current?.abort();
+    const request = new AbortController();
+    readRequest.current = request;
     setReading(true);
     setLectura(null);
     setVoucherError("");
     try {
-      const { data } = await api.post<LecturaComprobante>("/pagos/comprobantes", { grupoId, imagen: base64 }, { timeout: 60_000 });
+      const { data } = await api.post<LecturaComprobante>("/pagos/comprobantes", { grupoId, imagen: base64 }, { timeout: 60_000, signal: request.signal });
+      if (request.signal.aborted || readRequest.current !== request) return;
       setLectura(data);
       if (data.fecha && validDate(data.fecha)) setDate(data.fecha);
       setTyped(null);
@@ -131,9 +150,10 @@ export default function Payment() {
       // The voucher names someone you owe: pick them, unless you already chose.
       if (!creditorId && data.sugerenciaReceptorId && creditors.some((c) => c.acreedorId === data.sugerenciaReceptorId)) setCreditorId(data.sugerenciaReceptorId);
     } catch (err) {
+      if (request.signal.aborted) return;
       setVoucherError(errorText(err, "No pudimos subir la captura. Revisa tu conexión y reintenta."));
     } finally {
-      setReading(false);
+      if (readRequest.current === request) { readRequest.current = null; setReading(false); }
     }
   }
 
@@ -141,30 +161,32 @@ export default function Payment() {
   // (WhatsApp, Yape → Compartir) is read as soon as the group is known.
   useEffect(() => {
     // Nothing to pay here: leave a shared image for another group.
-    if (!group || autoOpened.current || done || !creditors.length) return;
+    if (!focused || !group || history.isPending || history.isError || autoOpened.current || done || !creditors.length) return;
     if (params.compartido === "1") {
       autoOpened.current = true;
       const shared = takeSharedVoucher();
       if (!shared) return;
+      const version = selectionVersion.current;
       void (async () => {
         const result = await readSharedVoucher(shared);
+        if (version !== selectionVersion.current) return;
         if ("error" in result) { setVoucherError(result.error); return; }
         setImage(result);
         await read(result.base64);
       })();
-    } else if (params.subir === "1") {
+    } else if (params.subir === "1" && Platform.OS !== "web") {
       autoOpened.current = true;
       void pick(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.subir, params.compartido, group, done, creditors.length, exchange]);
+  }, [params.subir, params.compartido, group, done, creditors.length, exchange, focused, history.isPending, history.isError]);
 
   function removeVoucher() {
     setImage(null); setLectura(null); setVoucherError(""); setTyped(null); setExchange(null); setMethod(null);
   }
 
   async function submit() {
-    if (busy || reading || !validDate(date) || !selected || !group || value <= 0 || value > limit || blocksSending(checks) || history.isPending || history.isError) return;
+    if (busy || reading || (image && !lectura) || !validDate(date) || !selected || !group || value <= 0 || value > limit || blocksSending(checks) || history.isPending || history.isError) return;
     setBusy(true);
     setError("");
     try {
@@ -235,7 +257,7 @@ export default function Payment() {
       </Screen>
     );
 
-  const canSend = validDate(date) && !!selected && value > 0 && value <= limit && !reading && !blocksSending(checks) && !history.isPending && !history.isError;
+  const canSend = validDate(date) && !!selected && value > 0 && value <= limit && !reading && (!image || !!lectura) && !blocksSending(checks) && !history.isPending && !history.isError;
   return (
     <Screen
       title="Registrar pago"
@@ -251,6 +273,7 @@ export default function Payment() {
       }
     >
       <Label size={13} color={palette.muted}>Primero paga por fuera, por Yape, Plin, efectivo o transferencia. Después registra aquí lo que ya pagaste: avisaremos a quien recibe para que lo confirme. JUNTO no mueve dinero.</Label>
+      {!!params.subir && <Card style={{ backgroundColor: palette.mint, gap: 6 }}><Label weight="bold">Tu comprobante aparecerá en el chat</Label><Label size={13}>Selecciona la captura abajo y revisa el resultado. Al tocar «Avisar que ya pagué» se envía para confirmación; no se aprueba automáticamente.</Label></Card>}
 
       {/* 1. Who */}
       <Label accessibilityRole="header" weight="extra" size={18}>{creditors.length > 1 ? "1. ¿A quién le pagaste?" : "1. Le pagaste a"}</Label>
@@ -320,6 +343,7 @@ export default function Payment() {
               <View style={{ flex: 1, justifyContent: "center", gap: 8 }}>
                 <ActivityIndicator color={palette.purple} />
                 <Label size={13} color={palette.muted} style={{ textAlign: "center" }}>Leyendo tu comprobante…</Label>
+                <Button compact secondary title="Cancelar lectura" onPress={cancelReading} />
               </View>
             ) : lectura ? (
               <>

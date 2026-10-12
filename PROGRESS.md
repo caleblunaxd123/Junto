@@ -1,5 +1,9 @@
 # JUNTO — estado real
 
+## Candidata 1.4.0: voz y comprobantes en chat
+
+Implementados dictado con revisión, clip de comprobante conectado al lector de pagos, tarjeta privada según permisos, cancelación de lectura y etiqueta de moneda correcta. Ver `ops/web/FLOW-VOICE-CHAT-20261011.md`: pruebas locales y límites; dictado de gasto solo PEN por ahora. La autorización del propietario permite publicar web/APK después de CI/respaldo; la activación se registrará al comprobarla. Voz física y push con app cerrada no se acreditan con pruebas simuladas.
+
 ## Beta 1.3.1 publicada: Google web y chat (11/10/2026)
 
 GitHub actualizado a `55090e9`, CI verde; API/web/APK activados con respaldo restaurado y copia externa cifrada. Google web REAL comprobado con la cuenta autorizada y sesión conservada al recargar. Nuevos cambios de GitHub en chat/fotos, corrección de deduplicación de respuestas y tipos de hover; 22 migraciones completas, sin pérdida de los registros existentes al migrar. APK 1.3.1/code 8 actualizado en el emulador, misma firma y sesión. Ver `ops/web/DEPLOY-20261011-GOOGLE131.md` para pruebas, hash, recuperación y límites. No se certifica aún Google físico en esta APK ni entrega push con la app cerrada.
