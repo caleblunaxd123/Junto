@@ -3,7 +3,8 @@
 La misma interfaz Expo se exporta como SPA en `/app/`, en el dominio HTTPS de JUNTO.
 No requiere Apple Developer, no es TestFlight y no instala una app nativa.
 Puede añadirse a la pantalla de inicio. Requiere internet; no hay service worker ni
-caché offline de datos financieros. Login Google y push nativo no se muestran en web.
+caché offline de datos financieros. Google web usa el botón oficial de Google Identity Services;
+el push nativo no se muestra en web.
 
 La web es un canal independiente: publicar las apps nativas en las tiendas no la
 desactiva. Las tres usan la misma API, cuentas y base de datos. En navegador desde
@@ -18,6 +19,12 @@ cuenta y correo verificado: no se ha habilitado un invitado anónimo con alias.
 En `apps/mobile`, configurar `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_WEB_URL` y URLs
 legales/soporte públicas; `EXPO_PUBLIC_APP_ENV=preview`, `JUNTO_WEB_BASE_PATH=/app`.
 Dejar `JUNTO_QA_KEYSTORE_PATH` vacío: un export web no usa firma Android de QA.
+Para Google, exportar el `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` público de
+`ops/android/google-beta.public.json` y autorizar solo `https://junto.lunalav.pe`
+en los orígenes JavaScript del cliente web existente. No necesita client secret,
+acceso a Gmail ni URI de redirección: el botón devuelve un ID token con nonce.
+La API verifica firma, audiencia, vencimiento y nonce; correo/contraseña sigue disponible.
+CSP permite únicamente los recursos GIS oficiales; COOP conserva su ventana emergente.
 
 ```sh
 npx expo export --platform web --output-dir dist-beta

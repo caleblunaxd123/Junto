@@ -73,7 +73,7 @@ export async function createComment(userId: string, input: CommentTarget & { tex
   // A double tap or a retry right after sending returns the same comment, never a copy.
   const result = await prisma.$transaction(async (tx) => {
     await transactionLock(tx, `comments:${userId}`);
-    const repeated = await tx.comentario.findFirst({ where: { ...where, autorId: userId, texto, eliminado: false, fechaCreacion: { gte: new Date(Date.now() - 15_000) } }, select: { id: true } });
+    const repeated = await tx.comentario.findFirst({ where: { ...where, autorId: userId, texto, respondeAId: input.respondeA ?? null, eliminado: false, fechaCreacion: { gte: new Date(Date.now() - 15_000) } }, select: { id: true } });
     if (repeated) return { id: repeated.id, repetido: true as const };
     const recent = await tx.comentario.count({ where: { autorId: userId, fechaCreacion: { gte: new Date(Date.now() - 10 * 60_000) } } });
     if (recent >= COMMENT_LIMITS.per10Minutes) throw new UserError("Escribiste muchos comentarios seguidos. Espera unos minutos.", 429);

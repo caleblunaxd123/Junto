@@ -93,12 +93,12 @@ export default function Recovery() {
   return (
     <Screen
       title={create ? "Crea tu contraseña" : "Recupera tu acceso"}
-      subtitle={create ? "Tu cuenta se creó con Google. Con una contraseña también entras desde la web." : "Un código por correo. Una contraseña nueva."}
+      subtitle={create ? "Tu cuenta se creó con Google. También puedes entrar con correo y contraseña." : "Un código por correo. Una contraseña nueva."}
       back
     >
       {done ? (
         <Card>
-          <FeedbackBox title={create ? "Contraseña creada" : "Contraseña actualizada"} tone="success" message={create ? "Listo: entra con tu correo y esta contraseña. Google sigue funcionando en la app." : "Ya puedes entrar con tu nueva contraseña. Cerramos las sesiones anteriores para proteger tu cuenta."} />
+          <FeedbackBox title={create ? "Contraseña creada" : "Contraseña actualizada"} tone="success" message={create ? "Listo: entra con tu correo y esta contraseña. Google sigue vinculado a la misma cuenta." : "Ya puedes entrar con tu nueva contraseña. Cerramos las sesiones anteriores para proteger tu cuenta."} />
           <Button
             title="Ir a iniciar sesión"
             onPress={() => router.replace("/(auth)/login")}

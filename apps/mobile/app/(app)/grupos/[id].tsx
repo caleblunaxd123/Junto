@@ -522,7 +522,7 @@ export default function Group() {
               const mine = actionsFor.reacciones?.some((r) => r.emoji === emoji && r.mia);
               return (
                 <Pressable key={emoji} accessibilityRole="button" accessibilityLabel={`Reaccionar ${emoji}`} accessibilityState={{ selected: !!mine }} onPress={() => { void react(actionsFor.comentarioId, emoji); }}
-                  style={({ hovered }: { hovered?: boolean }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: mine ? palette.mint : hovered ? "#F1F4F8" : "transparent" })}>
+                  style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: mine ? palette.mint : hovered ? "#F1F4F8" : "transparent" })}>
                   <Label size={24}>{emoji}</Label>
                 </Pressable>
               );

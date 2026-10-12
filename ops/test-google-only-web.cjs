@@ -1,5 +1,5 @@
 // Web beta: an account created with Google (no password) accepts an invitation from the browser,
-// where there is no Google button. It must be guided to create a password and still join.
+// even if the Google SDK cannot load. Password creation must preserve the invitation.
 // Local fictional data only; every request stays in loopback. Needs the web export served on :8090.
 // Usage: DATABASE_URL=<local QA db> node ops/test-google-only-web.cjs   (after `npm run build` in apps/api)
 const assert = require('node:assert/strict');
@@ -38,6 +38,7 @@ async function run() {
     await context.route('**/*', async (route) => {
       const request = route.request(); const url = new URL(request.url());
       if (url.origin === 'http://127.0.0.1:8090') return route.continue();
+      if (url.origin === 'https://accounts.google.com') return route.abort();
       if (url.origin === 'https://junto.lunalav.pe' && url.pathname.startsWith('/api/')) {
         const cors = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:8090', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE', 'Access-Control-Allow-Headers': 'authorization,content-type,x-junto-currency-version' };
         if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });

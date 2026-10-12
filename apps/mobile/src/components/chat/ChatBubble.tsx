@@ -69,7 +69,7 @@ function Bubble({ item, children, onPress, onLongPress, onQuickReact, onReply, l
             {chatReactions.map((emoji) => (
               <Pressable key={emoji} accessibilityRole="button" accessibilityLabel={`Reaccionar ${emoji}`} accessibilityState={{ selected: mineReaction === emoji }}
                 onPress={() => { setPicking(false); onQuickReact?.(emoji); }}
-                style={({ hovered }: { hovered?: boolean }) => ({ width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: mineReaction === emoji ? palette.mint : hovered ? "#F1F4F8" : "transparent", transform: [{ scale: hovered ? 1.15 : 1 }] })}>
+                style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: mineReaction === emoji ? palette.mint : hovered ? "#F1F4F8" : "transparent", transform: [{ scale: hovered ? 1.15 : 1 }] })}>
                 <Label size={22}>{emoji}</Label>
               </Pressable>
             ))}

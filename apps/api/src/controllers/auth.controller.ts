@@ -199,8 +199,8 @@ export async function deleteAccount(req: Request, res: Response, next: NextFunct
 
 export async function google(req: Request, res: Response, next: NextFunction) {
   try {
-    const { idToken } = z.object({ idToken: z.string().min(20).max(4096) }).parse(req.body);
-    res.json(await authService.loginWithGoogle(idToken));
+    const { idToken, nonce } = z.object({ idToken: z.string().min(20).max(4096), nonce: z.string().regex(/^[a-f0-9]{64}$/).optional() }).parse(req.body);
+    res.json(await authService.loginWithGoogle(idToken, nonce));
   } catch (err) {
     next(err);
   }

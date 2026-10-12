@@ -85,6 +85,8 @@ app.get('/api/fotos/:id', async (req, res, next) => {
 
 // Health check
 app.get('/health', (_req, res) => {
+  // Local harnesses must never mistake another running API for their own test instance.
+  if (process.env.NODE_ENV === 'test' && process.env.JUNTO_QA_INSTANCE) res.setHeader('X-Junto-QA-Instance', process.env.JUNTO_QA_INSTANCE);
   res.json({ status: 'ok', env: process.env.NODE_ENV, email: emailProvider() ?? 'sin configurar', timestamp: new Date().toISOString() });
 });
 

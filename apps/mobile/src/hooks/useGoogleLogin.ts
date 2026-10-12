@@ -10,15 +10,15 @@ export function useGoogleLogin() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const gate = useRef(false);
-  async function start() {
+  async function start(providedIdToken?: string, nonce?: string) {
     if (gate.current) return;
     gate.current = true;
     setError("");
     setBusy(true);
     try {
-      const idToken = await getGoogleIdToken();
+      const idToken = providedIdToken ?? await getGoogleIdToken();
       if (!idToken) return; // The person closed the picker: nothing to report.
-      await useAuthStore.getState().loginWithGoogle(idToken);
+      await useAuthStore.getState().loginWithGoogle(idToken, nonce);
       router.replace(authenticatedDestination(useAuthStore.getState().pendingInvitation));
     } catch (err) {
       if (err instanceof GoogleSignInError) setError(err.message);

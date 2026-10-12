@@ -22,7 +22,7 @@ interface AuthState {
 
   login: (email: string, password: string) => Promise<void>;
   /** Exchanges a Google ID token for a JUNTO session. */
-  loginWithGoogle: (idToken: string) => Promise<{ nuevo: boolean }>;
+  loginWithGoogle: (idToken: string, nonce?: string) => Promise<{ nuevo: boolean }>;
   register: (data: {
     nombre: string;
     email: string;
@@ -108,8 +108,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ usuario: data.usuario, isAuthenticated: true, sessionExpired: false });
   },
 
-  loginWithGoogle: async (idToken) => {
-    const { data } = await api.post<AuthResponse & { nuevo: boolean }>("/auth/google", { idToken });
+  loginWithGoogle: async (idToken, nonce) => {
+    const { data } = await api.post<AuthResponse & { nuevo: boolean }>("/auth/google", { idToken, nonce });
     await SecureStore.setItemAsync("accessToken", data.accessToken);
     await SecureStore.setItemAsync("refreshToken", data.refreshToken);
     await SecureStore.setItemAsync("cachedUsuario", JSON.stringify(data.usuario));

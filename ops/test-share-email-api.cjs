@@ -47,13 +47,14 @@ function startSmtp() {
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({ port: server.address().port, close: () => { for (const s of sockets) s.destroy(); server.close(); } })));
 }
 function startApi(port, extraEnv) {
+  const instance = require('node:crypto').randomUUID();
   const child = spawn(process.execPath, [path.join(__dirname, "../apps/api/dist/index.js")], {
-    env: { ...process.env, PORT: String(port), NODE_ENV: "test", PUBLIC_WEB_URL: "https://junto.example.invalid", RESEND_API_KEY: "", SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", ...extraEnv },
+    env: { ...process.env, PORT: String(port), NODE_ENV: "test", PUBLIC_WEB_URL: "https://junto.example.invalid", RESEND_API_KEY: "", SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", ...extraEnv, JUNTO_QA_INSTANCE: instance },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let log = ""; child.stdout.on("data", (d) => (log += d)); child.stderr.on("data", (d) => (log += d));
   child.on("error", error => { log += `API spawn error: ${error.message}`; });
-  return { child, log: () => log, ready: (async () => { for (let i = 0; i < 120; i++) { if (child.exitCode !== null) throw new Error(`API ${port} exited ${child.exitCode}: ${log}`); try { if ((await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) })).ok) return; } catch { /* starting */ } await new Promise((r) => setTimeout(r, 250)); } throw new Error(`API ${port} did not start:\n${log}`); })() };
+  return { child, log: () => log, ready: (async () => { for (let i = 0; i < 120; i++) { if (child.exitCode !== null) throw new Error(`API ${port} exited ${child.exitCode}: ${log}`); try { const r = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1000) }); if (r.ok && r.headers.get('X-Junto-QA-Instance') === instance) return; } catch { /* starting */ } await new Promise((r) => setTimeout(r, 250)); } throw new Error(`API ${port} did not start:\n${log}`); })() };
 }
 function client(port) {
   return async (pathname, token, method = "GET", body) => {

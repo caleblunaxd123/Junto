@@ -4,7 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Label, palette } from "./Design";
 
 /** White button with the Google mark, following Google's sign-in branding. */
-export function GoogleButton({ onPress, loading = false, disabled = false }: { onPress: () => void; loading?: boolean; disabled?: boolean }) {
+export function GoogleButton({ onPress, loading = false, disabled = false }: { onPress: (idToken?: string, nonce?: string) => void; loading?: boolean; disabled?: boolean }) {
   const [pressed, setPressed] = React.useState(false);
   return (
     <Pressable
@@ -12,7 +12,7 @@ export function GoogleButton({ onPress, loading = false, disabled = false }: { o
       accessibilityLabel="Continuar con Google"
       accessibilityState={{ busy: loading, disabled: disabled || loading }}
       disabled={disabled || loading}
-      onPress={onPress}
+      onPress={() => onPress()}
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
       style={{

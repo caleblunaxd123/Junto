@@ -57,9 +57,9 @@ export default function Onboarding() {
             {!!google.error && <ErrorBox message={google.error} />}
             <GoogleButton
               loading={google.busy}
-              onPress={async () => {
+              onPress={async (idToken, nonce) => {
                 await AsyncStorage.setItem("onboarding_completado", "true").catch(() => undefined);
-                google.start();
+                google.start(idToken, nonce);
               }}
             />
             <Button title="Crear cuenta con correo" secondary onPress={() => go("/(auth)/register")} />

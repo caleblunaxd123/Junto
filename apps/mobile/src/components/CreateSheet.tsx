@@ -37,7 +37,7 @@ export function CreateSheet({ visible, onClose, groups }: { visible: boolean; on
               }}
               onPressIn={() => setPressedOption(option.title)}
               onPressOut={() => setPressedOption(null)}
-              style={({ hovered }: { hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, backgroundColor: hovered ? "#F6F8FB" : "white", borderWidth: 1, borderColor: palette.line, opacity: pressedOption === option.title ? 0.8 : 1 })}
+              style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, backgroundColor: hovered ? "#F6F8FB" : "white", borderWidth: 1, borderColor: palette.line, opacity: pressedOption === option.title ? 0.8 : 1 })}
             >
               <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: option.bg, alignItems: "center", justifyContent: "center" }}>
                 <Ionicons name={option.icon} size={24} color={option.color} />

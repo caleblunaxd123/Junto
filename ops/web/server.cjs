@@ -9,11 +9,12 @@ const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; char
 function createServer() {
   return http.createServer((req,res) => {
     res.setHeader('X-Content-Type-Options','nosniff');
-    res.setHeader('Referrer-Policy','no-referrer');
+    res.setHeader('Referrer-Policy','strict-origin-when-cross-origin');
+    res.setHeader('Cross-Origin-Opener-Policy','same-origin-allow-popups');
     res.setHeader('X-Frame-Options','DENY');
     res.setHeader('Cache-Control','no-store');
-    // RN web needs inline styles, but scripts come only from the same-origin export.
-    res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: ${apiOrigin}; font-src 'self' data:; connect-src 'self' ${apiOrigin}; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`);
+    // Only the official identity SDK is added; no wildcard script hosts or unsafe-eval.
+    res.setHeader('Content-Security-Policy', `default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src 'self' data: blob: https: ${apiOrigin}; font-src 'self' data:; connect-src 'self' ${apiOrigin} https://accounts.google.com/gsi/; frame-src https://accounts.google.com/gsi/; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`);
     if (!['GET','HEAD'].includes(req.method)) { res.writeHead(405,{Allow:'GET, HEAD'}); res.end(); return; }
     let pathname;
     try { pathname=decodeURIComponent(new URL(req.url,'http://localhost').pathname); } catch {res.writeHead(400);res.end();return;}

@@ -8,7 +8,14 @@ test('beta SPA is isolated, safely reloadable and never masks missing JS with HT
   for(const url of ['/api/auth/me','/app/.env','/app/%2e%2e%2f.env','/app/_expo/missing.js','/app/assets/missing.png','/app/descargas/missing.apk'])assert.equal((await fetch(origin+url)).status,404,url);
   assert.equal((await fetch(origin+'/app/',{method:'POST'})).status,405);
   const manifest=await(await fetch(origin+'/app/manifest.webmanifest')).json();assert.equal(manifest.start_url,'/app/');
-  const html=await(await fetch(origin+'/app/')).text();assert.match(html,/lang="es"/);assert.match(html,/manifest.webmanifest/);
+  const htmlResponse=await fetch(origin+'/app/');
+  assert.equal(htmlResponse.headers.get('cross-origin-opener-policy'),'same-origin-allow-popups');
+  assert.equal(htmlResponse.headers.get('referrer-policy'),'strict-origin-when-cross-origin');
+  const csp=htmlResponse.headers.get('content-security-policy');
+  assert.match(csp,/script-src 'self' https:\/\/accounts.google.com\/gsi\/client;/);
+  assert.match(csp,/frame-src https:\/\/accounts.google.com\/gsi\//);
+  assert.ok(!csp.includes('unsafe-eval') && !csp.includes('script-src *'));
+  const html=await htmlResponse.text();assert.match(html,/lang="es"/);assert.match(html,/manifest.webmanifest/);
  }finally{await new Promise(r=>server.close(r));}
 });
 const apk=path.resolve(__dirname,'../../apps/mobile/dist-beta/descargas/JUNTO-beta-20261010.apk');

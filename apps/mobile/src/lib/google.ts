@@ -5,7 +5,7 @@ type GoogleModule = typeof import("@react-native-google-signin/google-signin");
 const WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
 /** The button only appears when the build has a Google OAuth client configured. */
-export const googleConfigured = !!WEB_CLIENT_ID && Platform.OS !== "web";
+export const googleConfigured = !!WEB_CLIENT_ID;
 
 export class GoogleSignInError extends Error {}
 

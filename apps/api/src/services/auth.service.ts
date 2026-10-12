@@ -14,6 +14,7 @@ import type { RegisterInput, LoginInput } from "../schemas/auth.schema";
 import { UserError } from "../domain/errors";
 import { credentialsTag } from "../domain/credentials";
 import { OAuth2Client } from "google-auth-library";
+import { googleNonceMatches } from "../domain/googleNonce";
 import { GoogleClaims, googleSignInPlan, nameFromGoogle } from "../domain/googleAccount";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
@@ -435,7 +436,7 @@ export function hasPassword(passwordHash: string) {
 const googleClient = new OAuth2Client();
 
 /** Verifies signature, expiry, issuer and audience of a Google ID token. */
-export async function verifyGoogleIdToken(idToken: string): Promise<GoogleClaims> {
+export async function verifyGoogleIdToken(idToken: string, nonce?: string): Promise<GoogleClaims> {
   const audience = (process.env.GOOGLE_CLIENT_IDS || "").split(",").map((v) => v.trim()).filter(Boolean);
   if (!audience.length)
     throw new UserError("El inicio con Google no está disponible por ahora. Usa tu correo.", 503, "GOOGLE_NO_CONFIGURADO");
@@ -445,6 +446,8 @@ export async function verifyGoogleIdToken(idToken: string): Promise<GoogleClaims
   } catch {
     throw new UserError("No pudimos confirmar tu cuenta de Google. Intenta de nuevo.", 401, "GOOGLE_TOKEN_INVALIDO");
   }
+  if (!googleNonceMatches((payload as { nonce?: string } | undefined)?.nonce, nonce))
+    throw new UserError("La respuesta de Google no corresponde a este intento. Reintenta.", 401, "GOOGLE_NONCE_INVALIDO");
   if (!payload?.sub || !payload.email)
     throw new UserError("Tu cuenta de Google no compartió el correo. Intenta de nuevo.", 400, "GOOGLE_SIN_CORREO");
   return {
@@ -511,8 +514,8 @@ async function resolveGoogleAccount(claims: GoogleClaims) {
   throw new UserError("No pudimos entrar con Google. Intenta de nuevo.", 409, "GOOGLE_REINTENTAR");
 }
 
-export async function loginWithGoogle(idToken: string) {
-  return signInWithGoogleClaims(await verifyGoogleIdToken(idToken));
+export async function loginWithGoogle(idToken: string, nonce?: string) {
+  return signInWithGoogleClaims(await verifyGoogleIdToken(idToken, nonce));
 }
 
 export async function updatePushToken(userId: string, expoPushToken: string | null, refreshToken?: string) {

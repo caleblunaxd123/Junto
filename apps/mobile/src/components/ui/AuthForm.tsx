@@ -39,7 +39,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  // The account was created with Google and this screen has no Google button (the web beta).
+  // Offer password creation as an alternative for a Google-created account.
   const [googleOnly, setGoogleOnly] = useState("");
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const gate = useRef(false);
@@ -89,9 +89,8 @@ export function AuthForm({ register = false }: { register?: boolean }) {
           params: { email: address },
         });
       else if (e.response?.data?.code === "USA_GOOGLE") {
-        // With a Google button here, use it; without one (the web), offer to create a password.
-        if (googleConfigured) setError("Esta cuenta se creó con Google. Toca «Continuar con Google» arriba.");
-        else setGoogleOnly(address);
+        // Preserve the invitation while offering either Google or password creation.
+        setGoogleOnly(address);
       } else
         setError(errorMessage(err, register ? "No sabemos si se creó tu cuenta. Revisa tu correo; si ya tienes un código, entra y verifica tu cuenta antes de registrarte otra vez." : "No pudimos iniciar sesión. Revisa tu conexión y vuelve a intentar."));
     } finally {
@@ -318,7 +317,7 @@ export function AuthForm({ register = false }: { register?: boolean }) {
                 <Ionicons name="logo-google" size={20} color="#8A5B05" />
                 <View style={{ flex: 1, gap: 4 }}>
                   <Label weight="bold">Tu cuenta se creó con Google</Label>
-                  <Label size={13}>Aquí no está «Continuar con Google». Crea una contraseña con un código que te enviamos a {googleOnly}: tu cuenta, tus grupos{auth.pendingInvitation ? " y tu invitación" : ""} siguen igual.</Label>
+                  <Label size={13}>{googleConfigured ? "Puedes usar Google arriba o crear una contraseña como alternativa." : "Crea una contraseña para entrar con tu correo."} Te enviamos un código a {googleOnly}: tu cuenta, tus grupos{auth.pendingInvitation ? " y tu invitación" : ""} siguen igual.</Label>
                 </View>
               </View>
               <Button title="Crear una contraseña" onPress={() => router.push({ pathname: "/(auth)/forgot-password", params: { email: googleOnly, crear: "1" } })} />
