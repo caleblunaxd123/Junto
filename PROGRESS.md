@@ -1,8 +1,8 @@
 # JUNTO — estado real
 
-## Candidata 1.4.0: voz y comprobantes en chat
+## Beta 1.4.0 publicada: voz y comprobantes en chat
 
-Implementados dictado con revisión, clip de comprobante conectado al lector de pagos, tarjeta privada según permisos, cancelación de lectura y etiqueta de moneda correcta. Ver `ops/web/FLOW-VOICE-CHAT-20261011.md`: pruebas locales y límites; dictado de gasto solo PEN por ahora. La autorización del propietario permite publicar web/APK después de CI/respaldo; la activación se registrará al comprobarla. Voz física y push con app cerrada no se acreditan con pruebas simuladas.
+Implementados y publicados dictado con revisión, clip conectado al lector de pagos, tarjeta privada según permisos, cancelación de lectura y etiqueta de moneda correcta. Ver `ops/web/FLOW-VOICE-CHAT-20261011.md` y `ops/web/DEPLOY-20261011-VOICE140.md`: CI verde, respaldo restaurable, API/web/APK activados y pruebas. Dictado del gasto solo PEN por ahora; voz física y push con app cerrada no se acreditan con simulaciones.
 
 ## Beta 1.3.1 publicada: Google web y chat (11/10/2026)
 

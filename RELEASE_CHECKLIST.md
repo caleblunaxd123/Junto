@@ -1,8 +1,8 @@
 # JUNTO — controles previos a publicación
 
-## Candidata 1.4.0: voz y capturas desde chat
+## Beta 1.4.0 publicada: voz y capturas desde chat
 
-Ver `ops/web/FLOW-VOICE-CHAT-20261011.md`. Antes de publicar: CI, respaldo/restauración, permiso RECORD_AUDIO en el APK real sin activar grabación al inicio, misma firma/code 9, CSP/Google y regresión de pagos. Dictado físico y reconocimiento de nombres/montos con ruido siguen como prueba del propietario. Capturas nunca confirman dinero ni se muestran a todo el grupo; push real sigue pendiente.
+Ver `ops/web/FLOW-VOICE-CHAT-20261011.md` y `ops/web/DEPLOY-20261011-VOICE140.md`: CI, respaldo/restauración, RECORD_AUDIO presente pero sin permiso runtime al abrir, misma firma/code 9, regresión web y pagos. Dictado físico y reconocimiento con ruido siguen como prueba del propietario. Capturas nunca confirman dinero ni se muestran a todo el grupo; push real sigue pendiente.
 
 ## Beta 1.3.1 publicada: Google web
 
