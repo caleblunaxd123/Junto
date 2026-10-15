@@ -179,6 +179,12 @@ export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAns
             </Label>
           )}
           {bill && !!item.tuParte && <Label size={13} weight="bold" color="#007B60">Tu {words.part}: {money(item.tuParte)}</Label>}
+          {!!item.repite && (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <Ionicons name="repeat" size={14} color={palette.purple} />
+              <Label size={12} color={palette.purple}>Se repite {item.repite}</Label>
+            </View>
+          )}
           {!!item.comentarios && <Label size={12} color={palette.purple}>💬 {item.comentarios}</Label>}
         </Bubble>
       );

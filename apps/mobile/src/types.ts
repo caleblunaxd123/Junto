@@ -147,7 +147,7 @@ export type ChatItem = ChatBase & (
   | { tipo: "creado" }
   | { tipo: 'cambio'; texto: string; evento: string }
   | { tipo: "union"; parte: number | null; activo: boolean; sinCuenta?: boolean }
-  | { tipo: "cuenta" | "gasto"; gastoId: string; descripcion: string; monto: number; pagador: ChatPersona; comentarios: number; tuParte: number | null; partes?: number; parte?: number; libres?: number; entrega?: Entrega }
+  | { tipo: "cuenta" | "gasto"; gastoId: string; descripcion: string; monto: number; pagador: ChatPersona; comentarios: number; tuParte: number | null; repite?: string | null; partes?: number; parte?: number; libres?: number; entrega?: Entrega }
   | { tipo: "pago"; pagoId: string; monto: number; monedaOrigen?: CurrencyCode | null; montoOrigen?: number | null; tipoCambio?: string | null; metodo: string | null; estado: string; receptor: ChatPersona; resolutor: ChatPersona | null; fechaResolucion: string | null; comentarios: number; tieneComprobante?: boolean; puedeVerComprobante?: boolean; apruebaComo: "receptor" | "administrador" | null }
   | { tipo: "recordatorio"; para: ChatPersona; monto: number | null; aviso: string | null }
   | { tipo: "mensaje"; comentarioId: string; texto: string; eliminado: boolean; puedeEliminar: boolean; entrega?: Entrega; reacciones?: Reaccion[]; fijado?: boolean; respuesta?: Respuesta }
@@ -352,4 +352,11 @@ export function centavosASoles(centavos: number): string {
 /** Converts soles string/number to centavos integer: 85.50 → 8550 */
 export function solesACentavos(soles: number): number {
   return Math.round(soles * 100);
+}
+
+/** A recurring expense rule (rent, internet…): it adds the same expense on a schedule. */
+export interface GastoRecurrente {
+  id: string; grupoId: string; descripcion: string; categoria: string; montoTotal: number;
+  pagador: { id: string; nombre: string } | null; tipoDivision: string; frecuencia: "semanal" | "quincenal" | "mensual"; diaMes: number | null;
+  cada: string; proximaFecha: string; activo: boolean; pausaMotivo: string | null; creador: { id: string; nombre: string }; gastosCreados: number;
 }

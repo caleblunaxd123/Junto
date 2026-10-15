@@ -58,6 +58,7 @@ model Usuario {
   avisosRecibidos     AvisoGrupo[] @relation("AvisoDestinatario")
   avisosOriginados    AvisoGrupo[] @relation("AvisoIntegrante")
   eventosGrupo       EventoGrupo[]
+  gastosRecurrentes  GastoRecurrente[] @relation("RecurrenteCreador")
 
   @@map("usuarios")
 }
@@ -145,6 +146,7 @@ model Grupo {
   invitaciones    Invitacion[]
   avisos          AvisoGrupo[]
   cuentaAnterior  CuentaRapida?
+  recurrentes     GastoRecurrente[]
   eventos         EventoGrupo[]
 
   @@unique([creadoPor, solicitudImportacion])
@@ -229,9 +231,12 @@ model Gasto {
   solicitudId  String?   @map("solicitud_id") @db.VarChar(80)
   // Equal split in N parts: parts nobody holds yet stay with whoever paid; each person who joins takes one.
   partes       Int?
+  // Created by a recurring rule (rent, internet…): shown as "se repite" and traced to its rule.
+  recurrenteId String?   @map("recurrente_id") @db.Uuid
 
   // Relations
   grupo        Grupo               @relation(fields: [grupoId], references: [id])
+  recurrente   GastoRecurrente?    @relation(fields: [recurrenteId], references: [id], onDelete: SetNull)
   pagador      Usuario             @relation("GastoPagador", fields: [pagadoPor], references: [id])
   creador      Usuario             @relation("GastoCreador", fields: [creadoPor], references: [id])
   participantes GastoParticipante[]
@@ -522,4 +527,38 @@ model FotoPerfil {
   usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@map("fotos_perfil")
+}
+
+// A rule that adds the same expense to a group on a schedule (rent, internet, utilities). Each run
+// creates a normal expense with a deterministic request id, so a repeated or concurrent run never
+// duplicates it. The split template is validated with the same rules as a manual expense.
+model GastoRecurrente {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  grupoId       String    @map("grupo_id") @db.Uuid
+  creadoPor     String    @map("creado_por") @db.Uuid
+  descripcion   String    @db.VarChar(200)
+  categoria     String    @default("otro") @db.VarChar(30)
+  montoTotal    Int       @map("monto_total") // en centavos
+  pagadoPor     String    @map("pagado_por") @db.Uuid
+  tipoDivision  String    @map("tipo_division") @db.VarChar(20)
+  // [{ usuarioId, monto?, porcentaje?, participaciones? }], same shape as a new expense.
+  participantes Json
+  notas         String?   @db.VarChar(500)
+  frecuencia    String    @db.VarChar(12) // semanal | quincenal | mensual
+  diaMes        Int?      @map("dia_mes")
+  proximaFecha  DateTime  @map("proxima_fecha") @db.Date
+  activo        Boolean   @default(true)
+  // Why it stopped by itself (someone left, the group closed); null while it runs or if paused by hand.
+  pausaMotivo   String?   @map("pausa_motivo") @db.VarChar(200)
+  solicitudId   String?   @map("solicitud_id") @db.VarChar(80)
+  fechaCreacion DateTime  @default(now()) @map("fecha_creacion")
+
+  grupo         Grupo     @relation(fields: [grupoId], references: [id])
+  creador       Usuario   @relation("RecurrenteCreador", fields: [creadoPor], references: [id])
+  gastos        Gasto[]
+
+  @@unique([creadoPor, solicitudId])
+  @@index([activo, proximaFecha])
+  @@index([grupoId])
+  @@map("gastos_recurrentes")
 }

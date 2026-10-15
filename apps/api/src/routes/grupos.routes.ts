@@ -6,6 +6,7 @@ import { authMiddleware } from "../middleware/auth";
 import { z } from "zod";
 import { getGroupChat, groupPresence } from "../services/groupChat.service";
 import { groupStatement } from "../services/statement.service";
+import { actualizarRecurrente, actualizarRecurrenteSchema, crearRecurrente, crearRecurrenteSchema, eliminarRecurrente, listarRecurrentes } from "../services/recurrentes.service";
 import { statementPdf, statementXlsx } from "../services/statementExport.service";
 import { createComment, pinMessage } from "../services/comentarios.service";
 import { agregarIntegrantes, quitarIntegrante, unirIntegrante } from "../services/integrantes.service";
@@ -76,6 +77,23 @@ router.get("/:id/chat", async (req, res, next) => {
   } catch (error) { next(error); }
 });
 // The viewer's own notebook, reconciled with the group's current settlement plan.
+// Recurring expenses (rent, internet…): program, list, pause/resume, stop.
+router.post("/:id/recurrentes", async (req, res, next) => {
+  try { res.status(201).json(await crearRecurrente(z.string().uuid().parse(req.params.id), crearRecurrenteSchema.parse(req.body), req.user!.userId)); }
+  catch (error) { next(error); }
+});
+router.get("/:id/recurrentes", async (req, res, next) => {
+  try { res.set("Cache-Control", "private, no-store"); res.json(await listarRecurrentes(z.string().uuid().parse(req.params.id), req.user!.userId)); }
+  catch (error) { next(error); }
+});
+router.patch("/:id/recurrentes/:rid", async (req, res, next) => {
+  try { res.json(await actualizarRecurrente(z.string().uuid().parse(req.params.rid), actualizarRecurrenteSchema.parse(req.body), req.user!.userId)); }
+  catch (error) { next(error); }
+});
+router.delete("/:id/recurrentes/:rid", async (req, res, next) => {
+  try { await eliminarRecurrente(z.string().uuid().parse(req.params.rid), req.user!.userId); res.status(204).send(); }
+  catch (error) { next(error); }
+});
 router.get("/:id/estado-cuenta", async (req, res, next) => {
   try {
     res.set("Cache-Control", "private, no-store");

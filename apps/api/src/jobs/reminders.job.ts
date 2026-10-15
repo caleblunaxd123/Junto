@@ -2,6 +2,7 @@ import { describeError } from "../lib/logSafe";
 import cron from 'node-cron';
 import { ejecutarRecordatoriosAutomaticos, ejecutarRecordatoriosPorFecha } from '../services/recordatorios.service';
 import { purgeVouchers } from '../services/vouchers.service';
+import { generarRecurrentes } from '../services/recurrentes.service';
 
 /**
  * Cron job: runs daily at 9 AM Peru time (UTC-5 = 14:00 UTC).
@@ -18,6 +19,16 @@ export function initRemindersJob(): void {
       await purgeVouchers();
     } catch (err) {
       console.error('[Cron] Error purging vouchers:', describeError(err));
+    }
+  });
+
+  // Recurring expenses: hourly, so a day starts with its rent already added (idempotent per day).
+  cron.schedule('17 * * * *', async () => {
+    try {
+      const { creados } = await generarRecurrentes();
+      if (creados) console.info(`[Cron] Recurring expenses added: ${creados}`);
+    } catch (err) {
+      console.error('[Cron] Error in recurring expenses:', describeError(err));
     }
   });
 

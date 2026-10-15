@@ -640,6 +640,7 @@ export default function Group() {
 
       <Sheet visible={menu} onClose={() => setMenu(false)} closeLabel="Cerrar opciones" eyebrow="GRUPO" title={group.nombre} subtitle={`${groupStateLabel(group)} · ${group.moneda ?? "PEN"}${group.archivado ? ' · Archivado para ti' : ''}`} width={520}>
         <Button title="Sacar cuentas · PDF y Excel" onPress={() => { setMenu(false); router.push(`/(app)/cuentas/cuaderno?grupoId=${id}`); }} />
+        <Button title="Gastos que se repiten" secondary onPress={() => { setMenu(false); router.push(`/(app)/grupos/recurrentes?grupoId=${id}`); }} />
         <Button title="Compartir resumen del grupo" secondary disabled={shareUnavailable} onPress={() => { setMenu(false); setShareMessage(groupShareMessage(group, group.pagosPorConfirmar ?? groupPayments.length)); }} />
         <Button title="Buscar movimientos y ver cambios" secondary onPress={() => { setMenu(false); router.push(`/(app)/grupos/movimientos?grupoId=${id}`); }} />
         {group.rolUsuario === "admin" && openForExpenses && <Button title="Editar grupo" secondary onPress={() => { setMenu(false); router.push(`/(app)/grupos/editar?grupoId=${id}`); }} />}

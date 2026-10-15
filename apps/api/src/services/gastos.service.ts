@@ -18,6 +18,8 @@ export async function crearGasto(
   grupoId: string,
   input: CrearGastoInput,
   creadoPor: string,
+  // A recurring rule creating its occurrence: the expense keeps a link to it.
+  origen?: { recurrenteId: string },
 ) {
   const participanteData = calcularParticipantes(input);
   let result;
@@ -42,6 +44,7 @@ export async function crearGasto(
           creadoPor,
           notas: input.notas,
           fecha: input.fecha ? new Date(input.fecha) : new Date(),
+          recurrenteId: origen?.recurrenteId,
           participantes: { create: participanteData },
         },
         include: {
@@ -90,7 +93,7 @@ async function gastoPorSolicitud(grupoId: string, input: CrearGastoInput, creado
   return previo;
 }
 
-function calcularParticipantes(input: CrearGastoInput) {
+export function calcularParticipantes(input: CrearGastoInput) {
   const { tipoDivision, montoTotal, participantes } = input;
 
   if (input.partes !== undefined) {
@@ -141,7 +144,7 @@ function calcularParticipantes(input: CrearGastoInput) {
   throw new Error("Tipo de división inválido");
 }
 
-async function validarMiembros(
+export async function validarMiembros(
   grupoId: string,
   pagadoPor: string,
   participanteIds: string[],

@@ -10,7 +10,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import DateTimePicker from "../../../src/components/ui/ExpenseDatePicker";
 import { canAddExpenses } from '../../../src/lib/groupLifecycle';
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../src/lib/api";
 import { errorMessage } from "../../../src/lib/errorMessage";
 import { Sheet } from "../../../src/components/ui/Sheet";
@@ -88,6 +88,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   const { isLoading } = groupQuery;
   const user = useAuthStore((s) => s.usuario);
   const create = useCrearGasto(groupId, params.gastoId);
+  const qc = useQueryClient();
   const interpret = useInterpretarGasto();
   const proposalRequest = useRef<AbortController | null>(null);
   const [preparing, setPreparing] = useState(false);
@@ -131,6 +132,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   const [detail, setDetail] = useState(false);
   // Splitwise-style: the default split is a sentence; the full editor opens on request.
   const [customSplit, setCustomSplit] = useState(false);
+  // "¿Se repite?": rent, internet… The first one is added now and then on schedule.
+  const [repeat, setRepeat] = useState<"no" | "semanal" | "quincenal" | "mensual">("no");
   const [picker, setPicker] = useState<"grupo" | "pagador" | null>(null);
   const saving = useRef(false);
   const requestId = useRef(newRequestId());
@@ -326,11 +329,23 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
         if (!refreshed?.data) throw new Error("Sin conexión: el borrador sigue aquí. Vuelve a intentarlo cuando tengas internet.");
         if (refreshed.data.moneda !== (group?.moneda || "PEN")) throw new Error("La moneda del grupo cambió. Revisa el gasto antes de enviarlo.");
         if (!refreshed.data.miembros.some((m: { usuarioId: string }) => m.usuarioId === payload.pagadoPor) || payload.participantes.some((p) => !refreshed.data.miembros.some((m: { usuarioId: string }) => m.usuarioId === p.usuarioId))) throw new Error("Los integrantes del grupo cambiaron. Revisa las personas antes de guardar.");
-        const frozen = { ...payload, solicitudId: requestId.current };
-        const snapshot = captureDraft(frozen);
-        await draft.persist(snapshot); setPending(frozen);
-        await create.mutateAsync(frozen);
-        await draft.clear();
+        if (repeat !== "no") {
+          // The first time is the chosen day; it must be today (earlier ones are normal expenses).
+          const day = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+          const now = new Date();
+          const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+          if (day !== today) throw new Error("Para que se repita, la primera vez es hoy. Cambia la fecha a hoy o guárdalo como gasto normal.");
+          const { fecha: _fecha, solicitudId: _old, ...rule } = payload;
+          await api.post(`/grupos/${groupId}/recurrentes`, { ...rule, frecuencia: repeat, primeraFecha: day, solicitudId: requestId.current });
+          await draft.clear();
+          await Promise.all(["chat", "grupos", "recurrentes"].map((key) => qc.invalidateQueries({ queryKey: [key] })));
+        } else {
+          const frozen = { ...payload, solicitudId: requestId.current };
+          const snapshot = captureDraft(frozen);
+          await draft.persist(snapshot); setPending(frozen);
+          await create.mutateAsync(frozen);
+          await draft.clear();
+        }
       } else await create.mutateAsync(payload);
       setPending(undefined);
       setAmount("");
@@ -341,6 +356,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       setValues({});
       setMode("igual");
       setCustomSplit(false);
+      setRepeat("no");
       setCategory("otro");
       setCategoryPicked(false);
       setDate(new Date());
@@ -809,6 +825,28 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
               {detail ? "Ocultar detalles" : `＋ ${sameDay(date, new Date()) ? "Hoy" : date.toLocaleDateString("es-PE", { day: "numeric", month: "short" })} · Categoría (${({ comida: "Comida", transporte: "Transporte", alojamiento: "Alojamiento", entretenimiento: "Diversión", compras: "Compras", otro: "Otro" } as Record<string, string>)[category] ?? "Otro"}) y nota`}
             </Label>
           </Pressable>
+          {!params.gastoId && params.cuenta !== "1" && (detail || group.tipo === "roomies" || group.tipo === "pareja") && (
+            <View accessibilityRole="radiogroup" accessibilityLabel="¿Se repite?" style={{ gap: 8 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Ionicons name="repeat" size={18} color={palette.purple} />
+                <Label size={14} weight="bold">¿Se repite?</Label>
+                <Label size={12} color={palette.muted}>Alquiler, internet, luz…</Label>
+              </View>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {([["no", "No"], ["semanal", "Cada semana"], ["quincenal", "Cada 15 días"], ["mensual", "Cada mes"]] as const).map(([value, title]) => (
+                  <Pressable key={value} accessibilityRole="radio" aria-checked={repeat === value} accessibilityLabel={title} onPress={() => { cancelProposal(); setRepeat(value); }}
+                    style={{ minHeight: 40, paddingHorizontal: 14, borderRadius: 20, justifyContent: "center", borderWidth: 1.5, borderColor: repeat === value ? palette.purple : palette.line, backgroundColor: repeat === value ? palette.lilac : "white" }}>
+                    <Label size={13} weight="bold" color={repeat === value ? palette.purple : palette.ink}>{title}</Label>
+                  </Pressable>
+                ))}
+              </View>
+              {repeat !== "no" && (
+                <Label size={12} color={palette.muted}>
+                  {`Se anota hoy y luego ${repeat === "semanal" ? "cada semana" : repeat === "quincenal" ? "cada 15 días" : `cada mes, el día ${date.getDate()}`}, con el mismo monto y reparto. Puedes pausarlo o quitarlo desde las opciones del grupo.`}
+                </Label>
+              )}
+            </View>
+          )}
           {detail && (
             <Card>
             <Field label="Fecha">
@@ -881,7 +919,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
           )}
           {!!error && <ErrorBox message={error} />}
           <Button
-            title={params.gastoId ? "Guardar corrección" : params.cuenta === "1" ? "Guardar total y reparto" : "Guardar gasto"}
+            title={params.gastoId ? "Guardar corrección" : params.cuenta === "1" ? "Guardar total y reparto" : repeat !== "no" ? "Guardar y repetir" : "Guardar gasto"}
             onPress={save}
             loading={create.isPending}
             disabled={!formReady || draft.storageError || !valid || !description.trim() || !payer}
