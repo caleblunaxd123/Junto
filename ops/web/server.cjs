@@ -6,7 +6,8 @@ const path = require('node:path');
 const apiOrigin = process.env.WEB_API_ORIGIN || 'https://junto.lunalav.pe';
 const root = path.resolve(process.env.WEB_ROOT || path.join(__dirname, '../../apps/mobile/dist-beta'));
 const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.json':'application/json', '.webmanifest':'application/manifest+json', '.png':'image/png', '.ico':'image/x-icon', '.svg':'image/svg+xml', '.ttf':'font/ttf', '.woff2':'font/woff2', '.apk':'application/vnd.android.package-archive' };
-function createServer() {
+function createServer(webRoot = root) {
+  const servingRoot = path.resolve(webRoot);
   return http.createServer((req,res) => {
     res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('Referrer-Policy','strict-origin-when-cross-origin');
@@ -21,13 +22,13 @@ function createServer() {
     if(pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json'});res.end(req.method==='HEAD'?undefined:'{"status":"ok"}');return;}
     if(pathname==='/app'){res.writeHead(308,{Location:'/app/'});res.end();return;}
     if(!pathname.startsWith('/app/') || pathname.includes('\\') || pathname.includes('\0') || pathname.split('/').some(p=>p==='..'||p.startsWith('.'))){res.writeHead(404);res.end();return;}
-    const file = path.resolve(root,pathname.slice('/app/'.length) || 'index.html');
-    if(file!==root && !file.startsWith(root+path.sep)){res.writeHead(404);res.end();return;}
+    const file = path.resolve(servingRoot,pathname.slice('/app/'.length) || 'index.html');
+    if(file!==servingRoot && !file.startsWith(servingRoot+path.sep)){res.writeHead(404);res.end();return;}
     // Deep navigation reloads get the SPA. Missing assets never get HTML masquerading as JS.
     let selected=file;
     try {if(!fs.statSync(selected).isFile())throw new Error();} catch {
       if(path.extname(file) || /\/(assets|_expo)\//.test(pathname)){res.writeHead(404);res.end();return;}
-      selected=path.join(root,'index.html');
+      selected=path.join(servingRoot,'index.html');
     }
     try {
       const stat=fs.statSync(selected);res.setHeader('Content-Type',types[path.extname(selected)]||'application/octet-stream');
