@@ -6,6 +6,7 @@ import { authMiddleware } from "../middleware/auth";
 import { z } from "zod";
 import { getGroupChat, groupPresence } from "../services/groupChat.service";
 import { groupStatement } from "../services/statement.service";
+import { fijarPresupuesto, mesSchema, presupuestoDelMes, presupuestoSchema } from "../services/presupuesto.service";
 import { actualizarRecurrente, actualizarRecurrenteSchema, crearRecurrente, crearRecurrenteSchema, eliminarRecurrente, listarRecurrentes } from "../services/recurrentes.service";
 import { statementPdf, statementXlsx } from "../services/statementExport.service";
 import { createComment, pinMessage } from "../services/comentarios.service";
@@ -77,6 +78,15 @@ router.get("/:id/chat", async (req, res, next) => {
   } catch (error) { next(error); }
 });
 // The viewer's own notebook, reconciled with the group's current settlement plan.
+// Household budget: the month at a glance and setting a monthly limit per category.
+router.get("/:id/presupuesto", async (req, res, next) => {
+  try { res.set("Cache-Control", "private, no-store"); res.json(await presupuestoDelMes(z.string().uuid().parse(req.params.id), req.user!.userId, mesSchema.parse(req.query.mes))); }
+  catch (error) { next(error); }
+});
+router.put("/:id/presupuesto", async (req, res, next) => {
+  try { res.json(await fijarPresupuesto(z.string().uuid().parse(req.params.id), presupuestoSchema.parse(req.body), req.user!.userId)); }
+  catch (error) { next(error); }
+});
 // Recurring expenses (rent, internet…): program, list, pause/resume, stop.
 router.post("/:id/recurrentes", async (req, res, next) => {
   try { res.status(201).json(await crearRecurrente(z.string().uuid().parse(req.params.id), crearRecurrenteSchema.parse(req.body), req.user!.userId)); }

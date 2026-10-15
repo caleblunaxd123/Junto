@@ -538,6 +538,7 @@ export default function Group() {
               : openForExpenses ? <Chip primary icon="add" title="Agregar gasto" onPress={goExpense} />
               : <Chip primary icon="document-text-outline" title={group.estado === 'cerrado' ? 'Ver cuentas finales' : 'Revisar cuentas pendientes'} onPress={() => router.push(`/(app)/cuentas/cuaderno?grupoId=${id}`)} />}
             {(paymentToReview || myWaitingPayment || group.balanceUsuario.debes > 0 || openForExpenses) && <Chip icon="document-text-outline" title="Sacar cuentas" onPress={() => router.push(`/(app)/cuentas/cuaderno?grupoId=${id}`)} />}
+            {(group.tipo === "roomies" || group.tipo === "pareja") && <Chip icon="pie-chart-outline" title="Presupuesto" onPress={() => router.push(`/(app)/grupos/presupuesto?grupoId=${id}`)} />}
             {openForExpenses && (paymentToReview || myWaitingPayment || group.balanceUsuario.debes > 0) && <Chip icon="add" title="Agregar gasto" onPress={goExpense} />}
             {group.balanceUsuario.teDeben > 0 && <Chip highlight icon="notifications-outline" title="Recordar" onPress={() => setWhoPaid(true)} />}
             {openForExpenses && <Chip icon="person-add-outline" title="Invitar" onPress={goInvite} />}
@@ -640,6 +641,7 @@ export default function Group() {
 
       <Sheet visible={menu} onClose={() => setMenu(false)} closeLabel="Cerrar opciones" eyebrow="GRUPO" title={group.nombre} subtitle={`${groupStateLabel(group)} · ${group.moneda ?? "PEN"}${group.archivado ? ' · Archivado para ti' : ''}`} width={520}>
         <Button title="Sacar cuentas · PDF y Excel" onPress={() => { setMenu(false); router.push(`/(app)/cuentas/cuaderno?grupoId=${id}`); }} />
+        <Button title="Presupuesto del mes" secondary onPress={() => { setMenu(false); router.push(`/(app)/grupos/presupuesto?grupoId=${id}`); }} />
         <Button title="Gastos que se repiten" secondary onPress={() => { setMenu(false); router.push(`/(app)/grupos/recurrentes?grupoId=${id}`); }} />
         <Button title="Compartir resumen del grupo" secondary disabled={shareUnavailable} onPress={() => { setMenu(false); setShareMessage(groupShareMessage(group, group.pagosPorConfirmar ?? groupPayments.length)); }} />
         <Button title="Buscar movimientos y ver cambios" secondary onPress={() => { setMenu(false); router.push(`/(app)/grupos/movimientos?grupoId=${id}`); }} />

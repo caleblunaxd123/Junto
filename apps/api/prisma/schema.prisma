@@ -147,6 +147,7 @@ model Grupo {
   avisos          AvisoGrupo[]
   cuentaAnterior  CuentaRapida?
   recurrentes     GastoRecurrente[]
+  presupuestos    PresupuestoGrupo[]
   eventos         EventoGrupo[]
 
   @@unique([creadoPor, solicitudImportacion])
@@ -561,4 +562,20 @@ model GastoRecurrente {
   @@index([activo, proximaFecha])
   @@index([grupoId])
   @@map("gastos_recurrentes")
+}
+
+// Monthly household budget per category ("total" for the whole group). Spending is never stored here:
+// it is read from the group's expenses of that month, so the budget can never drift from the ledger.
+model PresupuestoGrupo {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  grupoId       String   @map("grupo_id") @db.Uuid
+  categoria     String   @db.VarChar(30)
+  montoMensual  Int      @map("monto_mensual") // en centavos
+  actualizadoPor String  @map("actualizado_por") @db.Uuid
+  fechaActualizacion DateTime @default(now()) @updatedAt @map("fecha_actualizacion")
+
+  grupo         Grupo    @relation(fields: [grupoId], references: [id])
+
+  @@unique([grupoId, categoria])
+  @@map("presupuestos_grupo")
 }
