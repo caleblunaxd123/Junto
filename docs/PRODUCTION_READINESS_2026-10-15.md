@@ -11,7 +11,7 @@ La revisión parte de la rama `feat/junto-2-persona-a-persona` y del estilo actu
 - **Configuración:** el arranque de producción rechaza orígenes CORS mal formados, rutas, comodines y credenciales embebidas. La API termina las solicitudes en curso al recibir SIGTERM y desconecta la base con espera limitada. TypeScript de la API usa tipos de Node, evitando que declaraciones globales de React Native alteren la compilación del servidor.
 - **Presentación:** «Te deben» y «Debes» se muestran por separado; importes grandes y presupuestos se acomodan a 320 px. El botón oficial de Google sigue el ancho del formulario. Se conservan la nueva bienvenida y el splash aportados por el propietario. La tipografía importa únicamente los cuatro pesos usados, evitando exportar el resto de la familia y manteniendo su apariencia.
 - **Verificación continua:** CI incorpora estado de cuenta/exportaciones, cierre/historial, pagos recibidos con captura, recurrentes, presupuesto y correo de cuenta. Construye la web de producción, audita la imagen de API y prueba migraciones y arranque en contenedores efímeros. El test simulado de lectura de chat ya no puede recurrir a la base configurada en el equipo. La prueba del servidor estático crea sus propios archivos temporales y comprueba también las cabeceras de descarga, sin depender de un export local no versionado.
-- **Repositorio:** se amplían exclusiones de entornos y firmas. Se revisan los archivos versionados y nuevos antes de subirlos; capturas, logs, tar de Docker y datos QA permanecen en `ops/artifacts/`, fuera de Git.
+- **Repositorio:** se amplían exclusiones de entornos y firmas. Se restauran los 19 binarios opcionales de Lightning CSS que faltaban para otras plataformas, tomando sus versiones exactas e integridad del registro npm; ninguna versión existente cambia. Una prueba evita volver a guardar un lockfile que funcione solo en Windows. Se revisan los archivos versionados y nuevos antes de subirlos; capturas, logs, tar de Docker y datos QA permanecen en `ops/artifacts/`, fuera de Git.
 
 ## Evidencia local
 
@@ -19,11 +19,11 @@ La revisión parte de la rama `feat/junto-2-persona-a-persona` y del estilo actu
 | --- | --- |
 | Compilación API | Correcta |
 | Pruebas de dominio | 104/104 |
-| Pruebas de UX/configuración y servidor web | 115 correctas; 1 omitida porque no se publica un APK en este export |
+| Pruebas de UX/configuración y servidor web | 116 correctas; 1 omitida porque no se publica un APK en este export |
 | Integración con PostgreSQL local | 27 suites correctas: autenticación/eliminación, permisos, idempotencia, concurrencia, pagos, OCR/comprobantes, notificaciones simuladas, invitaciones, monedas, cuentas directas/simplificadas, PDF/Excel, ciclo de grupo, recurrentes, presupuesto y SMTP loopback |
 | TypeScript y ESLint móvil | Correctos |
 | Compatibilidad de paquetes con Expo | `expo install --check`: correcta |
-| Export web de producción | Correcto; sin source maps y solo configuración pública |
+| Export web de producción | Correcto en Windows y Linux desde instalación limpia; sin source maps y solo configuración pública |
 | Interfaz del grupo finalizado | Export real revisado a 320, 390 y 1280 px: presupuesto consultable y recurrentes pausados, sin acciones de edición o reanudación ni desbordes |
 | Imagen Docker de producción | Construida con Node 22 y el lockfile del repositorio |
 | `npm audit` dentro de esa imagen | 0 vulnerabilidades |

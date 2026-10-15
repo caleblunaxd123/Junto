@@ -38,6 +38,7 @@ jobs:
       - run: node --test ops/test-group-chat-read.cjs
       - run: node --test ops/test-statement-ui.cjs ops/test-group-lifecycle-ui.cjs ops/test-contabo-config.cjs
       - run: node --test ops/web/test-server.cjs
+      - run: node --test ops/test-native-lock.cjs
       - run: npm run build:api
       - run: npm run typecheck --workspace=apps/mobile
       - run: npm run lint --workspace=apps/mobile

@@ -4,7 +4,7 @@
 
 Se conserva la identidad esmeralda/menta actual y se incluyen cuaderno con PDF/Excel, cierre de grupos, gastos recurrentes y presupuesto. La auditoría, correcciones y evidencia reproducible están en `docs/PRODUCTION_READINESS_2026-10-15.md`. Las secciones de betas siguientes son antecedentes; no describen todas las funciones de esta candidata.
 
-Validación local: 104 pruebas de dominio, 115 de UX/configuración, 27 suites de integración con PostgreSQL, tipos/lint, export web de producción, compatibilidad Expo y contenedor con las 27 migraciones desde cero, sin desfase de esquema. La imagen de API contiene cero vulnerabilidades reportadas por npm; usa usuario no privilegiado, filesystem de solo lectura y un rol de base con CRUD restringido. GitHub Actions repite los controles y ahora incluye las funciones recientes.
+Validación local: 104 pruebas de dominio, 116 de UX/configuración, 27 suites de integración con PostgreSQL, tipos/lint, export web de producción, compatibilidad Expo y contenedor con las 27 migraciones desde cero, sin desfase de esquema. La imagen de API contiene cero vulnerabilidades reportadas por npm; usa usuario no privilegiado, filesystem de solo lectura y un rol de base con CRUD restringido. GitHub Actions repite los controles y ahora incluye las funciones recientes.
 
 La validación local no acredita entrega real de push, recorridos físicos de Google/WhatsApp/adjuntos/TalkBack ni publicación en tiendas. El despliegue debe usar el respaldo y procedimiento de `ops/contabo/README.md`; subir el código a GitHub no actualiza por sí solo el servidor ni el APK.
 
