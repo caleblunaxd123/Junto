@@ -1,5 +1,9 @@
 # JUNTO — controles previos a publicación
 
+## Beta 1.5.0 publicada el 15 de octubre de 2026
+
+API, web y [APK 1.5.0/código 10](https://junto.lunalav.pe/app/descargas/JUNTO-beta-1.5.0.apk) actualizadas desde `252bf7a`, con CI verde, respaldo restaurado/copia externa cifrada y 27 migraciones en producción. Resend activo con dominio exclusivo verificado, TLS obligatorio y recepción real en Gmail comprobada con SPF/DKIM correctos. Actualización en el emulador sin desinstalar, sesión conservada y diseño nuevo visible. Evidencia, recuperación y límites: `ops/web/DEPLOY-20261015-BETA150.md`. Distribución directa para pruebas; no publicación en tienda.
+
 ## Candidata actual: revisión del 15 de octubre de 2026
 
 Se conserva la identidad esmeralda/menta actual y se incluyen cuaderno con PDF/Excel, cierre de grupos, gastos recurrentes y presupuesto. La auditoría, correcciones y evidencia reproducible están en `docs/PRODUCTION_READINESS_2026-10-15.md`. Las secciones de betas siguientes son antecedentes; no describen todas las funciones de esta candidata.
