@@ -275,10 +275,10 @@ export default function Group() {
     }
   }
 
-  async function recordPayment(monto: number, metodo: string, conversion?: PaymentConversion, fechaEfectiva?: string) {
+  async function recordPayment(monto: number, metodo: string, conversion?: PaymentConversion, fechaEfectiva?: string, comprobanteId?: string) {
     if (!recordFor) return;
     try {
-      await api.post("/pagos/recibido", { grupoId: id, pagadorId: recordFor.person.id, ...(recordFor.receiver ? { receptorId: recordFor.receiver.id } : {}), monto, metodo, fechaEfectiva, ...(conversion ? { conversion } : {}) });
+      await api.post("/pagos/recibido", { grupoId: id, pagadorId: recordFor.person.id, ...(recordFor.receiver ? { receptorId: recordFor.receiver.id } : {}), monto, metodo, fechaEfectiva, ...(conversion ? { conversion } : {}), ...(comprobanteId ? { comprobanteId } : {}) });
     } catch (err) {
       throw new Error(errorMessage(err, "No pudimos registrar el pago. Revisa tu conexión y reintenta."));
     }

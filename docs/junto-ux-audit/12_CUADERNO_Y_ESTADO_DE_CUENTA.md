@@ -127,3 +127,17 @@ Para `seed`, se indica `JUNTO_QA_VIEWER_ID` de una cuenta ficticia verificada ab
 genera una captura con operación única; se copia desde `ops/artifacts/statement-voucher/captura-qa.png` a la
 galería del emulador y se registra por la app antes de `pending`. Los estados, PDFs, Excel y capturas nativas
 quedan en `ops/artifacts/statement-voucher/`. No se usaron pagos ni destinatarios reales.
+
+## Captura en el pago recibido (15 oct 2026)
+
+Quien recibe el dinero ahora puede adjuntar la captura que le mandaron al registrar «Ya me pagó»
+(Yape, Plin o transferencia; en efectivo no aparece). Es opcional. La captura se sube al elegirla,
+JUNTO propone monto, método y fecha leídos, y al guardar queda vinculada al pago. Mismas reglas que
+el pagador: solo la ve quien pagó, quien recibe y quien aprueba; solo quien la subió puede usarla;
+la misma imagen o número de operación no respalda dos pagos.
+
+Validado en el emulador (`screens/native/30–34`): Sofía registró el Yape de S/ 50 de Luis con captura
+ficticia («PRUEBA QA - NO ES UN PAGO REAL»), el pago quedó confirmado con el comprobante leído, el
+cuaderno lo marca «con comprobante» y el PDF dice «comprobante en JUNTO». Prueba HTTP:
+`ops/test-received-voucher.cjs`. También: el día del pago se muestra legible, la hoja de pago recibido
+dice «¿Te pagó en otra moneda?», y el PDF/Excel escriben el método con mayúscula.

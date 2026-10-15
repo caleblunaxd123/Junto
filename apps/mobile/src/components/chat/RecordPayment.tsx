@@ -1,7 +1,11 @@
 import { PaymentDate, todayLocal, validDate } from "../PaymentDate";
 import { PaymentExchange, resolveExchange, type ExchangeDraft } from "../PaymentExchange";
 import React, { useLayoutEffect, useState } from "react";
-import { Pressable, TextInput, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, TextInput, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { pickVoucherImage } from "../../lib/voucherPicker";
+import { api } from "../../lib/api";
+import { errorMessage } from "../../lib/errorMessage";
 import { Avatar, Button, ErrorBox, Label, palette, design } from "../ui/Design";
 import { Sheet } from "../ui/Sheet";
 import { parseMoney } from "../../lib/expensePreview";
@@ -20,7 +24,7 @@ export type Method = (typeof methods)[number]["id"];
 /** "Ana ya me pagó": the receiver records money already received; it counts at once. */
 export function RecordPayment({ person, receiver, moneda = "PEN", grupoId, max, onClose, onSave }: {
   person: { id: string; nombre: string } | null; receiver?: { id: string; nombre: string }; max: number; moneda?: CurrencyCode; grupoId?: string; onClose: () => void;
-  onSave: (monto: number, metodo: Method, conversion?: PaymentConversion, fechaEfectiva?: string) => Promise<void>;
+  onSave: (monto: number, metodo: Method, conversion?: PaymentConversion, fechaEfectiva?: string, comprobanteId?: string) => Promise<void>;
 }) {
   const money = (value: number) => formatMoney(value, moneda);
   const [amount, setAmount] = useState("");
@@ -31,15 +35,38 @@ export function RecordPayment({ person, receiver, moneda = "PEN", grupoId, max, 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [shown, setShown] = useState(false);
+  // Optional screenshot the payer sent you. Uploaded when picked; linked to the payment on save.
+  const [voucher, setVoucher] = useState<{ id: string; uri: string } | null>(null);
+  const [reading, setReading] = useState(false);
+  const [voucherNote, setVoucherNote] = useState("");
   // Initialize before paint: a fast first edit must not be overwritten by a delayed effect.
-  useLayoutEffect(() => { setAmount(max ? centavosASoles(max) : ""); setMethod("efectivo"); setExchange(null); setDate(todayLocal()); setError(""); }, [person?.id, receiver?.id, max]);
+  useLayoutEffect(() => { setAmount(max ? centavosASoles(max) : ""); setMethod("efectivo"); setExchange(null); setDate(todayLocal()); setError(""); setVoucher(null); setVoucherNote(""); }, [person?.id, receiver?.id, max]);
   useLayoutEffect(() => { setShown(false); }, [person?.id, receiver?.id]);
   if (!person) return null;
   const cents = exchange ? fx.conversion?.monto ?? null : parseMoney(amount);
   const tooMuch = !!cents && cents > max;
+  async function attach(camera: boolean) {
+    if (!grupoId || reading || busy) return;
+    const picked = await pickVoucherImage(camera).catch(() => ({ error: "No pudimos abrir tus fotos. Reintenta." }));
+    if (!picked) return;
+    if ("error" in picked) { setVoucherNote(picked.error); return; }
+    try {
+      setReading(true); setVoucherNote("");
+      const { data } = await api.post<{ comprobanteId: string; monto: number | null; app: "yape" | "plin" | null; fecha: string | null; duplicado: string | null; advertencias: string[] }>("/pagos/comprobantes", { grupoId, imagen: picked.base64 }, { timeout: 60_000 });
+      if (data.duplicado) { setVoucherNote(data.duplicado); return; }
+      setVoucher({ id: data.comprobanteId, uri: picked.uri });
+      // What it reads is a proposal; the person still sees and can change every field.
+      if (!exchange && data.monto && data.monto <= max) setAmount(centavosASoles(data.monto));
+      if (data.app) setMethod(data.app);
+      if (data.fecha && validDate(data.fecha)) setDate(data.fecha);
+      setVoucherNote(data.advertencias[0] ?? (data.monto ? "Leímos la captura: revisa monto, fecha y método." : "Adjuntamos la captura. No pudimos leer el monto: escríbelo."));
+    } catch (err) {
+      setVoucherNote(errorMessage(err, "No pudimos subir la captura. Puedes guardar el pago sin ella."));
+    } finally { setReading(false); }
+  }
   async function save() {
-    if (!cents || tooMuch || busy || !validDate(date)) return;
-    try { setBusy(true); setError(""); await onSave(cents, method, fx.conversion ? { monedaOrigen: fx.conversion.monedaOrigen, montoOrigen: fx.conversion.montoOrigen, tipoCambio: fx.conversion.tipoCambio, cotizacionId: fx.conversion.cotizacionId } : undefined, date); }
+    if (!cents || tooMuch || busy || reading || !validDate(date)) return;
+    try { setBusy(true); setError(""); await onSave(cents, method, fx.conversion ? { monedaOrigen: fx.conversion.monedaOrigen, montoOrigen: fx.conversion.montoOrigen, tipoCambio: fx.conversion.tipoCambio, cotizacionId: fx.conversion.cotizacionId } : undefined, date, voucher?.id); }
     catch (err) { setError(err instanceof Error ? err.message : "No pudimos registrar el pago. Reintenta."); }
     finally { setBusy(false); }
   }
@@ -69,9 +96,35 @@ export function RecordPayment({ person, receiver, moneda = "PEN", grupoId, max, 
               </Pressable>
             ))}
           </View>
+          {method !== "efectivo" && grupoId && (
+            <View style={{ gap: 8, padding: 12, borderRadius: 16, borderWidth: 1, borderStyle: voucher ? "solid" : "dashed", borderColor: voucher ? "#BDEBD9" : "#C9B8FF", backgroundColor: voucher ? palette.mint : palette.lilac }}>
+              {voucher ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <Image source={{ uri: voucher.uri }} accessibilityLabel="Captura adjunta" style={{ width: 48, height: 64, borderRadius: 8, backgroundColor: "white" }} resizeMode="cover" />
+                  <View style={{ flex: 1 }}>
+                    <Label size={14} weight="bold" color="#007B60">Captura adjunta</Label>
+                    <Label size={12} color={palette.muted}>La ven solo quien pagó, quien recibe y quien aprueba.</Label>
+                  </View>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Quitar captura" hitSlop={8} onPress={() => { setVoucher(null); setVoucherNote(""); }} style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
+                    <Ionicons name="close" size={20} color={palette.muted} />
+                  </Pressable>
+                </View>
+              ) : (
+                <>
+                  <Label size={14} weight="bold" color={palette.purple}>¿Te mandó la captura? (opcional)</Label>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <View style={{ flex: 1 }}><Button compact secondary title={reading ? "Leyendo…" : "Elegir captura"} disabled={reading || busy} onPress={() => { void attach(false); }} /></View>
+                    <View style={{ flex: 1 }}><Button compact secondary title="Tomar foto" disabled={reading || busy} onPress={() => { void attach(true); }} /></View>
+                  </View>
+                  {reading && <ActivityIndicator color={palette.purple} />}
+                </>
+              )}
+              {!!voucherNote && <Label size={12} color={palette.ink}>{voucherNote}</Label>}
+            </View>
+          )}
           {receiver && <Label size={13} color={palette.purple}>Lo registras como administrador por alguien sin cuenta. Confirma con {firstName(receiver.nombre)} que recibió el dinero antes de guardar.</Label>}
           {!!error && <ErrorBox message={error} />}
-          <Button title="Guardar pago recibido" loading={busy} disabled={!shown || !cents || tooMuch || !validDate(date)} onPress={() => { void save(); }} />
+          <Button title="Guardar pago recibido" loading={busy} disabled={!shown || reading || !cents || tooMuch || !validDate(date)} onPress={() => { void save(); }} />
     </Sheet>
   );
 }

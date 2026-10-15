@@ -32,6 +32,8 @@ export const registrarRecibidoSchema = z.object({
   grupoId: z.string().uuid(),
   monto: z.number().int().positive().max(999_999_999),
   metodo: z.enum(['yape', 'plin', 'transferencia', 'efectivo']),
+  // A screenshot the receiver uploaded first (POST /pagos/comprobantes); optional, cash has none.
+  comprobanteId: z.string().uuid().optional(),
 }).strict();
 
 // ~3 MB image in base64.

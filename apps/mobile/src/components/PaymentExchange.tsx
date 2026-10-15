@@ -24,7 +24,7 @@ export function PaymentExchange({ value, onChange, target, disabled, grupoId, fe
   const quote = useQuery<Quote>({ queryKey: ["cambio", grupoId, value?.monedaOrigen, target, fecha], enabled: !!value && !!grupoId && !!fecha && validDate(fecha) && value.monedaOrigen !== target,
     queryFn: () => api.get("/pagos/tipo-cambio", { params: { grupoId, origen: value!.monedaOrigen, fecha }, timeout: 10000 }).then((r) => r.data), retry: false, staleTime: 3600000 });
   return <View style={{ gap: 10 }}>
-    <Button compact secondary title={value ? "Volver a pagar en la moneda del grupo" : "¿Pagaste en otra moneda?"} disabled={disabled}
+    <Button compact secondary title={value ? (received ? "Volver a la moneda del grupo" : "Volver a pagar en la moneda del grupo") : received ? "¿Te pagó en otra moneda?" : "¿Pagaste en otra moneda?"} disabled={disabled}
       onPress={() => onChange(value ? null : { monedaOrigen: target === "USD" ? "PEN" : "USD", amount: "", rate: "" })} />
     {value && <Card style={{ backgroundColor: palette.lilac, gap: 12 }}>
       <Label weight="bold">Tipo de cambio acordado</Label>

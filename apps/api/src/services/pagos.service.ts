@@ -27,6 +27,27 @@ const pagoInclude = {
 export const HISTORY_LIMIT = 200;
 // A receiver can say "it never arrived" about a payment an admin approved for them, for this long.
 const REVERT_DAYS = 30;
+/**
+ * A draft voucher the uploader attaches to the payment they are recording (the payer reporting it, or
+ * the receiver/admin recording money already received). One screenshot never backs two payments.
+ */
+async function claimVoucher(tx: Prisma.TransactionClient, input: { comprobanteId?: string; grupoId: string; conversion?: PaymentConversion }, uploaderId: string, moneda: string) {
+  if (!input.comprobanteId) return null;
+  const voucher = await tx.comprobante.findFirst({
+    where: { id: input.comprobanteId, subidoPor: uploaderId, grupoId: input.grupoId, pagoId: null },
+    select: { id: true, hash: true, app: true, operacion: true, monedaLeida: true },
+  });
+  if (!voucher) throw new Error("El comprobante ya no está disponible. Súbelo otra vez.", 409);
+  if (voucher.monedaLeida && voucher.monedaLeida !== (input.conversion?.monedaOrigen ?? moneda)) throw new Error("La moneda del comprobante no coincide con la que registras. Usa la moneda original y revisa el cambio.");
+  // A group row lock alone cannot protect the same evidence submitted in two different groups.
+  const keys = [`voucher-image:${voucher.hash}`];
+  if (voucher.operacion && voucher.operacion.length >= 6) keys.push(`voucher-operation:${JSON.stringify([voucher.app, voucher.operacion])}`);
+  for (const key of keys.sort()) await transactionLock(tx, key);
+  const used = await voucherInUse(tx, voucher);
+  if (used) throw new Error(used, 409);
+  return voucher;
+}
+
 async function paymentCurrency(tx: Prisma.TransactionClient, input: { grupoId: string; metodo?: string; comprobanteId?: string; conversion?: PaymentConversion }) {
   const { moneda } = await tx.grupo.findUniqueOrThrow({ where: { id: input.grupoId }, select: { moneda: true } });
   if ((input.conversion?.monedaOrigen ?? moneda) !== "PEN" && (input.metodo === "yape" || input.metodo === "plin"))
@@ -129,21 +150,7 @@ export async function reportarPago(
     if (pendiente)
       throw new Error("Ya existe un pago esperando confirmación entre ustedes");
 
-    let voucher = null;
-    if (input.comprobanteId) {
-      voucher = await tx.comprobante.findFirst({
-        where: { id: input.comprobanteId, subidoPor: pagadorId, grupoId: input.grupoId, pagoId: null },
-        select: { id: true, hash: true, app: true, operacion: true, monedaLeida: true },
-      });
-      if (!voucher) throw new Error("El comprobante ya no está disponible. Súbelo otra vez.", 409);
-      if (voucher.monedaLeida && voucher.monedaLeida !== (input.conversion?.monedaOrigen ?? moneda)) throw new Error("La moneda del comprobante no coincide con la que registras. Usa la moneda original y revisa el cambio.");
-      // A group row lock alone cannot protect the same evidence submitted in two different groups.
-      const keys = [`voucher-image:${voucher.hash}`];
-      if (voucher.operacion && voucher.operacion.length >= 6) keys.push(`voucher-operation:${JSON.stringify([voucher.app, voucher.operacion])}`);
-      for (const key of keys.sort()) await transactionLock(tx, key);
-      const used = await voucherInUse(tx, voucher);
-      if (used) throw new Error(used, 409);
-    }
+    const voucher = await claimVoucher(tx, input, pagadorId, moneda);
 
     const created = await tx.pago.create({
       data: {
@@ -359,11 +366,14 @@ export async function registrarRecibido(input: RegistrarRecibidoInput, userId: s
     const moneda = await paymentCurrency(tx, input);
     const conversion = await paymentConversion(tx, input, moneda);
     if (input.monto > limit) throw new Error(`El pago no puede superar ${money(limit, moneda)}: es lo que esta persona aún ${receptorId === userId ? "te debe" : "debe al receptor"}`);
+    // Optional: the screenshot the payer sent you (Yape, Plin, transfer). Cash has none.
+    const voucher = await claimVoucher(tx, input, userId, moneda);
     const now = new Date();
     const created = await tx.pago.create({
       data: { grupoId: input.grupoId, pagadorId: input.pagadorId, receptorId, monto: input.monto, ...conversion, feejunto: 0, metodo: input.metodo, estado: "exitoso", nota: input.nota || null, fechaEfectiva: input.fechaEfectiva ? new Date(`${input.fechaEfectiva}T00:00:00Z`) : now, fechaResolucion: now, resueltoPor: userId },
     });
     await savePaymentNotices(tx, created, "pago_confirmado", userId);
+    if (voucher) await tx.comprobante.update({ where: { id: voucher.id }, data: { pagoId: created.id } });
     await syncGroupClosure(tx, input.grupoId, userId);
     return tx.pago.findUniqueOrThrow({ where: { id: created.id }, include: pagoInclude });
   });

@@ -174,7 +174,7 @@ export default function PaymentDetail() {
           <Label size={13}>Cambio aplicado: 1 {pago.monedaOrigen} = {pago.tipoCambio} {pago.grupo.moneda ?? "PEN"}. Cubre {money(pago.monto)} de la deuda.</Label>
           {!!pago.referenciaCambio && <Label size={12} color={palette.muted}>Referencia: 1 {pago.referenciaCambio.origen} = {pago.referenciaCambio.tasa} {pago.referenciaCambio.destino} · {pago.referenciaCambio.fecha.slice(0, 10)} · {pago.referenciaCambio.fuente}. Es orientativa; el cambio aplicado es el acordado arriba.</Label>}
         </View>}
-        {!!pago.fechaEfectiva && <Label size={12} color={palette.muted}>Día del pago: {pago.fechaEfectiva.slice(0, 10)}.</Label>}
+        {!!pago.fechaEfectiva && <Label size={12} color={palette.muted}>Día del pago: {new Date(`${pago.fechaEfectiva.slice(0, 10)}T12:00:00`).toLocaleDateString("es-PE", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}.</Label>}
         <Label size={12} color={palette.muted}>
           Registrado el {new Date(pago.fechaPago).toLocaleString("es-PE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
           {pago.fechaResolucion ? ` · resuelto el ${new Date(pago.fechaResolucion).toLocaleDateString("es-PE", { day: "numeric", month: "short" })}` : ""}

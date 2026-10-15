@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import { formatMoney } from '@junto/shared/currency';
 import type { groupStatement } from './statement.service';
+const methodName = (metodo: string | null) => ({ yape: 'Yape', plin: 'Plin', transferencia: 'Transferencia', efectivo: 'Efectivo' } as Record<string, string>)[metodo ?? ''] ?? metodo ?? 'Pago';
 
 export type Statement = Awaited<ReturnType<typeof groupStatement>>;
 const categories: Record<string, string> = { comida: 'Comida', transporte: 'Transporte', alojamiento: 'Alojamiento', entretenimiento: 'Entretenimiento', compras: 'Compras', otro: 'Otros' };
@@ -125,7 +126,7 @@ export function statementPdf(s: Statement, timeZone = 'America/Lima'): Promise<B
     inTable = true; tableHeader();
     for (const [i, e] of s.movimientos.entries()) {
       const title = concept(e);
-      const detail = e.tipo === 'gasto' ? `${money(e.monto)} - ${e.pagaste ? 'pagaste tú' : `pagó ${e.pagadorNombre}`} - tu parte ${money(e.tuParte)}` : `${money(e.monto)} - ${e.metodo ?? 'pago'} - ${state(e.estado)}${e.conComprobante ? ' - comprobante en JUNTO' : ''}`;
+      const detail = e.tipo === 'gasto' ? `${money(e.monto)} - ${e.pagaste ? 'pagaste tú' : `pagó ${e.pagadorNombre}`} - tu parte ${money(e.tuParte)}` : `${money(e.monto)} - ${methodName(e.metodo)} - ${state(e.estado)}${e.conComprobante ? ' - comprobante en JUNTO' : ''}`;
       const registered = day(e.fecha, timeZone) !== day(e.fechaRegistro, timeZone) ? `Anotado el ${date(e.fechaRegistro)}` : '';
       doc.font('Helvetica-Bold').fontSize(9);
       const titleH = doc.heightOfString(title, { width: 201 });
