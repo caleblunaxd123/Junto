@@ -132,8 +132,8 @@ export default function Activity() {
           {rest.map((e, index) => (
             <React.Fragment key={e.id}>
             {(index === 0 || dayLabel(rest[index - 1].fecha) !== dayLabel(e.fecha)) && (
-              <Label accessibilityRole="header" size={13} weight="bold" color={palette.muted} style={{ marginTop: index ? 8 : 0, textTransform: "capitalize" }}>
-                {dayLabel(e.fecha)}
+              <Label accessibilityRole="header" size={13} weight="bold" color={palette.muted} style={{ marginTop: index ? 8 : 0 }}>
+                {dayLabel(e.fecha).charAt(0).toUpperCase() + dayLabel(e.fecha).slice(1)}
               </Label>
             )}
             <Pressable

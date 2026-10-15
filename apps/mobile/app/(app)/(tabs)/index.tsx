@@ -9,7 +9,8 @@ import {
   ScrollView,
   RefreshControl,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { setStatusBarStyle } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { useGrupos, usePagos } from "../../../src/hooks/useGrupos";
@@ -23,6 +24,8 @@ import {
   palette,
   design,
   SkeletonRow,
+  BrandBackdrop,
+  brand,
 } from "../../../src/components/ui/Design";
 import { BalanceSummary } from "../../../src/components/BalanceSummary";
 import { Brand, SectionTitle } from "../../../src/components/ui/Reference";
@@ -47,6 +50,9 @@ import { formatMoney as money } from "@junto/shared/currency";
 export default function Home() {
   const { usuario } = useAuthStore();
   const { desktop, web } = useResponsiveLayout();
+  const insets = useSafeAreaInsets();
+  // White status bar text on the emerald band (other screens set their own on focus).
+  useFocusEffect(useCallback(() => { setStatusBarStyle("light"); }, []));
   const {
     data: groupData,
     isLoading,
@@ -108,30 +114,38 @@ export default function Home() {
   );
   const refreshing = isRefetching || payments.isRefetching || bills.isRefetching;
   return (
-    <SafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: palette.background }}>
+    <SafeAreaView edges={[]} style={{ flex: 1, backgroundColor: palette.background }}>
       <ScrollView
-        contentContainerStyle={{ width: "100%", maxWidth: web ? 1160 : undefined, alignSelf: "center", padding: desktop ? 32 : 16, paddingBottom: desktop ? 40 : 110, gap: desktop ? 24 : 16 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor={palette.primary} />}
+        style={{ backgroundColor: palette.background }}
+        contentContainerStyle={{ paddingBottom: desktop ? 40 : 110 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor="#FFFFFF" colors={[palette.primary]} progressBackgroundColor="#FFFFFF" />}
       >
-        <View style={[design.row, { justifyContent: "space-between" }]}>
-          {desktop ? <Label size={12} weight="bold" color={palette.muted} style={{ letterSpacing: 1 }}>TU ESPACIO EN JUNTO</Label> : <Brand compact />}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Abrir mi perfil"
-            onPress={() => router.push("/(app)/(tabs)/perfil")}
-            hitSlop={8}
-          >
-            <Avatar name={usuario?.nombre || "Tú"} photo={usuario?.fotoUrl} seed={usuario?.id} />
-          </Pressable>
-        </View>
-        <Label accessibilityRole="header" size={desktop ? 34 : 26} weight="extra">
-          Hola, {usuario?.nombre.split(" ")[0] || "amigo"}
-        </Label>
-        {usuario && <FirstSteps userId={usuario.id} />}
-        {desktop && <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-          <View style={{ flex: 1, minWidth: 200 }}><Label size={15} color={palette.muted}>Todo lo compartido, en un solo lugar.</Label></View>
-          <Button compact secondary title="Agregar" onPress={() => setSheet(true)} />
-        </View>}
+        {/* The brand band: who you are and where to start, on the JUNTO emerald. */}
+        <BrandBackdrop style={{ paddingTop: insets.top + 10, paddingBottom: desktop ? 72 : 64 }}>
+          <View style={{ width: "100%", maxWidth: web ? 1160 : undefined, alignSelf: "center", paddingHorizontal: desktop ? 32 : 16, gap: desktop ? 18 : 12 }}>
+            <View style={[design.row, { justifyContent: "space-between" }]}>
+              {desktop ? <Label size={12} weight="bold" color={brand.onBrandMuted} style={{ letterSpacing: 1 }}>TU ESPACIO EN JUNTO</Label> : <Brand compact inverse />}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Abrir mi perfil"
+                onPress={() => router.push("/(app)/(tabs)/perfil")}
+                hitSlop={8}
+                style={{ borderRadius: 26, borderWidth: 2, borderColor: "#FFFFFF66" }}
+              >
+                <Avatar name={usuario?.nombre || "Tú"} photo={usuario?.fotoUrl} seed={usuario?.id} />
+              </Pressable>
+            </View>
+            <View style={{ gap: 2 }}>
+              <Label accessibilityRole="header" size={desktop ? 34 : 27} weight="extra" color={brand.onBrand}>
+                Hola, {usuario?.nombre.split(" ")[0] || "amigo"}
+              </Label>
+              <Label size={14} color={brand.onBrandMuted}>Las cuentas claras. Los buenos momentos, juntos.</Label>
+            </View>
+            {usuario && <FirstSteps userId={usuario.id} onBrand />}
+            {desktop && <View style={{ flexDirection: "row", justifyContent: "flex-end" }}><Button compact secondary title="Agregar" onPress={() => setSheet(true)} /></View>}
+          </View>
+        </BrandBackdrop>
+        <View style={{ width: "100%", maxWidth: web ? 1160 : undefined, alignSelf: "center", paddingHorizontal: desktop ? 32 : 16, marginTop: desktop ? -48 : -44, gap: desktop ? 24 : 16 }}>
 
         {!unavailable && !empty && !isError && (isLoading || groups.length > 0) && <BalanceSummary groups={groups} loading={isLoading} />}
         <Invitations />
@@ -362,6 +376,7 @@ export default function Home() {
             </View>
           </>
         )}
+        </View>
       </ScrollView>
       {!empty && !desktop && <AddButton onPress={() => setSheet(true)} />}
       <CreateSheet visible={sheet} onClose={() => setSheet(false)} groups={groups.filter(canAddExpenses)} />

@@ -3,6 +3,7 @@ import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, Sha
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { setStatusBarStyle } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import * as Clipboard from "expo-clipboard";
@@ -29,6 +30,8 @@ export default function Notebook() {
   });
   const { refetch } = query;
   useFocusEffect(React.useCallback(() => { void refetch(); }, [refetch]));
+  // Paper page: dark status bar text.
+  useFocusEffect(React.useCallback(() => { setStatusBarStyle("dark"); }, []));
   const [copied, setCopied] = React.useState(false);
   const [shareError, setShareError] = React.useState("");
   const [needsReview, setNeedsReview] = React.useState(false);

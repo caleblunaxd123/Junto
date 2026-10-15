@@ -4,7 +4,8 @@ import { MotionImage } from "./MotionImage";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Path, Circle } from "react-native-svg";
 import { Label, palette, design } from "./Design";
-export function Brand({ compact = false }: { compact?: boolean }) {
+export function Brand({ compact = false, inverse = false }: { compact?: boolean; inverse?: boolean }) {
+  const mark = inverse ? "#FFFFFF" : palette.primary;
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
       <Svg
@@ -12,20 +13,21 @@ export function Brand({ compact = false }: { compact?: boolean }) {
         height={compact ? 38 : 48}
         viewBox="0 0 60 60"
       >
-        <Circle cx="18" cy="12" r="7" fill={palette.primary} />
-        <Circle cx="38" cy="8" r="8" fill={palette.primary} />
+        <Circle cx="18" cy="12" r="7" fill={mark} />
+        <Circle cx="38" cy="8" r="8" fill={mark} />
         <Path
           d="M14 23C8 25 1 39 3 47C5 53 13 51 18 44C21 55 32 56 35 47C22 49 23 42 23 32C24 24 19 21 14 23Z"
-          fill={palette.primary}
+          fill={mark}
         />
         <Path
           d="M33 20C23 23 25 38 27 43C30 47 35 43 35 37C35 28 43 29 44 36L47 47C50 55 60 50 58 43L54 29C52 19 42 17 33 20Z"
-          fill={palette.primary}
+          fill={mark}
         />
       </Svg>
       <Label
         size={compact ? 29 : 36}
         weight="extra"
+        color={inverse ? "#FFFFFF" : palette.ink}
         style={{ letterSpacing: -1.7 }}
       >
         JUNTO

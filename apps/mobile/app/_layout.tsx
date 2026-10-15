@@ -10,7 +10,6 @@ import {
   PlusJakartaSans_700Bold,
   PlusJakartaSans_800ExtraBold,
 } from "@expo-google-fonts/plus-jakarta-sans";
-import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import { useAuthStore } from "../src/store/auth.store";
 import { DialogHost } from "../src/components/ui/AppDialog";
@@ -44,7 +43,7 @@ function RootLayoutInner() {
   return (
     <>
       <DesktopShell><Stack screenOptions={{ headerShown: false }} /></DesktopShell>
-      <StatusBar style="dark" />
+      {/* Each screen sets the status bar on focus (white on the emerald band, dark on plain pages). */}
       <OfflineBanner />
       <DialogHost />
     </>

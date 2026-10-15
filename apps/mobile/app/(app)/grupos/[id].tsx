@@ -3,6 +3,7 @@ import { groupAccountExplanation } from "../../../src/lib/accountSummary";
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { View, Pressable, ActivityIndicator, Image, ScrollView, TextInput, Keyboard, KeyboardAvoidingView, Platform } from "react-native";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
+import { setStatusBarStyle } from "expo-status-bar";
 import { useIsFocused } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -80,6 +81,7 @@ export default function Group() {
     refetchChat();
   }, [refetch, refetchPayments, refetchChat]);
   useFocusEffect(refreshAll);
+  useFocusEffect(useCallback(() => { setStatusBarStyle("light"); }, []));
   // A join or payment changes the ledger too, not just its bubble. Structural sharing
   // keeps unchanged polling responses from triggering extra balance/history requests.
   useEffect(() => {

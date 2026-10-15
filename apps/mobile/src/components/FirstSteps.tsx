@@ -18,7 +18,7 @@ const outcomes: Record<string, string> = {
 };
 
 /** Optional, repeatable and per account: never consumes an invitation or creates a bill. */
-export function FirstSteps({ userId }: { userId: string }) {
+export function FirstSteps({ userId, onBrand = false }: { userId: string; onBrand?: boolean }) {
   const [visible, setVisible] = useState(false);
   const [step, setStep] = useState(0);
   const [result, setResult] = useState("");
@@ -45,8 +45,8 @@ export function FirstSteps({ userId }: { userId: string }) {
   const open = (next: number) => { setStep(next); setResult(""); setVisible(true); };
   return <>
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-      <Pressable accessibilityRole="button" onPress={() => open(0)} style={{ minHeight: 44, flexDirection: "row", gap: 6, alignItems: "center", paddingHorizontal: 12, borderRadius: 16, backgroundColor: palette.lilac }}><Ionicons name="compass-outline" size={18} color={palette.purple} /><Label size={12} weight="bold" color={palette.purple}>Guía rápida</Label></Pressable>
-      <Pressable accessibilityRole="button" onPress={() => open(3)} style={{ minHeight: 44, flexDirection: "row", gap: 6, alignItems: "center", paddingHorizontal: 12, borderRadius: 16, backgroundColor: palette.mint }}><Ionicons name="notifications-outline" size={18} color="#007B60" /><Label size={12} weight="bold" color="#007B60">Mis avisos</Label></Pressable>
+      <Pressable accessibilityRole="button" onPress={() => open(0)} style={{ minHeight: 44, flexDirection: "row", gap: 6, alignItems: "center", paddingHorizontal: 12, borderRadius: 16, backgroundColor: onBrand ? "#FFFFFF24" : palette.lilac }}><Ionicons name="compass-outline" size={18} color={onBrand ? "#FFFFFF" : palette.purple} /><Label size={12} weight="bold" color={onBrand ? "#FFFFFF" : palette.purple}>Guía rápida</Label></Pressable>
+      <Pressable accessibilityRole="button" onPress={() => open(3)} style={{ minHeight: 44, flexDirection: "row", gap: 6, alignItems: "center", paddingHorizontal: 12, borderRadius: 16, backgroundColor: onBrand ? "#FFFFFF24" : palette.mint }}><Ionicons name="notifications-outline" size={18} color={onBrand ? "#FFFFFF" : "#007B60"} /><Label size={12} weight="bold" color={onBrand ? "#FFFFFF" : "#007B60"}>Mis avisos</Label></Pressable>
     </View>
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
       <SafeAreaView style={{ flex: 1, padding: 20, backgroundColor: "#08264499", justifyContent: "center", alignItems: "center" }}>

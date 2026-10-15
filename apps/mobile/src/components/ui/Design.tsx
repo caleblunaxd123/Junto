@@ -15,7 +15,8 @@ import {
   AccessibilityInfo,
   DimensionValue,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { setStatusBarStyle } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
@@ -25,7 +26,8 @@ import { feedbackTitle } from "../../lib/errorMessage";
 import { useResponsiveLayout } from "./responsive";
 
 export const palette = {
-  background: "#FFFCF7",
+  // A soft mint wash from the logo's green, so no screen is a flat colorless page.
+  background: "#EEF6F2",
   surface: "#FFFFFF",
   ink: "#082644",
   muted: "#64748B",
@@ -42,6 +44,27 @@ export const palette = {
   negative: "#D9404C",
   skeleton: "#E9EEF3",
 };
+/** The JUNTO emerald, deepest to brightest (the logo is #00AD83). Used for headers and heroes. */
+export const brand = { deep: "#00513F", base: "#007A60", bright: "#00AD83", mint: "#7FE3C4", onBrand: "#FFFFFF", onBrandMuted: "#D4F5EA" };
+
+/**
+ * The brand band behind a screen's title: an emerald gradient with soft circles that echo the logo's
+ * heads (and coins). Decorative only; text on it is always white with AA contrast on #007A60.
+ */
+export function BrandBackdrop({ children, style, rounded = false }: { children?: React.ReactNode; style?: ViewStyle; rounded?: boolean }) {
+  return (
+    <View style={[{ overflow: "hidden", backgroundColor: brand.base }, rounded && { borderRadius: 28 }, style]}>
+      <LinearGradient pointerEvents="none" colors={[brand.deep, brand.base, "#009B76"]} locations={[0, 0.55, 1]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      <View pointerEvents="none" importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill}>
+        <View style={{ position: "absolute", width: 220, height: 220, borderRadius: 110, right: -70, top: -90, backgroundColor: "#FFFFFF", opacity: 0.07 }} />
+        <View style={{ position: "absolute", width: 120, height: 120, borderRadius: 60, right: 70, top: -40, backgroundColor: brand.mint, opacity: 0.12 }} />
+        <View style={{ position: "absolute", width: 160, height: 160, borderRadius: 80, left: -60, bottom: -110, backgroundColor: "#FFFFFF", opacity: 0.06 }} />
+        <View style={{ position: "absolute", width: 64, height: 64, borderRadius: 32, right: 24, bottom: -26, borderWidth: 10, borderColor: brand.mint, opacity: 0.16 }} />
+      </View>
+      {children}
+    </View>
+  );
+}
 export function Label({
   children,
   size = 15,
@@ -185,59 +208,66 @@ export function Screen({
       if (resetOnFocus) scrollView.current?.scrollTo({ y: 0, animated: false });
     }, [resetOnFocus]),
   );
+  const insets = useSafeAreaInsets();
+  // Titled screens get the emerald band; the content sits on a rounded mint sheet over it.
+  const band = !!title;
+  // The status bar follows the screen in focus: white on the emerald band, dark on plain pages.
+  useFocusEffect(React.useCallback(() => { setStatusBarStyle(band ? "light" : "dark"); }, [band]));
+  const header = band && (
+    <BrandBackdrop style={{ paddingTop: insets.top + (desktop ? 20 : 10), paddingBottom: 40 }}>
+      <View style={{ width: "100%", maxWidth: web ? maxWidth : undefined, alignSelf: "center", paddingHorizontal: desktop ? 32 : 16, flexDirection: "row", gap: 12, alignItems: "center" }}>
+        {back && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Volver"
+            onPress={onBack || (() =>
+              router.canGoBack() ? router.back() : router.replace("/(app)/(tabs)")
+            )}
+            style={[design.back, { backgroundColor: "#FFFFFF26" }]}
+          >
+            <Ionicons name="arrow-back" size={24} color={brand.onBrand} />
+          </Pressable>
+        )}
+        <View style={{ flex: 1 }}>
+          <Label accessibilityRole="header" weight="extra" size={desktop ? 30 : compact ? 23 : 27} color={brand.onBrand}>
+            {title}
+          </Label>
+          {subtitle && <Label color={brand.onBrandMuted}>{subtitle}</Label>}
+        </View>
+      </View>
+    </BrandBackdrop>
+  );
   const content = (
     <View style={{ width: "100%", maxWidth: web ? maxWidth : undefined, alignSelf: "center", padding: desktop ? 32 : 16, gap: desktop ? 24 : 16 }}>
-      {title && (
-        <View
-          style={{
-            flexDirection: "row",
-            gap: 12,
-            alignItems: "center",
-            marginBottom: 4,
-          }}
-        >
-          {back && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Volver"
-              onPress={onBack || (() =>
-                router.canGoBack() ? router.back() : router.replace("/(app)/(tabs)")
-              )}
-              style={design.back}
-            >
-              <Ionicons name="arrow-back" size={24} color={palette.ink} />
-            </Pressable>
-          )}
-          <View style={{ flex: 1 }}>
-            <Label accessibilityRole="header" weight="extra" size={desktop ? 30 : compact ? 23 : 27}>
-              {title}
-            </Label>
-            {subtitle && <Label color={palette.muted}>{subtitle}</Label>}
-          </View>
-        </View>
-      )}
       {children}
     </View>
   );
+  const body = band ? (
+    <>
+      {header}
+      <View style={{ marginTop: -24, borderTopLeftRadius: 26, borderTopRightRadius: 26, backgroundColor: palette.background, paddingTop: 6, flexGrow: 1 }}>{content}</View>
+    </>
+  ) : content;
   return (
     <SafeAreaView
-      style={{ flex: 1, backgroundColor: palette.background }}
-      edges={["top", "left", "right", "bottom"]}
+      style={{ flex: 1, backgroundColor: band ? brand.base : palette.background }}
+      edges={band ? ["left", "right"] : ["top", "left", "right", "bottom"]}
     >
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       {scroll ? (
         <ScrollView
           ref={scrollView}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 24 }}
-          refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} /> : undefined}
+          style={{ backgroundColor: palette.background }}
+          contentContainerStyle={{ paddingBottom: band ? 24 + insets.bottom : 24, flexGrow: 1 }}
+          refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} colors={[palette.primary]} progressBackgroundColor="#FFFFFF" /> : undefined}
         >
-          {content}
+          {body}
         </ScrollView>
       ) : (
-        content
+        <View style={{ flex: 1, backgroundColor: palette.background }}>{body}</View>
       )}
-      {footer && <View style={{ borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: palette.background }}><View style={{ width: "100%", maxWidth: web ? maxWidth : undefined, alignSelf: "center", padding: 16, gap: 8 }}>{footer}</View></View>}
+      {footer && <View style={{ borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: "#FFFFFF", paddingBottom: band ? insets.bottom : 0 }}><View style={{ width: "100%", maxWidth: web ? maxWidth : undefined, alignSelf: "center", padding: 16, gap: 8 }}>{footer}</View></View>}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
