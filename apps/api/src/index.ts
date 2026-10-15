@@ -26,13 +26,14 @@ import { errorHandler } from './middleware/errorHandler';
 import { initPushReceiptsJob } from './jobs/pushReceipts.job';
 import { initRemindersJob } from './jobs/reminders.job';
 import { prisma } from './lib/prisma';
+import { serverConfig } from './domain/serverConfig';
+import cron from 'node-cron';
+import { setTimeout as nodeTimeout } from 'node:timers';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const allowedOrigins = (process.env.FRONTEND_URL || '').split(',').map((value) => value.trim()).filter(Boolean);
+const { allowedOrigins } = serverConfig(process.env);
 if (process.env.NODE_ENV === 'production') {
-  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 || /super_secret|cambia_esto|local-qa|example/i.test(process.env.JWT_SECRET)) throw new Error('Configure a strong production JWT_SECRET before starting JUNTO.');
-  if (!allowedOrigins.length || allowedOrigins.some((origin) => !origin.startsWith('https://') || origin.includes('*'))) throw new Error('Configure explicit HTTPS FRONTEND_URL origins for production.');
   // Without e-mail nobody can verify an account; keep serving existing users but make it loud.
   if (!emailProvider()) console.error('[Email] Sin proveedor de correo: el registro y la recuperación de contraseña no funcionarán. Configura RESEND_API_KEY o SMTP_*.');
 }
@@ -117,8 +118,23 @@ app.use(errorHandler);
 initPushReceiptsJob();
 initRemindersJob();
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.info(`[Server] Junto API running on port ${PORT} — ${process.env.NODE_ENV}`);
 });
+
+// Let in-flight requests finish during a container replacement; bound the wait so rollout can finish.
+let stopping = false;
+async function shutdown() {
+  if (stopping) return;
+  stopping = true;
+  for (const task of cron.getTasks().values()) void task.stop();
+  const deadline = nodeTimeout(() => process.exit(1), 10_000);
+  deadline.unref();
+  server.close(() => {
+    void prisma.$disconnect().then(() => process.exit(0), () => process.exit(1));
+  });
+}
+process.once('SIGTERM', shutdown);
+process.once('SIGINT', shutdown);
 
 export default app;

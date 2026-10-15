@@ -1,6 +1,6 @@
 # 04 · Sistema de diseño JUNTO
 
-JUNTO ya tiene una identidad propia y reconocible (marfil, esmeralda, azul marino, lila, coral; Plus Jakarta
+JUNTO ya tiene una identidad propia y reconocible (menta, esmeralda, azul marino, lila, coral; Plus Jakarta
 Sans; ilustraciones 3D cálidas). Se **conserva y se formaliza**; no se reemplaza. Fuente de verdad en código:
 `apps/mobile/src/components/ui/Design.tsx`.
 
@@ -8,12 +8,12 @@ Sans; ilustraciones 3D cálidas). Se **conserva y se formaliza**; no se reemplaz
 
 | Token (`palette.*`) | Valor | Uso |
 |---|---|---|
-| `background` | `#FFFCF7` | Fondo cálido de todas las pantallas |
+| `background` | `#EEF6F2` | Fondo menta; tarjetas blancas y bandas esmeralda |
 | `surface` | `#FFFFFF` | Tarjetas, hojas |
 | `ink` | `#082644` | Texto principal (contraste 15:1 sobre blanco) |
 | `muted` | `#64748B` | Texto secundario (4.8:1) |
-| `primary` | `#00AD83` | Marca, pestaña activa, progreso |
-| `positive` **(nuevo)** | `#007B60` | «Te deben», confirmado, éxito (texto AA) |
+| `primary` | `#00AD83` | Marca y progreso |
+| `positive` **(nuevo)** | `#007B60` | «Te deben», confirmado, éxito y navegación activa sobre blanco (texto AA) |
 | `negative` **(nuevo)** | `#D9404C` | «Debes», errores (AA en texto grande) |
 | `purple` / `lilac` | `#8055ED` / `#F2EDFF` | Acciones secundarias, explicaciones |
 | `mint` / `yellow` / `blush` | `#E7FBF3` / `#FFF4D7` / `#FFF0F1` | Fondos de estado: éxito, pendiente, error |

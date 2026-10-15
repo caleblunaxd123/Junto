@@ -19,7 +19,7 @@ export async function crearGasto(
   input: CrearGastoInput,
   creadoPor: string,
   // A recurring rule creating its occurrence: the expense keeps a link to it.
-  origen?: { recurrenteId: string },
+  origen?: { recurrenteId: string; occurrence: string; next: string },
 ) {
   const participanteData = calcularParticipantes(input);
   let result;
@@ -28,8 +28,17 @@ export async function crearGasto(
       await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${grupoId}::uuid FOR UPDATE`;
       const miembro = await tx.grupoMiembro.findFirst({ where: { grupoId, usuarioId: creadoPor, activo: true, grupo: { activo: true } } });
       if (!miembro) throw new Error("No perteneces a este grupo");
+      if (origen) {
+        // The group lock also serializes pause/delete/resume and closure with each occurrence.
+        const rule = await tx.gastoRecurrente.findUnique({ where: { id: origen.recurrenteId } });
+        if (!rule?.activo || rule.grupoId !== grupoId || rule.proximaFecha.toISOString().slice(0, 10) !== origen.occurrence)
+          throw new Error('La programación cambió mientras se generaba el gasto.', 409, 'RECURRENCE_CHANGED');
+      }
       const previo = await gastoPorSolicitud(grupoId, input, creadoPor, tx);
-      if (previo) return { gasto: previo, repetido: true };
+      if (previo) {
+        if (origen) await tx.gastoRecurrente.update({ where: { id: origen.recurrenteId }, data: { proximaFecha: new Date(`${origen.next}T00:00:00Z`) } });
+        return { gasto: previo, repetido: true };
+      }
       await requireOpenGroup(tx, grupoId);
       await validarMiembros(grupoId, input.pagadoPor, input.participantes.map((p) => p.usuarioId), tx);
       const gasto = await tx.gasto.create({
@@ -55,6 +64,8 @@ export async function crearGasto(
           creador: { select: { id: true, nombre: true } },
         },
       });
+      // Expense and next date commit together: a crash cannot leave a half-advanced rule.
+      if (origen) await tx.gastoRecurrente.update({ where: { id: origen.recurrenteId }, data: { proximaFecha: new Date(`${origen.next}T00:00:00Z`) } });
       return { gasto, repetido: false };
     });
   } catch (error) {

@@ -12,7 +12,12 @@ build/
 .env
 .env.local
 .env.*.local
+.env.*
 !.env.example
+*.keystore
+*.jks
+*.p12
+*.p8
 
 # Expo
 apps/mobile/.expo/

@@ -97,11 +97,11 @@ router.get("/:id/recurrentes", async (req, res, next) => {
   catch (error) { next(error); }
 });
 router.patch("/:id/recurrentes/:rid", async (req, res, next) => {
-  try { res.json(await actualizarRecurrente(z.string().uuid().parse(req.params.rid), actualizarRecurrenteSchema.parse(req.body), req.user!.userId)); }
+  try { res.json(await actualizarRecurrente(z.string().uuid().parse(req.params.id), z.string().uuid().parse(req.params.rid), actualizarRecurrenteSchema.parse(req.body), req.user!.userId)); }
   catch (error) { next(error); }
 });
 router.delete("/:id/recurrentes/:rid", async (req, res, next) => {
-  try { await eliminarRecurrente(z.string().uuid().parse(req.params.rid), req.user!.userId); res.status(204).send(); }
+  try { await eliminarRecurrente(z.string().uuid().parse(req.params.id), z.string().uuid().parse(req.params.rid), req.user!.userId); res.status(204).send(); }
   catch (error) { next(error); }
 });
 router.get("/:id/estado-cuenta", async (req, res, next) => {

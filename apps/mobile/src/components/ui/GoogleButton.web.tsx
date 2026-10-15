@@ -16,6 +16,9 @@ export function GoogleButton({ onPress, loading = false, disabled = false }: { o
   useEffect(() => {
     if (!focused || !host.current) return;
     let active = true;
+    let observer: ResizeObserver | undefined;
+    let frame = 0;
+    let resize: (() => void) | undefined;
     const parent = host.current;
     setReady(false); setError("");
     loadGoogleIdentity().then((identity) => {
@@ -26,13 +29,26 @@ export function GoogleButton({ onPress, loading = false, disabled = false }: { o
         if (!response.credential) { setError("Google no devolvió tu identidad. Reintenta."); return; }
         callback.current(response.credential, nonce);
       } });
-      identity.renderButton(parent, { type: "standard", theme: "outline", size: "large", text: "continue_with", shape: "pill", width: Math.max(200, Math.min(400, parent.clientWidth)), locale: "es" });
+      let renderedWidth = 0;
+      const render = () => {
+        if (!active || !parent.clientWidth) return;
+        const width = Math.max(200, Math.min(400, Math.floor(parent.clientWidth)));
+        if (width === renderedWidth && parent.childElementCount) return;
+        renderedWidth = width;
+        parent.replaceChildren();
+        identity.renderButton(parent, { type: "standard", theme: "outline", size: "large", text: "continue_with", shape: "pill", width, locale: "es" });
+      };
+      // GIS fixes its iframe width when rendered. Follow the actual form width after resizing.
+      resize = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(render); };
+      if (typeof ResizeObserver !== 'undefined') { observer = new ResizeObserver(resize); observer.observe(parent); }
+      else window.addEventListener('resize', resize);
+      render();
       setReady(true);
     }).catch((err) => { if (active) setError(err instanceof Error ? err.message : "No pudimos cargar Google."); });
-    return () => { active = false; parent.replaceChildren(); };
+    return () => { active = false; observer?.disconnect(); cancelAnimationFrame(frame); if (resize) window.removeEventListener('resize', resize); parent.replaceChildren(); };
   }, [focused, attempt]);
   return <View style={{ gap: 8, minHeight: 48 }}>
-    <div ref={host} aria-hidden={disabled || loading} inert={disabled || loading ? true : undefined} style={{ minHeight: 44, display: "flex", justifyContent: "center", pointerEvents: disabled || loading ? "none" : "auto", opacity: disabled || loading ? 0.5 : 1 }} />
+    <div ref={host} aria-hidden={disabled || loading} inert={disabled || loading ? true : undefined} style={{ minWidth: 0, width: '100%', minHeight: 44, display: "flex", justifyContent: "center", pointerEvents: disabled || loading ? "none" : "auto", opacity: disabled || loading ? 0.5 : 1 }} />
     {(!ready || loading) && !error && <View style={{ flexDirection: "row", justifyContent: "center", gap: 8 }}><ActivityIndicator size="small" color={palette.primary} /><Label size={12}>{loading ? "Entrando a JUNTO…" : "Preparando Google…"}</Label></View>}
     {!!error && <View style={{ gap: 6 }}><Label accessibilityLiveRegion="polite" color={palette.coral} size={13}>{error}</Label><Button secondary compact title="Reintentar Google" onPress={() => setAttempt((value) => value + 1)} /></View>}
   </View>;

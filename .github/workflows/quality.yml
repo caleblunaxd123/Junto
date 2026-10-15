@@ -1,5 +1,10 @@
 name: JUNTO quality
 on: [push, pull_request]
+permissions:
+  contents: read
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   quality:
     runs-on: ubuntu-latest
@@ -31,9 +36,25 @@ jobs:
       - run: node --test ops/test-dictation.cjs
       - run: node --test ops/test-group-contribution.cjs
       - run: node --test ops/test-group-chat-read.cjs
+      - run: node --test ops/test-statement-ui.cjs ops/test-group-lifecycle-ui.cjs ops/test-contabo-config.cjs
+      - run: node --test ops/web/test-server.cjs
       - run: npm run build:api
       - run: npm run typecheck --workspace=apps/mobile
       - run: npm run lint --workspace=apps/mobile
+      - name: Build the production web app with public configuration only
+        working-directory: apps/mobile
+        env:
+          EXPO_NO_DOTENV: '1'
+          EXPO_PUBLIC_APP_ENV: production
+          EXPO_PUBLIC_API_URL: https://junto.lunalav.pe
+          EXPO_PUBLIC_WEB_URL: https://junto.lunalav.pe/app/
+          EXPO_PUBLIC_PRIVACY_URL: https://junto.lunalav.pe/privacidad
+          EXPO_PUBLIC_DELETE_ACCOUNT_URL: https://junto.lunalav.pe/eliminar-cuenta
+          EXPO_PUBLIC_SUPPORT_EMAIL: soporte@lunalav.pe
+          JUNTO_WEB_BASE_PATH: /app
+        run: |
+          export EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=$(node -p "require('../../ops/android/google-beta.public.json').webClientId")
+          npx --no-install expo export --platform web --output-dir dist-ci
 
   database:
     runs-on: ubuntu-latest
@@ -93,3 +114,22 @@ jobs:
           node ops/test-payment-flow.cjs || (cat api.log && exit 1)
           node ops/test-chat-updates.cjs || (cat api.log && exit 1)
           node ops/test-ledger-concurrency.cjs || (cat api.log && exit 1)
+          node ops/test-shares-simplify.cjs || (cat api.log && exit 1)
+          node ops/test-statement-api.cjs || (cat api.log && exit 1)
+          node ops/test-group-lifecycle.cjs || (cat api.log && exit 1)
+          node ops/test-received-voucher.cjs || (cat api.log && exit 1)
+          node ops/test-recurring-expenses.cjs || (cat api.log && exit 1)
+          node ops/test-household-budget.cjs || (cat api.log && exit 1)
+          node ops/test-account-email-api.cjs || (cat api.log && exit 1)
+
+  production-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: docker build -f ops/contabo/Dockerfile -t junto-api:ci .
+      - name: Audit only packages shipped in the production image
+        run: docker run --rm --entrypoint npm junto-api:ci audit --omit=dev --audit-level=high
+      - run: node ops/test-production-image.cjs junto-api:ci

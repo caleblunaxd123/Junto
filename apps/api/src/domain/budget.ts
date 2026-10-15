@@ -1,4 +1,4 @@
-import { nextOccurrence, type Frecuencia } from './recurrence';
+import { nextOccurrence, occurrenceOnOrAfter, type Frecuencia } from './recurrence';
 
 /**
  * Household budget for one calendar month (in the group's local time). "Gastado" is the group's
@@ -32,7 +32,7 @@ export function upcomingInMonth(rules: BudgetRule[], month: string, fromDay: str
   const rows: { recurrenteId: string; descripcion: string; categoria: string; monto: number; dia: string }[] = [];
   for (const rule of rules) {
     if (!rule.activo) continue;
-    let day = rule.proximaFecha;
+    let day = occurrenceOnOrAfter(rule.proximaFecha, start, rule.frecuencia, rule.diaMes);
     for (let guard = 0; day <= end && guard < 40; guard += 1) {
       if (day >= start) rows.push({ recurrenteId: rule.id, descripcion: rule.descripcion, categoria: known(rule.categoria), monto: rule.montoTotal, dia: day });
       day = nextOccurrence(day, rule.frecuencia, rule.diaMes);

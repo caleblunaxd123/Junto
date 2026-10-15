@@ -3,7 +3,7 @@ import { View, Image, Pressable } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Screen, Label, Button, ErrorBox, palette } from "../../src/components/ui/Design";
+import { Screen, Label, Button, ErrorBox, palette, brand, BrandBackdrop } from "../../src/components/ui/Design";
 import { Brand } from "../../src/components/ui/Reference";
 import { art } from "../../src/components/ui/Artwork";
 import { GoogleButton } from "../../src/components/ui/GoogleButton";
@@ -84,7 +84,10 @@ export default function Onboarding() {
         )
       }
     >
-      <Brand />
+      <BrandBackdrop rounded style={{ padding: 18, gap: 6 }}>
+        <Brand inverse />
+        <Label size={14} color={brand.onBrandMuted}>Las cuentas claras. Los buenos momentos, juntos.</Label>
+      </BrandBackdrop>
       <OnboardingTour />
     </Screen>
   );

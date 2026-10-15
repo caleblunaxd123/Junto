@@ -1,10 +1,11 @@
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { UserError } from '../domain/errors';
 import { describeError } from '../lib/logSafe';
 import { crearGastoSchema, type CrearGastoInput } from '../schemas/gastos.schema';
-import { calendarToday, describeFrequency, dueOccurrences, FRECUENCIAS, isCalendarDay, nextOccurrence, type Frecuencia } from '../domain/recurrence';
+import { calendarToday, describeFrequency, dueOccurrences, FRECUENCIAS, isCalendarDay, nextOccurrence, occurrenceOnOrAfter, type Frecuencia } from '../domain/recurrence';
 import { calcularParticipantes, crearGasto, validarMiembros } from './gastos.service';
 import { groupEvent, requireOpenGroup } from './groupLifecycle.service';
 
@@ -30,8 +31,8 @@ const template = (rule: { descripcion: string; categoria: string; montoTotal: nu
   notas: rule.notas ?? undefined,
 });
 
-async function member(grupoId: string, usuarioId: string) {
-  const row = await prisma.grupoMiembro.findFirst({ where: { grupoId, usuarioId, activo: true, grupo: { activo: true } }, select: { rol: true } });
+async function member(grupoId: string, usuarioId: string, db: Prisma.TransactionClient = prisma) {
+  const row = await db.grupoMiembro.findFirst({ where: { grupoId, usuarioId, activo: true, grupo: { activo: true } }, select: { rol: true } });
   if (!row) throw new UserError('No perteneces a este grupo', 403);
   return row;
 }
@@ -40,16 +41,23 @@ async function member(grupoId: string, usuarioId: string) {
 export async function crearRecurrente(grupoId: string, input: CrearRecurrenteInput, userId: string) {
   await member(grupoId, userId);
   const today = calendarToday();
-  if (input.primeraFecha < today) throw new UserError('La primera fecha no puede ser pasada. Anota los gastos anteriores como gastos normales.', 400);
   // Same split rules as a manual expense: an invalid template is rejected now, not every month.
   calcularParticipantes({ ...input, solicitudId: undefined });
+  const { solicitudId: _request, ...content } = input;
+  const huella = createHash('sha256').update(JSON.stringify({ grupoId, ...content })).digest('hex');
   const rule = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${grupoId}::uuid FOR UPDATE`;
-    await requireOpenGroup(tx, grupoId);
+    await member(grupoId, userId, tx);
     if (input.solicitudId) {
       const previous = await tx.gastoRecurrente.findUnique({ where: { creadoPor_solicitudId: { creadoPor: userId, solicitudId: input.solicitudId } } });
-      if (previous) return previous;
+      if (previous) {
+        const event = previous.grupoId === grupoId ? await tx.eventoGrupo.findFirst({ where: { grupoId, tipo: 'recurrente_creado', detalle: { path: ['recurrenteId'], equals: previous.id } }, select: { detalle: true } }) : null;
+        if (!event || (event.detalle as { huella?: string }).huella !== huella) throw new UserError('Este envío ya programó otro gasto. Revisa los gastos que se repiten antes de guardar.', 409);
+        return previous;
+      }
     }
+    await requireOpenGroup(tx, grupoId);
+    if (input.primeraFecha < today) throw new UserError('La primera fecha no puede ser pasada. Anota los gastos anteriores como gastos normales.', 400);
     await validarMiembros(grupoId, input.pagadoPor, input.participantes.map((p) => p.usuarioId), tx);
     const created = await tx.gastoRecurrente.create({ data: {
       grupoId, creadoPor: userId, descripcion: input.descripcion, categoria: input.categoria, montoTotal: input.montoTotal,
@@ -57,7 +65,7 @@ export async function crearRecurrente(grupoId: string, input: CrearRecurrenteInp
       notas: input.notas, frecuencia: input.frecuencia, diaMes: input.frecuencia === 'mensual' ? Number(input.primeraFecha.slice(8, 10)) : null,
       proximaFecha: new Date(`${input.primeraFecha}T00:00:00Z`), solicitudId: input.solicitudId,
     } });
-    await groupEvent(tx, grupoId, userId, 'recurrente_creado', `Se programó «${input.descripcion}» ${describeFrequency(input.frecuencia, created.diaMes)}.`, { recurrenteId: created.id });
+    await groupEvent(tx, grupoId, userId, 'recurrente_creado', `Se programó «${input.descripcion}» ${describeFrequency(input.frecuencia, created.diaMes)}.`, { recurrenteId: created.id, huella });
     return created;
   });
   await runRule(rule.id, today);
@@ -81,21 +89,22 @@ export async function listarRecurrentes(grupoId: string, userId: string) {
   return Promise.all(rules.map((rule) => detalle(rule.id)));
 }
 
-async function ownRule(id: string, userId: string) {
-  const rule = await prisma.gastoRecurrente.findUnique({ where: { id } });
-  if (!rule) throw new UserError('No encontramos este gasto que se repite.', 404);
-  const { rol } = await member(rule.grupoId, userId);
+async function ownRule(tx: Prisma.TransactionClient, grupoId: string, id: string, userId: string) {
+  await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${grupoId}::uuid FOR UPDATE`;
+  const rule = await tx.gastoRecurrente.findUnique({ where: { id } });
+  if (!rule || rule.grupoId !== grupoId) throw new UserError('No encontramos este gasto que se repite.', 404);
+  const { rol } = await member(grupoId, userId, tx);
   if (rule.creadoPor !== userId && rol !== 'admin') throw new UserError('Solo quien lo programó o un administrador puede cambiarlo.', 403);
   return rule;
 }
 
 /** Pause or resume. Resuming never back-fills: it continues from today. */
-export async function actualizarRecurrente(id: string, input: z.infer<typeof actualizarRecurrenteSchema>, userId: string) {
-  const rule = await ownRule(id, userId);
+export async function actualizarRecurrente(grupoId: string, id: string, input: z.infer<typeof actualizarRecurrenteSchema>, userId: string) {
   const today = calendarToday();
-  let proxima = day(rule.proximaFecha);
-  if (input.activo) while (proxima < today) proxima = nextOccurrence(proxima, rule.frecuencia as Frecuencia, rule.diaMes);
   await prisma.$transaction(async (tx) => {
+    const rule = await ownRule(tx, grupoId, id, userId);
+    if (input.activo) await requireOpenGroup(tx, grupoId);
+    const proxima = input.activo && !rule.activo ? occurrenceOnOrAfter(day(rule.proximaFecha), today, rule.frecuencia as Frecuencia, rule.diaMes) : day(rule.proximaFecha);
     await tx.gastoRecurrente.update({ where: { id }, data: { activo: input.activo, pausaMotivo: null, proximaFecha: new Date(`${proxima}T00:00:00Z`) } });
     await groupEvent(tx, rule.grupoId, userId, input.activo ? 'recurrente_reanudado' : 'recurrente_pausado', `${input.activo ? 'Se reanudó' : 'Se pausó'} «${rule.descripcion}».`, { recurrenteId: id });
   });
@@ -104,9 +113,9 @@ export async function actualizarRecurrente(id: string, input: z.infer<typeof act
 }
 
 /** Stops it for good. Expenses it already added stay as normal expenses. */
-export async function eliminarRecurrente(id: string, userId: string) {
-  const rule = await ownRule(id, userId);
+export async function eliminarRecurrente(grupoId: string, id: string, userId: string) {
   await prisma.$transaction(async (tx) => {
+    const rule = await ownRule(tx, grupoId, id, userId);
     await tx.gastoRecurrente.delete({ where: { id } });
     await groupEvent(tx, rule.grupoId, userId, 'recurrente_eliminado', `«${rule.descripcion}» dejó de repetirse. Los gastos ya anotados siguen igual.`);
   });
@@ -122,19 +131,19 @@ export async function runRule(id: string, today = calendarToday()) {
   const rule = await prisma.gastoRecurrente.findUnique({ where: { id } });
   if (!rule || !rule.activo) return 0;
   const from = day(rule.proximaFecha);
-  const { due, next } = dueOccurrences(from, today, rule.frecuencia as Frecuencia, rule.diaMes);
+  const { due } = dueOccurrences(from, today, rule.frecuencia as Frecuencia, rule.diaMes);
   let created = 0;
   for (const occurrence of due) {
     try {
-      const result = await crearGasto(rule.grupoId, { ...template(rule), fecha: noonInLima(occurrence), solicitudId: `rec-${rule.id}-${occurrence.replace(/-/g, '')}` }, rule.creadoPor, { recurrenteId: rule.id });
+      const result = await crearGasto(rule.grupoId, { ...template(rule), fecha: noonInLima(occurrence), solicitudId: `rec-${rule.id}-${occurrence.replace(/-/g, '')}` }, rule.creadoPor, { recurrenteId: rule.id, occurrence, next: nextOccurrence(occurrence, rule.frecuencia as Frecuencia, rule.diaMes) });
       if (!result.repetido) created += 1;
     } catch (error) {
       if (!(error instanceof UserError)) throw error;
-      await prisma.gastoRecurrente.updateMany({ where: { id, activo: true }, data: { activo: false, pausaMotivo: error.message.slice(0, 200), proximaFecha: new Date(`${occurrence}T00:00:00Z`) } });
+      if (error.code === 'RECURRENCE_CHANGED') return created;
+      await prisma.gastoRecurrente.updateMany({ where: { id, activo: true, proximaFecha: new Date(`${occurrence}T00:00:00Z`) }, data: { activo: false, pausaMotivo: error.message.slice(0, 200) } });
       return created;
     }
   }
-  if (due.length) await prisma.gastoRecurrente.updateMany({ where: { id, proximaFecha: rule.proximaFecha }, data: { proximaFecha: new Date(`${next}T00:00:00Z`) } });
   return created;
 }
 

@@ -43,3 +43,10 @@ test('months: shift across years, validation, occurrences from today', () => {
   assert.ok(isMonth('2026-10') && !isMonth('2026-13') && !isMonth('2026-1'));
   assert.deepEqual(upcomingInMonth(rules, '2026-10', '2026-10-25').map((p) => p.dia), ['2026-10-31']);
 });
+
+test('future budgets include weekly rules even more than forty occurrences ahead', () => {
+  const upcoming = upcomingInMonth([rules[2]], '2030-10', '2030-10-01');
+  assert.ok(upcoming.length >= 4);
+  assert.ok(upcoming.every(row => row.dia.startsWith('2030-10')));
+  assert.equal((new Date(`${upcoming[0].dia}T00:00:00Z`).getTime() - new Date('2026-10-17T00:00:00Z').getTime()) % (7 * 86_400_000), 0);
+});

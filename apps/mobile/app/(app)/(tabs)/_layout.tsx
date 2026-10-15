@@ -20,7 +20,7 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarHideOnKeyboard: true,
-        tabBarActiveTintColor: palette.primary,
+        tabBarActiveTintColor: palette.positive,
         tabBarInactiveTintColor: palette.muted,
         tabBarLabelStyle: { fontFamily: "JakartaBold", fontSize: 12, marginBottom: 2 },
         tabBarStyle: {

@@ -27,13 +27,14 @@ export default function Recurring() {
   const [error, setError] = React.useState("");
   const money = (value: number) => formatMoney(value, group.data?.moneda);
   const isAdmin = group.data?.rolUsuario === "admin";
+  const openGroup = !!group.data && (group.data.estado ?? 'abierto') === 'abierto';
 
   async function change(rule: GastoRecurrente, action: "pausar" | "reanudar" | "quitar") {
     try {
       setBusy(rule.id); setError("");
       if (action === "quitar") await api.delete(`/grupos/${grupoId}/recurrentes/${rule.id}`);
       else await api.patch(`/grupos/${grupoId}/recurrentes/${rule.id}`, { activo: action === "reanudar" });
-      await Promise.all(["recurrentes", "chat", "grupos"].map((key) => qc.invalidateQueries({ queryKey: [key] })));
+      await Promise.all(["recurrentes", "chat", "grupos", "presupuesto", "estado-cuenta"].map((key) => qc.invalidateQueries({ queryKey: [key] })));
     } catch (err) {
       setError(errorMessage(err, "No pudimos guardar el cambio. Reintenta."));
     } finally { setBusy(null); }
@@ -48,6 +49,7 @@ export default function Recurring() {
   return (
     <Screen title="Gastos que se repiten" subtitle={group.data?.nombre} back onRefresh={() => refetch()} refreshing={query.isRefetching}>
       <Label size={14} color={palette.muted}>JUNTO los anota solos en el grupo, con el mismo monto y reparto. Cada uno aparece en el chat y en las cuentas como un gasto normal.</Label>
+      {group.data && !openGroup && <Label size={13} color={palette.muted}>El grupo finalizó sus gastos. Las programaciones quedan en pausa; un administrador puede reabrirlo para continuar.</Label>}
       {!!error && <ErrorBox message={error} />}
       {query.isLoading ? <ActivityIndicator color={palette.primary} /> : query.isError ? (
         <><ErrorBox message="No pudimos cargar los gastos que se repiten." /><Button title="Reintentar" onPress={() => refetch()} /></>
@@ -56,7 +58,7 @@ export default function Recurring() {
           <Ionicons name="repeat" size={28} color={palette.purple} />
           <Label weight="extra" size={17}>Aún no hay gastos que se repitan</Label>
           <Label size={13} color={palette.muted}>Al anotar un gasto como el alquiler o el internet, elige «¿Se repite? Cada mes».</Label>
-          <Button compact title="Agregar un gasto" onPress={() => router.push(`/(app)/gastos/agregar?grupoId=${grupoId}`)} />
+          {openGroup && <Button compact title="Agregar un gasto" onPress={() => router.push(`/(app)/gastos/agregar?grupoId=${grupoId}`)} />}
         </Card>
       ) : query.data.map((rule) => {
         const canChange = rule.creador.id === user?.id || isAdmin;
@@ -68,16 +70,16 @@ export default function Recurring() {
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Label weight="extra" size={16} numberOfLines={1}>{rule.descripcion}</Label>
-                <Label size={13} color={palette.muted}>{money(rule.montoTotal)} · {rule.cada} · paga {rule.pagador?.id === user?.id ? "tú" : rule.pagador?.nombre.split(" ")[0] ?? "?"}</Label>
+                <Label size={13} color={palette.muted}>{money(rule.montoTotal)} · {rule.cada} · {rule.pagador?.id === user?.id ? 'pagas tú' : `paga ${rule.pagador?.nombre.split(' ')[0] ?? 'la persona indicada'}`}</Label>
               </View>
             </View>
             {rule.activo
               ? <Label size={13}>Próxima vez: <Label size={13} weight="bold">{nextLabel(rule.proximaFecha)}</Label></Label>
               : <Label size={13} color={palette.coral}>{rule.pausaMotivo ? `Se pausó solo: ${rule.pausaMotivo}` : "En pausa"}</Label>}
-            <Label size={12} color={palette.muted}>Lo programó {rule.creador.id === user?.id ? "tú" : rule.creador.nombre.split(" ")[0]} · anotado {rule.gastosCreados} {rule.gastosCreados === 1 ? "vez" : "veces"}</Label>
+            <Label size={12} color={palette.muted}>{rule.creador.id === user?.id ? 'Lo programaste tú' : `Lo programó ${rule.creador.nombre.split(' ')[0]}`} · anotado {rule.gastosCreados} {rule.gastosCreados === 1 ? "vez" : "veces"}</Label>
             {canChange && (
               <View style={{ flexDirection: "row", gap: 8 }}>
-                <View style={{ flex: 1 }}><Button compact secondary title={rule.activo ? "Pausar" : "Reanudar"} loading={busy === rule.id} onPress={() => { void change(rule, rule.activo ? "pausar" : "reanudar"); }} /></View>
+                {(rule.activo || openGroup) && <View style={{ flex: 1 }}><Button compact secondary title={rule.activo ? "Pausar" : "Reanudar"} loading={busy === rule.id} onPress={() => { void change(rule, rule.activo ? "pausar" : "reanudar"); }} /></View>}
                 <View style={{ flex: 1 }}><Button compact secondary title="Dejar de repetir" disabled={busy === rule.id} onPress={() => confirmRemove(rule)} /></View>
               </View>
             )}

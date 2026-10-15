@@ -15,6 +15,8 @@ import {
   ErrorBox,
   palette,
   design,
+  brand,
+  BrandBackdrop,
 } from "./Design";
 import { Brand, FormField } from "./Reference";
 import { useAuthStore } from "../../store/auth.store";
@@ -101,28 +103,28 @@ export function AuthForm({ register = false }: { register?: boolean }) {
   return (
       <Screen wide={desktop}>
         <View style={{ flexDirection: desktop ? "row" : "column", alignItems: desktop ? "center" : "stretch", gap: desktop ? 56 : 16, paddingVertical: desktop ? 24 : 0 }}>
-        <View style={{ minHeight: desktop ? 540 : 150, marginTop: 4, flex: desktop ? 1 : undefined, minWidth: 0, gap: desktop ? 20 : 0 }}>
+        <BrandBackdrop rounded style={{ minHeight: desktop ? 540 : 170, marginTop: 4, flex: desktop ? 1 : undefined, minWidth: 0, gap: desktop ? 20 : 0, padding: desktop ? 32 : 18 }}>
           <Image
             source={require("../../../assets/illustrations/auth-couple.png")}
             resizeMode="contain"
             style={{
               position: "absolute",
-              right: desktop ? 0 : -16,
-              bottom: desktop ? 0 : -6,
+              right: desktop ? 0 : -8,
+              bottom: desktop ? 0 : 0,
               width: desktop ? "100%" : "50%",
               height: desktop ? 280 : 150,
             }}
           />
-          <Brand compact={!desktop} />
+          <Brand compact={!desktop} inverse />
           <View style={{ width: desktop ? "100%" : "49%", marginTop: 8, gap: desktop ? 12 : 3 }}>
-            <Label accessibilityRole="header" size={desktop ? 36 : 20} weight="extra" style={{ lineHeight: desktop ? 44 : 25 }}>
+            <Label accessibilityRole="header" size={desktop ? 36 : 20} weight="extra" color={brand.onBrand} style={{ lineHeight: desktop ? 44 : 25 }}>
               {register ? "Crea tu cuenta gratis" : "Qué bueno verte"}
             </Label>
-            <Label size={desktop ? 17 : 13} color={palette.muted}>
+            <Label size={desktop ? 17 : 13} color={brand.onBrandMuted}>
               {desktop ? "Comparte gastos, no complicaciones. La misma cuenta desde tu celular o tu computadora." : register ? "Toma menos de un minuto." : "Tus cuentas te esperan."}
             </Label>
           </View>
-        </View>
+        </BrandBackdrop>
         <Card style={{ gap: 18, padding: desktop ? 28 : 18, borderWidth: desktop ? 1 : 0, width: desktop ? "48%" : undefined, maxWidth: desktop ? 480 : undefined }}>
           <View
             style={{

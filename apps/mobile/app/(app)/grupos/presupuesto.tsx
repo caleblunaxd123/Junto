@@ -13,7 +13,7 @@ import { Sheet } from "../../../src/components/ui/Sheet";
 
 type Categoria = "total" | "alojamiento" | "comida" | "compras" | "transporte" | "entretenimiento" | "otro";
 type Line = { categoria: Categoria; presupuesto: number | null; gastado: number; porVenir: number; proyectado: number; disponible: number | null; estado: "ok" | "cerca" | "pasado" | "sin_presupuesto" };
-type Budget = { grupo: { nombre: string; moneda: CurrencyCode }; hoy: string; mesActual: string; mes: string; total: Line; categorias: Line[]; proximos: { recurrenteId: string; descripcion: string; categoria: string; monto: number; dia: string }[]; gastos: number };
+type Budget = { grupo: { nombre: string; moneda: CurrencyCode; estado?: 'abierto' | 'por_liquidar' | 'cerrado' }; hoy: string; mesActual: string; mes: string; total: Line; categorias: Line[]; proximos: { recurrenteId: string; descripcion: string; categoria: string; monto: number; dia: string }[]; gastos: number };
 
 const info: Record<Categoria, { label: string; icon: keyof typeof Ionicons.glyphMap }> = {
   total: { label: "Todo el grupo", icon: "wallet-outline" },
@@ -43,8 +43,8 @@ function Bar({ line, money, monthTotal }: { line: Line; money: (v: number) => st
         <View style={{ width: `${spent * 100}%`, backgroundColor: color }} />
         <View style={{ width: `${coming * 100}%`, backgroundColor: color, opacity: 0.35 }} />
       </View>
-      <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
-        <Label size={12} color={palette.muted}>Gastado {money(line.gastado)}{line.porVenir ? ` · por venir ${money(line.porVenir)}` : ""}</Label>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', columnGap: 12, rowGap: 4 }}>
+        <Label size={12} color={palette.muted} style={{ flexShrink: 1 }}>Gastado {money(line.gastado)}{line.porVenir ? ` · por venir ${money(line.porVenir)}` : ""}</Label>
         {line.disponible !== null ? (
           <Label size={12} weight="bold" color={color}>{line.disponible >= 0 ? `Quedan ${money(line.disponible)}` : `Te pasas ${money(-line.disponible)}`}</Label>
         ) : monthTotal ? <Label size={12} color={palette.muted}>sin límite</Label> : null}
@@ -62,6 +62,7 @@ export default function HouseholdBudget() {
   const { refetch } = query;
   useFocusEffect(React.useCallback(() => { refetch(); }, [refetch]));
   const b = query.data;
+  const canEdit = !!b && (b.grupo.estado ?? 'abierto') === 'abierto';
   const money = (v: number) => formatMoney(v, b?.grupo.moneda ?? "PEN");
   const [editing, setEditing] = React.useState<Categoria | null>(null);
   const [amount, setAmount] = React.useState("");
@@ -69,6 +70,7 @@ export default function HouseholdBudget() {
   const [error, setError] = React.useState("");
 
   function open(categoria: Categoria) {
+    if (!canEdit) return;
     const current = categoria === "total" ? b?.total.presupuesto : b?.categorias.find((c) => c.categoria === categoria)?.presupuesto;
     setAmount(current ? centavosASoles(current) : ""); setError(""); setEditing(categoria);
   }
@@ -94,6 +96,7 @@ export default function HouseholdBudget() {
         <><ErrorBox message="No pudimos cargar el presupuesto." /><Button title="Reintentar" onPress={() => refetch()} /></>
       ) : (
         <>
+          {!canEdit && <Label size={13} color={palette.muted}>El grupo finalizó sus gastos. Puedes consultar el presupuesto; un administrador debe reabrir el grupo para cambiarlo.</Label>}
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
             <Pressable accessibilityRole="button" accessibilityLabel="Mes anterior" hitSlop={8} onPress={() => setMes(shift(month, -1))} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
               <Ionicons name="chevron-back" size={22} color={palette.ink} />
@@ -108,11 +111,11 @@ export default function HouseholdBudget() {
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Ionicons name="wallet-outline" size={20} color="#00856A" />
               <Label weight="extra" size={15} style={{ flex: 1 }}>Todo el grupo</Label>
-              <Pressable accessibilityRole="button" accessibilityLabel={b.total.presupuesto ? "Cambiar presupuesto total" : "Poner presupuesto total"} onPress={() => open("total")} hitSlop={8}>
+              {canEdit && <Pressable accessibilityRole="button" accessibilityLabel={b.total.presupuesto ? "Cambiar presupuesto total" : "Poner presupuesto total"} onPress={() => open("total")} hitSlop={8} style={{ minHeight: 44, justifyContent: 'center', flexShrink: 1 }}>
                 <Label size={13} weight="bold" color={palette.purple}>{b.total.presupuesto ? "Cambiar" : "Poner límite"}</Label>
-              </Pressable>
+              </Pressable>}
             </View>
-            <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 6, rowGap: 2 }}>
               <Label size={28} weight="extra">{money(b.total.proyectado)}</Label>
               {b.total.presupuesto !== null && <Label size={14} color={palette.muted}>de {money(b.total.presupuesto)}</Label>}
             </View>
@@ -121,15 +124,19 @@ export default function HouseholdBudget() {
           </Card>
 
           {lines.map((line) => (
-            <Pressable key={line.categoria} accessibilityRole="button" accessibilityLabel={`${info[line.categoria].label}: gastado ${money(line.gastado)}${line.presupuesto !== null ? ` de ${money(line.presupuesto)}` : ""}. Cambiar presupuesto`} onPress={() => open(line.categoria)}>
+            <Pressable key={line.categoria} disabled={!canEdit} accessibilityState={{ disabled: !canEdit }} accessibilityRole="button" accessibilityLabel={`${info[line.categoria].label}: gastado ${money(line.gastado)}${line.presupuesto !== null ? ` de ${money(line.presupuesto)}` : ""}.${canEdit ? ' Cambiar presupuesto' : ''}`} onPress={() => open(line.categoria)}>
               <Card style={{ gap: 10, padding: 14 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                   <View style={{ width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: palette.mint }}>
                     <Ionicons name={info[line.categoria].icon} size={18} color="#00856A" />
                   </View>
-                  <Label weight="bold" size={15} style={{ flex: 1 }}>{info[line.categoria].label}</Label>
-                  <Label weight="extra" size={15}>{money(line.proyectado)}</Label>
-                  {line.presupuesto !== null && <Label size={12} color={palette.muted}>/ {money(line.presupuesto)}</Label>}
+                  <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+                    <Label weight="bold" size={15}>{info[line.categoria].label}</Label>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 6, rowGap: 2 }}>
+                      <Label weight="extra" size={15}>{money(line.proyectado)}</Label>
+                      {line.presupuesto !== null && <Label size={12} color={palette.muted}>de {money(line.presupuesto)}</Label>}
+                    </View>
+                  </View>
                 </View>
                 <Bar line={line} money={money} monthTotal={b.total.proyectado} />
               </Card>
@@ -143,25 +150,25 @@ export default function HouseholdBudget() {
                 <Label weight="extra" size={15}>Por venir este mes</Label>
               </View>
               {b.proximos.map((p) => (
-                <View key={`${p.recurrenteId}-${p.dia}`} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View key={`${p.recurrenteId}-${p.dia}`} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
                   <Label size={13} color={palette.muted} style={{ width: 64 }}>{dayLabel(p.dia)}</Label>
-                  <Label size={14} style={{ flex: 1 }} numberOfLines={1}>{p.descripcion}</Label>
+                  <Label size={14} style={{ flexGrow: 1, flexBasis: 120 }}>{p.descripcion}</Label>
                   <Label size={14} weight="bold">{money(p.monto)}</Label>
                 </View>
               ))}
-              <Pressable accessibilityRole="link" onPress={() => router.push(`/(app)/grupos/recurrentes?grupoId=${grupoId}`)} style={{ minHeight: 40, justifyContent: "center" }}>
+              <Pressable accessibilityRole="link" onPress={() => router.push(`/(app)/grupos/recurrentes?grupoId=${grupoId}`)} style={{ minHeight: 44, justifyContent: "center" }}>
                 <Label size={13} weight="bold" color={palette.purple}>Ver gastos que se repiten ›</Label>
               </Pressable>
             </Card>
           )}
 
-          {!!unset.length && (
+          {canEdit && !!unset.length && (
             <View style={{ gap: 8 }}>
               <Label size={13} weight="bold" color={palette.muted}>Poner límite a</Label>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {unset.map((c) => (
                   <Pressable key={c} accessibilityRole="button" accessibilityLabel={`Poner presupuesto de ${info[c].label}`} onPress={() => open(c)}
-                    style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: palette.line, backgroundColor: "white" }}>
+                    style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: palette.line, backgroundColor: "white" }}>
                     <Ionicons name={info[c].icon} size={16} color="#00856A" />
                     <Label size={13} weight="bold">{info[c].label}</Label>
                   </Pressable>

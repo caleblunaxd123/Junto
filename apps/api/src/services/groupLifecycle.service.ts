@@ -52,6 +52,7 @@ export async function changeGroupLifecycle(grupoId: string, userId: string, acci
       const [expenses, payments] = await Promise.all([tx.gasto.count({ where: { grupoId } }), tx.pago.count({ where: { grupoId } })]);
       if (expenses || payments) throw new UserError('Este grupo tiene historial de gastos o pagos. Ciérralo para conservar sus cuentas.', 409);
       await tx.grupo.update({ where: { id: grupoId }, data: { activo: false, linkInvitacion: null } });
+      await tx.gastoRecurrente.updateMany({ where: { grupoId, activo: true }, data: { activo: false, pausaMotivo: 'El grupo fue eliminado.' } });
       await tx.invitacion.updateMany({ where: { grupoId, estado: 'pendiente' }, data: { estado: 'cancelada', fechaRespuesta: new Date() } });
       await groupEvent(tx, grupoId, userId, 'grupo_eliminado', 'Se eliminó el grupo sin movimientos.');
       return { eliminado: true };
@@ -69,6 +70,7 @@ export async function changeGroupLifecycle(grupoId: string, userId: string, acci
     const estado = await closureState(tx, grupoId);
     const now = new Date();
     await tx.grupo.update({ where: { id: grupoId }, data: { estado, cierreSolicitadoEn: now, cerradoEn: estado === 'cerrado' ? now : null, linkInvitacion: null } });
+    await tx.gastoRecurrente.updateMany({ where: { grupoId, activo: true }, data: { activo: false, pausaMotivo: 'El grupo finalizó sus gastos. Reábrelo y reanuda esta programación si deseas continuar.' } });
     await tx.invitacion.updateMany({ where: { grupoId, estado: 'pendiente' }, data: { estado: 'cancelada', fechaRespuesta: now } });
     await groupEvent(tx, grupoId, userId, estado === 'cerrado' ? 'grupo_cerrado' : 'cierre_solicitado', estado === 'cerrado'
       ? 'Se cerró el grupo. Todos quedaron a mano y las cuentas siguen disponibles.'

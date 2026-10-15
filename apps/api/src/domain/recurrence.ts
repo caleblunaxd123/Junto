@@ -19,13 +19,27 @@ const lastDayOfMonth = (year: number, month0: number) => new Date(Date.UTC(year,
 export function nextOccurrence(day: string, frecuencia: Frecuencia, diaMes?: number | null) {
   if (!isCalendarDay(day)) throw new Error('Fecha inválida');
   if (frecuencia === 'semanal') return addDays(day, 7);
-  if (frecuencia === 'quincenal') return addDays(day, 14);
+  if (frecuencia === 'quincenal') return addDays(day, 15);
   const [year, month] = day.split('-').map(Number);
   const target = diaMes ?? Number(day.slice(8, 10));
   const nextYear = month === 12 ? year + 1 : year;
   const nextMonth0 = month === 12 ? 0 : month; // month is 1-based, so this is the following month
   const dayOfMonth = Math.min(target, lastDayOfMonth(nextYear, nextMonth0));
   return `${nextYear}-${String(nextMonth0 + 1).padStart(2, '0')}-${String(dayOfMonth).padStart(2, '0')}`;
+}
+
+/** Seek without walking years of missed weekly occurrences (budget previews and resume). */
+export function occurrenceOnOrAfter(day: string, target: string, frecuencia: Frecuencia, diaMes?: number | null) {
+  if (day >= target) return day;
+  if (frecuencia !== 'mensual') {
+    const step = frecuencia === 'semanal' ? 7 : 15;
+    const days = (new Date(`${target}T00:00:00Z`).getTime() - new Date(`${day}T00:00:00Z`).getTime()) / 86_400_000;
+    return addDays(day, Math.ceil(days / step) * step);
+  }
+  const [year, month] = target.split('-').map(Number);
+  const intended = diaMes ?? Number(day.slice(8, 10));
+  const candidate = `${target.slice(0, 7)}-${String(Math.min(intended, lastDayOfMonth(year, month - 1))).padStart(2, '0')}`;
+  return candidate >= target ? candidate : nextOccurrence(candidate, frecuencia, intended);
 }
 
 /** Every occurrence due up to `today` (inclusive), at most `limit`, and the next pending one. */

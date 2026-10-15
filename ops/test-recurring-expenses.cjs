@@ -55,6 +55,12 @@ async function run() {
     const again = await call(`/grupos/${depa.id}/recurrentes`, caleb, 'POST', { ...base, primeraFecha: today, solicitudId: `rent-${suffix}` });
     assert.equal(again.id, rent.id);
     assert.equal(await db.gasto.count({ where: { recurrenteId: rent.id } }), 1);
+    // An idempotency key cannot return another group's private recurring template, or accept changed data.
+    await call(`/grupos/${depa.id}/recurrentes`, caleb, 'POST', { ...base, montoTotal: 999, primeraFecha: today, solicitudId: `rent-${suffix}` }, 409);
+    const other = await call('/grupos', caleb, 'POST', { nombre: `Otro ${suffix}`, tipo: 'roomies' });
+    await call(`/grupos/${other.id}/recurrentes`, caleb, 'POST', { ...base, primeraFecha: today, solicitudId: `rent-${suffix}` }, 409);
+    await call(`/grupos/${other.id}/recurrentes/${rent.id}`, caleb, 'PATCH', { activo: false }, 404);
+    await call(`/grupos/${other.id}/recurrentes/${rent.id}`, caleb, 'DELETE', undefined, 404);
 
     // Simulate the server being off for three months: the job adds each missed month once,
     // and running it twice (or twice at the same time) never duplicates.
@@ -80,6 +86,12 @@ async function run() {
     assert.equal(await db.gasto.count({ where: { recurrenteId: rent.id } }), before, 'resuming never adds months that were paused');
     assert.ok(resumed.proximaFecha >= today);
 
+    // A worker that read the template before a pause must re-check it under the group lock.
+    const { crearGasto } = require('../apps/api/dist/services/gastos.service');
+    await call(`/grupos/${depa.id}/recurrentes/${rent.id}`, caleb, 'PATCH', { activo: false });
+    await assert.rejects(crearGasto(depa.id, { ...base, fecha: `${today}T17:00:00Z`, solicitudId: `stale-${suffix}` }, caleb.usuario.id, { recurrenteId: rent.id, occurrence: today, next: week }), e => e.code === 'RECURRENCE_CHANGED');
+    assert.equal(await db.gasto.count({ where: { recurrenteId: rent.id } }), before, 'paused rule cannot create a stale occurrence');
+
     // Someone in the split leaves the group: the rule pauses itself and says why, nothing half-created.
     await db.gastoRecurrente.update({ where: { id: groceries.id }, data: { proximaFecha: new Date(`${today}T00:00:00Z`) } });
     await db.grupoMiembro.updateMany({ where: { grupoId: depa.id, usuarioId: diego }, data: { activo: false } });
@@ -88,6 +100,22 @@ async function run() {
     assert.equal(paused.activo, false);
     assert.ok(paused.pausaMotivo, 'it explains why it stopped');
     await db.grupoMiembro.updateMany({ where: { grupoId: depa.id, usuarioId: diego }, data: { activo: true } });
+
+    // A process error halfway through catch-up cannot leave an already-created occurrence pending.
+    const interrupted = await call(`/grupos/${depa.id}/recurrentes`, caleb, 'POST', { ...base, descripcion: 'Internet recuperado', frecuencia: 'semanal', primeraFecha: week });
+    const missed = new Date(`${today}T00:00:00Z`); missed.setUTCDate(missed.getUTCDate() - 14);
+    const firstDay = missed.toISOString().slice(0, 10);
+    await db.gastoRecurrente.update({ where: { id: interrupted.id }, data: { proximaFecha: missed } });
+    const expenseService = require('../apps/api/dist/services/gastos.service');
+    const originalCreate = expenseService.crearGasto;
+    let calls = 0;
+    expenseService.crearGasto = (...args) => { if (++calls === 2) throw new Error('simulated process interruption'); return originalCreate(...args); };
+    try { await assert.rejects(runRule(interrupted.id, today), /simulated process interruption/); }
+    finally { expenseService.crearGasto = originalCreate; }
+    const interruptedRule = await db.gastoRecurrente.findUniqueOrThrow({ where: { id: interrupted.id } });
+    assert.ok(interruptedRule.proximaFecha.toISOString().slice(0, 10) > firstDay, 'the first expense and next date committed together');
+    assert.equal(await runRule(interrupted.id, today), 2, 'retry adds only the two remaining weeks');
+    assert.equal(await db.gasto.count({ where: { recurrenteId: interrupted.id } }), 3);
 
     // Stopping it keeps every rent already added; the group history records each change.
     const added = await db.gasto.count({ where: { recurrenteId: rent.id } });
@@ -98,6 +126,15 @@ async function run() {
     // Balances stay exact: money is neither created nor lost.
     const final = await call(`/grupos/${depa.id}`, caleb);
     assert.equal(final.resumen.cuentas.reduce((t, x) => t + x.neto, 0), 0);
+    // Closing freezes future spending immediately, including budget edits and automatic rules.
+    await call(`/grupos/${depa.id}/recurrentes/${groceries.id}`, sofia, 'PATCH', { activo: true });
+    await call(`/grupos/${depa.id}/ciclo`, caleb, 'POST', { accion: 'cerrar' });
+    assert.equal((await db.gastoRecurrente.findUniqueOrThrow({ where: { id: groceries.id } })).activo, false);
+    await call(`/grupos/${depa.id}/recurrentes/${groceries.id}`, sofia, 'PATCH', { activo: true }, 409);
+    await call(`/grupos/${depa.id}/presupuesto`, caleb, 'PUT', { categoria: 'total', montoMensual: 100000 }, 409);
+    assert.equal((await call(`/grupos/${depa.id}/presupuesto`, caleb)).total.porVenir, 0);
+    await call(`/grupos/${depa.id}/ciclo`, caleb, 'POST', { accion: 'reabrir' });
+    assert.equal((await db.gastoRecurrente.findUniqueOrThrow({ where: { id: groceries.id } })).activo, false, 'reopening never silently restarts automatic spending');
     console.log('PASS: recurring expenses — invalid rules refused, first one added at once with an exact split, idempotent request, missed months added once even with two concurrent runs, short months, permissions, pause/resume without back-fill, self-pause with a reason when someone left, stop keeps past expenses, history events, balances exact. Local data only.');
   } catch (error) {
     console.error(server.log().split(String.fromCharCode(10)).filter((line) => /error/i.test(line)).slice(-8).join(String.fromCharCode(10)));

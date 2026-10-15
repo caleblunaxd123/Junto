@@ -1,5 +1,13 @@
 # JUNTO — controles previos a publicación
 
+## Candidata actual: revisión del 15 de octubre de 2026
+
+Se conserva la identidad esmeralda/menta actual y se incluyen cuaderno con PDF/Excel, cierre de grupos, gastos recurrentes y presupuesto. La auditoría, correcciones y evidencia reproducible están en `docs/PRODUCTION_READINESS_2026-10-15.md`. Las secciones de betas siguientes son antecedentes; no describen todas las funciones de esta candidata.
+
+Validación local: 104 pruebas de dominio, 115 de UX/configuración, 27 suites de integración con PostgreSQL, tipos/lint, export web de producción, compatibilidad Expo y contenedor con las 27 migraciones desde cero, sin desfase de esquema. La imagen de API contiene cero vulnerabilidades reportadas por npm; usa usuario no privilegiado, filesystem de solo lectura y un rol de base con CRUD restringido. GitHub Actions repite los controles y ahora incluye las funciones recientes.
+
+La validación local no acredita entrega real de push, recorridos físicos de Google/WhatsApp/adjuntos/TalkBack ni publicación en tiendas. El despliegue debe usar el respaldo y procedimiento de `ops/contabo/README.md`; subir el código a GitHub no actualiza por sí solo el servidor ni el APK.
+
 ## Beta 1.4.0 publicada: voz y capturas desde chat
 
 Ver `ops/web/FLOW-VOICE-CHAT-20261011.md` y `ops/web/DEPLOY-20261011-VOICE140.md`: CI, respaldo/restauración, RECORD_AUDIO presente pero sin permiso runtime al abrir, misma firma/code 9, regresión web y pagos. Dictado físico y reconocimiento con ruido siguen como prueba del propietario. Capturas nunca confirman dinero ni se muestran a todo el grupo; push real sigue pendiente.
@@ -21,7 +29,7 @@ Cambios locales posteriores a la beta 1.2.0 (todavía requieren despliegue aprob
 - «Dividir gastos» es la acción principal grande de Inicio; sigue creando un grupo único de gastos compartidos.
 - El cálculo conservado de «Probar sin cuenta» y «Cuentas anteriores» pueden pasar a un grupo, con selección explícita de identidad/pagador. La cuenta anterior permanece como historial de solo lectura, sin volver a sumar su deuda.
 - La administración registra pagos recibidos por personas sin cuenta, nunca su propio pago ni pagos recibidos por otra cuenta real. Se guarda quién lo confirmó.
-- Repetir estos flujos en Android físico, Safari iPhone y TalkBack antes de dar por lista esta versión. Monedas por país todavía pendientes; la versión actual registra importes en soles.
+- Repetir estos flujos en Android físico, Safari iPhone y TalkBack antes de publicar en tiendas. Las monedas por país ya se incorporaron en la beta 1.3.0; los importes siguen guardándose en unidades menores exactas de la moneda del grupo.
 
 | Tema | Qué hay ahora | Cómo comprobarlo |
 | --- | --- | --- |

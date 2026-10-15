@@ -3,13 +3,11 @@ import { Stack } from "expo-router";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ShareIntentProvider } from "expo-share-intent";
 import { queryClient } from "../src/lib/queryClient";
-import {
-  useFonts,
-  PlusJakartaSans_400Regular,
-  PlusJakartaSans_500Medium,
-  PlusJakartaSans_700Bold,
-  PlusJakartaSans_800ExtraBold,
-} from "@expo-google-fonts/plus-jakarta-sans";
+import { useFonts } from "expo-font";
+import { PlusJakartaSans_400Regular } from "@expo-google-fonts/plus-jakarta-sans/400Regular";
+import { PlusJakartaSans_500Medium } from "@expo-google-fonts/plus-jakarta-sans/500Medium";
+import { PlusJakartaSans_700Bold } from "@expo-google-fonts/plus-jakarta-sans/700Bold";
+import { PlusJakartaSans_800ExtraBold } from "@expo-google-fonts/plus-jakarta-sans/800ExtraBold";
 import * as SplashScreen from "expo-splash-screen";
 import { useAuthStore } from "../src/store/auth.store";
 import { DialogHost } from "../src/components/ui/AppDialog";

@@ -39,7 +39,9 @@ test("Pressable never uses a style callback (it is dropped under NativeWind); us
 test("every Pressable tells screen readers what it is", () => {
   const offenders = [];
   for (const file of files) for (const { line, tag } of pressableTags(fs.readFileSync(file, "utf8")))
-    if (!/accessibilityRole=/.test(tag) && !/accessibilityLabel="Cerrar/.test(tag)) offenders.push(`${path.relative(process.cwd(), file)}:${line}`);
+    if (!/accessibilityRole=/.test(tag) && !/accessibilityLabel="Cerrar/.test(tag) &&
+        !(/accessible=\{false\}/.test(tag) && /importantForAccessibility="no-hide-descendants"/.test(tag) && /tabIndex=\{-1\}/.test(tag)))
+      offenders.push(`${path.relative(process.cwd(), file)}:${line}`);
   assert.deepEqual(offenders, []);
 });
 

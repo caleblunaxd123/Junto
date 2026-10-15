@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calendarToday, dueOccurrences, isCalendarDay, nextOccurrence } from './recurrence';
+import { calendarToday, dueOccurrences, isCalendarDay, nextOccurrence, occurrenceOnOrAfter } from './recurrence';
 
 test('monthly on the 31st: last day of short months, back to the 31st afterwards', () => {
   const days: string[] = ['2026-01-31'];
@@ -13,7 +13,17 @@ test('monthly on the 31st: last day of short months, back to the 31st afterwards
 test('weekly and every 15 days', () => {
   assert.equal(nextOccurrence('2026-10-15', 'semanal'), '2026-10-22');
   assert.equal(nextOccurrence('2026-12-28', 'semanal'), '2027-01-04');
-  assert.equal(nextOccurrence('2026-10-15', 'quincenal'), '2026-10-29');
+  assert.equal(nextOccurrence('2026-10-15', 'quincenal'), '2026-10-30');
+  assert.equal(nextOccurrence('2026-12-28', 'quincenal'), '2027-01-12');
+});
+
+test('seeking distant occurrences preserves the schedule and short-month anchor', () => {
+  for (const frequency of ['mensual', 'quincenal', 'semanal'] as const) {
+    let expected = '2020-01-31';
+    while (expected < '2028-02-28') expected = nextOccurrence(expected, frequency, 31);
+    assert.equal(occurrenceOnOrAfter('2020-01-31', '2028-02-28', frequency, 31), expected);
+  }
+  assert.equal(occurrenceOnOrAfter('2026-10-31', '2026-10-01', 'mensual', 31), '2026-10-31');
 });
 
 test('catch-up after the server was off: every missed occurrence once, capped', () => {
