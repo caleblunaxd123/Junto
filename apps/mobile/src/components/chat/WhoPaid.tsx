@@ -62,7 +62,7 @@ export function WhoPaid({ group, payments = [], userId, visible, onClose, onPay,
             {!saldos.length ? (
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 14, backgroundColor: palette.mint }}>
                 <Ionicons name="checkmark-circle" size={20} color="#007B60" />
-                <Label size={14} weight="bold" color="#007B60">{group.resumen.cantidadGastos ? "Todos están a mano" : "Agrega un gasto para ver las cuentas"}</Label>
+                <Label size={14} weight="bold" color="#007B60">{group.resumen.cantidadGastos || group.estado === 'cerrado' ? "Todos están a mano" : "Agrega un gasto para ver las cuentas"}</Label>
               </View>
             ) : saldos.map((s) => {
               const debtor = members.get(s.deudorId);
@@ -87,7 +87,7 @@ export function WhoPaid({ group, payments = [], userId, visible, onClose, onPay,
                     <View style={{ flexDirection: "row", gap: 8 }}>
                       <View style={{ flex: 1 }}><Button compact title="Ya me pagó" onPress={() => onRecord({ id: s.deudorId, nombre: s.deudorNombre }, s.monto)} /></View>
                       <View style={{ flex: 1 }}>{debtor && sinCuenta(debtor)
-                        ? <Button compact secondary title="Recordar" accessibilityHint="Sin app: abre WhatsApp con lo que debe y su enlace" onPress={() => onShare(debtor)} />
+                        ? <Button compact secondary title="Recordar" accessibilityHint="Prepara un mensaje con lo que debe" onPress={() => onShare(debtor)} />
                         : <Button compact secondary title="Recordar" accessibilityHint="Le llega un aviso de JUNTO y queda anotado en el chat" onPress={() => onRemind({ id: s.deudorId, nombre: s.deudorNombre }, s.monto)} />}</View>
                     </View>
                   )}
@@ -123,7 +123,7 @@ export function WhoPaid({ group, payments = [], userId, visible, onClose, onPay,
                     </View>
                     <Label size={13} weight="bold" color={state.color} style={{ textAlign: "right", maxWidth: 120 }}>{state.text}</Label>
                   </View>
-                  {noApp && (
+                  {noApp && (!group.estado || group.estado === 'abierto') && (
                     <View style={{ flexDirection: "row", gap: 8 }}>
                       <View style={{ flex: 1 }}><Button compact secondary title="Enviar su enlace" onPress={() => onShare(member)} /></View>
                       {admin && <View style={{ flex: 1 }}><Button compact secondary title="Ya se unió" onPress={() => onLink(member)} /></View>}

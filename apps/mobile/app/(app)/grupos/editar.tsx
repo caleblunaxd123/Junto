@@ -9,6 +9,7 @@ import { FormField, ReferenceHero } from "../../../src/components/ui/Reference";
 import { art } from "../../../src/components/ui/Artwork";
 import type { AprobacionPagos, GrupoTipo } from "../../../src/types";
 import { errorMessage } from "../../../src/lib/errorMessage";
+import { canAddExpenses } from '../../../src/lib/groupLifecycle';
 
 const types: { id: GrupoTipo; label: string; image: typeof art.travel }[] = [
   { id: "viaje", label: "Viaje", image: art.travel },
@@ -72,7 +73,7 @@ export default function EditGroup() {
         <Label weight="bold">Solo los administradores pueden editar el grupo</Label>
         <Label>Puedes seguir revisando sus gastos y tus cuentas.</Label>
         <Button title="Volver al grupo" secondary onPress={() => router.dismissTo(`/(app)/grupos/${grupoId}`)} />
-      </Card> : draft?.id === grupoId && <>
+      </Card> : !canAddExpenses(group) ? <Card><Label weight="bold">El grupo está cerrado para cambios</Label><Label>Reábrelo desde sus opciones antes de editarlo.</Label><Button title="Volver al grupo" secondary onPress={() => router.dismissTo(`/(app)/grupos/${grupoId}`)} /></Card> : draft?.id === grupoId && <>
         <ReferenceHero title="El mismo plan, más claro" subtitle="Un nombre fácil de reconocer ayuda a todo el grupo." image={art.group} height={150} />
         <FormField label="Nombre del grupo" icon="people-outline" accessibilityLabel="Nombre del grupo" value={draft.nombre} maxLength={100} editable={!update.isPending} onChangeText={(nombre) => setDraft({ ...draft, nombre })} placeholder="Ej. Gastos de nuestro depa" />
         <Label weight="extra" size={20}>Tipo de grupo</Label>

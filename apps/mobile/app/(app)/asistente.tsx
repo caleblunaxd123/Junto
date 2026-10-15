@@ -21,7 +21,8 @@ import {
 import { IconBubble } from "../../src/components/ui/Reference";
 import { art } from "../../src/components/ui/Artwork";
 import { useGrupos } from "../../src/hooks/useGrupos";
-import { centavosASoles } from "../../src/types";
+import { canAddExpenses } from '../../src/lib/groupLifecycle';
+import { formatMoney } from '@junto/shared/currency';
 export default function Assistant() {
   const groups = useGrupos();
   const [groupId, setGroupId] = useState("");
@@ -51,6 +52,7 @@ export default function Assistant() {
       /\b(pague|gaste|cena|taxi|almuerzo|compramos)\b/.test(normalized) &&
       /\d/.test(normalized)
     ) {
+      if (!canAddExpenses(chosen)) { setReply('Este grupo terminó de anotar gastos. Un administrador puede reabrirlo desde sus opciones. Puedes seguir consultando sus cuentas.'); return; }
       router.push({
         pathname: "/(app)/gastos/agregar",
         params: { grupoId: chosen.id, texto: question },
@@ -58,7 +60,7 @@ export default function Assistant() {
       return;
     }
     setReply(
-      `En ${chosen.nombre}, el grupo gastó S/ ${centavosASoles(chosen.resumen.totalGastado)} en ${chosen.resumen.cantidadGastos} gastos. ${chosen.balanceUsuario.neto === 0 ? "Estás al día." : chosen.balanceUsuario.neto > 0 ? `Te deben S/ ${centavosASoles(chosen.balanceUsuario.neto)}.` : `Debes S/ ${centavosASoles(-chosen.balanceUsuario.neto)}.`} Abre “Explícame mis cuentas” para ver tu parte y lo que pagaste. Los pagos pendientes no descuentan la deuda todavía.`,
+      `En ${chosen.nombre}, el grupo gastó ${formatMoney(chosen.resumen.totalGastado, chosen.moneda)} en ${chosen.resumen.cantidadGastos} gastos. ${chosen.balanceUsuario.teDeben ? `Te deben ${formatMoney(chosen.balanceUsuario.teDeben, chosen.moneda)}. ` : ''}${chosen.balanceUsuario.debes ? `Debes ${formatMoney(chosen.balanceUsuario.debes, chosen.moneda)}. ` : ''}${!chosen.balanceUsuario.teDeben && !chosen.balanceUsuario.debes ? 'Estás a mano. ' : ''}Abre “Sacar cuentas” para ver tu parte y lo que pagaste. Los pagos pendientes no descuentan la deuda todavía.`,
     );
   }
   return (

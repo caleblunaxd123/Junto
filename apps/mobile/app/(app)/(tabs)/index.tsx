@@ -40,6 +40,7 @@ import { clearTryBill, loadTryBill, type SavedTryBill } from "../../../src/lib/t
 import { useResponsiveLayout } from "../../../src/components/ui/responsive";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { expenseDraftPrefix } from "../../../src/lib/draftStorage";
+import { canAddExpenses, groupStateLabel } from '../../../src/lib/groupLifecycle';
 
 import { formatMoney as money } from "@junto/shared/currency";
 
@@ -57,6 +58,7 @@ export default function Home() {
   const payments = usePagos();
   const refetchPayments = payments.refetch;
   const [search, setSearch] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const [splitPressed, setSplitPressed] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [allPending, setAllPending] = useState(false);
@@ -94,8 +96,9 @@ export default function Home() {
   const actions = pendingActions(groups, payments.data ?? [], usuario?.id);
   const openBills = bills.data?.filter((bill) => !bill.archivada && !bill.grupoId) ?? [];
   const dayPending = pendingDayBills(openBills);
+  const archivedCount = groups.filter(g => g.archivado).length;
   const filtered = groups.filter((g) =>
-    g.nombre.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
+    !!g.archivado === showArchived && g.nombre.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
   );
   const { empty, unavailable, canShowAllClear, canShowGroupsClear } = homeState(
     { loading: isLoading, error: isError, hasData: groupData !== undefined },
@@ -245,6 +248,11 @@ export default function Home() {
               <Label size={13} color={palette.muted}>Aún no tienes grupos. Pulsa «Dividir gastos» para empezar.</Label>
             ) : (
               <>
+                {(archivedCount > 0 || showArchived) && <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Button compact title="Mis grupos" secondary={showArchived} onPress={() => setShowArchived(false)} />
+                  {!!archivedCount && <Button compact title={`Archivados (${archivedCount})`} secondary={!showArchived} onPress={() => setShowArchived(true)} />}
+                </View>}
+                {showArchived && <Label size={12} color={palette.muted}>Archivados solo para ti. Sus deudas siguen incluidas en tus cuentas y pagos pendientes.</Label>}
                 {groups.length > 5 && (
                   <View style={[design.input, { flexDirection: "row", alignItems: "center", paddingVertical: 0, gap: 8 }]}>
                     <Ionicons name="search" size={20} color={palette.muted} />
@@ -279,6 +287,7 @@ export default function Home() {
                         />
                         <View style={{ flex: 1, gap: 4 }}>
                           <Label size={16} weight="extra" numberOfLines={2}>{g.nombre}</Label>
+                          {g.estado && g.estado !== 'abierto' && <Label size={11} weight="bold" color={g.estado === 'cerrado' ? '#007B60' : '#8A5A00'}>{groupStateLabel(g)}</Label>}
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                             <View style={{ flexDirection: "row" }}>
                               {g.miembros.slice(0, 4).map((m, i) => (
@@ -310,7 +319,7 @@ export default function Home() {
                     </Pressable>
                   );
                 })}
-                {!filtered.length && <Label color={palette.muted}>No hay grupos con ese nombre.</Label>}
+                {!filtered.length && <Label color={palette.muted}>{search ? 'No hay grupos con ese nombre.' : showArchived ? 'No tienes grupos archivados.' : 'Tus grupos están archivados. Puedes abrirlos desde «Archivados».'}</Label>}
               </>
             )}
 
@@ -355,7 +364,7 @@ export default function Home() {
         )}
       </ScrollView>
       {!empty && !desktop && <AddButton onPress={() => setSheet(true)} />}
-      <CreateSheet visible={sheet} onClose={() => setSheet(false)} groups={groups} />
+      <CreateSheet visible={sheet} onClose={() => setSheet(false)} groups={groups.filter(canAddExpenses)} />
     </SafeAreaView>
   );
 }

@@ -11,6 +11,7 @@ import { referenceForDate } from "../domain/exchange";
 import { transactionLock } from "../lib/transactionLock";
 import type { RegistrarRecibidoInput, ReportarPagoInput } from "../schemas/pagos.schema";
 import type { Prisma } from "@prisma/client";
+import { syncGroupClosure } from './groupLifecycle.service';
 
 const person = { select: { id: true, nombre: true, fotoUrl: true } } as const;
 const pagoInclude = {
@@ -214,6 +215,7 @@ export async function resolverPago(
     });
     if (result.count !== 1) throw new Error("Este pago ya fue resuelto. Actualiza el grupo.");
     await savePaymentNotices(tx, pago, confirmar ? "pago_confirmado" : "pago_rechazado", userId);
+    await syncGroupClosure(tx, pago.grupoId, userId);
     return { pago, reverted, resuelto: await tx.pago.findUniqueOrThrow({ where: { id: pagoId }, include: pagoInclude }) };
   });
   if (reverted) {
@@ -362,6 +364,7 @@ export async function registrarRecibido(input: RegistrarRecibidoInput, userId: s
       data: { grupoId: input.grupoId, pagadorId: input.pagadorId, receptorId, monto: input.monto, ...conversion, feejunto: 0, metodo: input.metodo, estado: "exitoso", nota: input.nota || null, fechaEfectiva: input.fechaEfectiva ? new Date(`${input.fechaEfectiva}T00:00:00Z`) : now, fechaResolucion: now, resueltoPor: userId },
     });
     await savePaymentNotices(tx, created, "pago_confirmado", userId);
+    await syncGroupClosure(tx, input.grupoId, userId);
     return tx.pago.findUniqueOrThrow({ where: { id: created.id }, include: pagoInclude });
   });
   void notify(

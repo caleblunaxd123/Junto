@@ -46,3 +46,4 @@ __pycache__/
 apps/mobile/dist-beta/
 apps/mobile/dist-local/
 ops/artifacts/
+/output/

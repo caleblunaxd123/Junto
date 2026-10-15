@@ -11,6 +11,7 @@ const short = z.string().max(80);
 const snapshot = z.object({
   id: short, nombre: z.string().max(100), tipo: z.enum(["viaje", "roomies", "pareja", "amigos", "trabajo", "deporte", "otro"]),
   moneda: z.enum(["PEN", "USD", "EUR", "COP", "MXN", "BRL"]),
+  estado: z.enum(['abierto', 'por_liquidar', 'cerrado']).optional(),
   // No email, phone, invitation code, balance, avatar URL or payment history in this cache.
   miembros: z.array(z.object({ usuarioId: short, usuario: z.object({ id: short, nombre: z.string().max(100), fotoUrl: z.undefined().optional() }) }).strict()).max(50),
 }).strict();

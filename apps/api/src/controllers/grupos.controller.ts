@@ -88,6 +88,7 @@ export async function getSaldos(
 export async function invitar(req: Request, res: Response, next: NextFunction) {
   try {
     const group = await gruposService.getGrupoDetalle(req.params.id, req.user!.userId);
+    if (group.estado !== 'abierto') throw new UserError('Este grupo ya no admite invitaciones. Un administrador puede reabrirlo.', 409);
     const { identificador, celular } = z
       .object({ identificador: z.string().trim().min(2).max(255).optional(), celular: invitarSchema.shape.celular })
       .parse(req.body ?? {});

@@ -202,7 +202,7 @@ export default function Payment() {
         comprobanteId: lectura?.comprobanteId,
       });
       setReported(data);
-      await Promise.all(["pagos", "actividad", "grupos", "chat", "notificaciones"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
+      await Promise.all(["pagos", "actividad", "grupos", "chat", "notificaciones", "estado-cuenta"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
     } catch (err) {
       setError(errorText(err, "No pudimos registrar el pago. Reintenta."));
       // It may have been saved before the answer was lost: refresh so an existing report shows up.

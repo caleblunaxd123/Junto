@@ -60,6 +60,9 @@ export function useEditarGrupo(grupoId: string) {
         qc.invalidateQueries({ queryKey: ["grupos"] }),
         qc.invalidateQueries({ queryKey: ["actividad"] }),
         qc.invalidateQueries({ queryKey: ["pagos"] }),
+        qc.invalidateQueries({ queryKey: ["estado-cuenta", grupoId] }),
+        qc.invalidateQueries({ queryKey: ['chat', grupoId] }),
+        qc.invalidateQueries({ queryKey: ['movimientos', grupoId] }),
       ]);
     },
   });
@@ -87,6 +90,9 @@ export function useCrearGasto(grupoId: string, gastoId?: string) {
       qc.invalidateQueries({ queryKey: ["gastos"] });
       qc.invalidateQueries({ queryKey: ["saldos", grupoId] });
       qc.invalidateQueries({ queryKey: ["grupos"] });
+      qc.invalidateQueries({ queryKey: ["estado-cuenta", grupoId] });
+      qc.invalidateQueries({ queryKey: ['chat', grupoId] });
+      qc.invalidateQueries({ queryKey: ['movimientos', grupoId] });
     },
   });
 }
@@ -150,6 +156,8 @@ export function useResolverPago() {
       queryClient.invalidateQueries({ queryKey: ["pagos"] });
       queryClient.invalidateQueries({ queryKey: ["grupos"] });
       queryClient.invalidateQueries({ queryKey: ["saldos"] });
+      queryClient.invalidateQueries({ queryKey: ["estado-cuenta"] });
+      queryClient.invalidateQueries({ queryKey: ['movimientos'] });
     },
   });
 }

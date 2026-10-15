@@ -15,7 +15,7 @@ export const sinCuenta = (member: Pick<Member, "usuario">) => !!member.usuario.s
  */
 export function personalInvite(group: GrupoConBalance, member: Member, senderName: string): ShareMessage {
   const money = (value: number) => formatMoney(value, group.moneda);
-  const url = member.codigoPersonal ? invitationUrl(member.codigoPersonal) : "";
+  const url = (!group.estado || group.estado === 'abierto') && member.codigoPersonal ? invitationUrl(member.codigoPersonal) : "";
   const name = firstName(member.usuario.nombre);
   const owes = (group.resumen.saldos ?? []).filter((s) => s.deudorId === member.usuarioId);
   const owed = (group.resumen.saldos ?? []).filter((s) => s.acreedorId === member.usuarioId);

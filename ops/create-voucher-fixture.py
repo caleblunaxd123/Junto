@@ -2,6 +2,7 @@
 # Usage: python3 ops/create-voucher-fixture.py                      ->  ops/qa-voucher.png
 #        python3 ops/create-voucher-fixture.py --operacion 91383048 --codigo "7 1 6" --salida /tmp/v.png
 import argparse
+import os
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
@@ -9,18 +10,32 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--operacion", default="03416872")
 parser.add_argument("--codigo", default="4 8 2")
 parser.add_argument("--hora", default="08:15 p. m.")
+parser.add_argument("--monto", default="25")
+parser.add_argument("--destinatario", default="Marta Q. Ríos")
+parser.add_argument("--fecha", default="07 oct. 2026")
 parser.add_argument("--salida", default=str(Path(__file__).with_name("qa-voucher.png")))
 args = parser.parse_args()
 
-FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+def font_path(bold=False):
+    windows = Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts"
+    candidates = [
+        Path("/usr/share/fonts/truetype/dejavu") / ("DejaVuSans-Bold.ttf" if bold else "DejaVuSans.ttf"),
+        windows / ("arialbd.ttf" if bold else "arial.ttf"),
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+    raise RuntimeError("Instala DejaVu Sans o Arial para generar el comprobante ficticio.")
+
+FONT = font_path()
+BOLD = font_path(True)
 image = Image.new("RGB", (720, 1280), "white")
 draw = ImageDraw.Draw(image)
 lines = [
     ("¡Yapeaste!", BOLD, 44, "#4A1A6B"),
-    ("S/ 25", BOLD, 72, "#4A1A6B"),
-    ("Marta Q. Ríos", FONT, 36, "#222222"),
-    (f"07 oct. 2026 | {args.hora}", FONT, 28, "#555555"),
+    (f"S/ {args.monto}", BOLD, 72, "#4A1A6B"),
+    (args.destinatario, FONT, 36, "#222222"),
+    (f"{args.fecha} | {args.hora}", FONT, 28, "#555555"),
     ("CÓDIGO DE SEGURIDAD", BOLD, 26, "#222222"),
     (args.codigo, BOLD, 40, "#222222"),
     ("Datos de la transacción", BOLD, 28, "#222222"),

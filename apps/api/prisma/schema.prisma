@@ -57,6 +57,7 @@ model Usuario {
   fotoPerfil          FotoPerfil?
   avisosRecibidos     AvisoGrupo[] @relation("AvisoDestinatario")
   avisosOriginados    AvisoGrupo[] @relation("AvisoIntegrante")
+  eventosGrupo       EventoGrupo[]
 
   @@map("usuarios")
 }
@@ -114,6 +115,9 @@ model Grupo {
   linkInvitacion  String?   @unique @map("link_invitacion") @db.VarChar(50)
   fechaCreacion   DateTime  @default(now()) @map("fecha_creacion")
   activo          Boolean   @default(true)
+  estado          String    @default("abierto") @db.VarChar(20)
+  cierreSolicitadoEn DateTime? @map("cierre_solicitado_en")
+  cerradoEn       DateTime? @map("cerrado_en")
   // Who may approve a reported payment: "receptor" (only who receives it) or "administrador"
   // (who receives it or a group admin). The payer never approves their own payment.
   aprobacionPagos String    @default("receptor") @map("aprobacion_pagos") @db.VarChar(20)
@@ -141,6 +145,7 @@ model Grupo {
   invitaciones    Invitacion[]
   avisos          AvisoGrupo[]
   cuentaAnterior  CuentaRapida?
+  eventos         EventoGrupo[]
 
   @@unique([creadoPor, solicitudImportacion])
   @@index([fechaLimite])
@@ -155,6 +160,7 @@ model GrupoMiembro {
   fechaUnion  DateTime  @default(now()) @map("fecha_union")
   // Last time this member opened the group chat: what came after is "unread".
   ultimaLectura DateTime? @map("ultima_lectura")
+  archivadoEn DateTime? @map("archivado_en")
   activo      Boolean   @default(true)
   // Personal invitation code for a member added by name: opening /unirse/<code> joins as them.
   codigoPersonal String? @unique @map("codigo_personal") @db.VarChar(40)
@@ -166,6 +172,22 @@ model GrupoMiembro {
   @@unique([grupoId, usuarioId])
   @@index([usuarioId])
   @@map("grupo_miembros")
+}
+
+// Append-only account history: corrections and lifecycle events survive expense deletion.
+model EventoGrupo {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  grupoId     String   @map("grupo_id") @db.Uuid
+  autorId     String   @map("autor_id") @db.Uuid
+  tipo        String   @db.VarChar(40)
+  texto       String   @db.Text
+  detalle     Json     @default("{}")
+  fecha       DateTime @default(now())
+  grupo       Grupo    @relation(fields: [grupoId], references: [id])
+  autor       Usuario  @relation(fields: [autorId], references: [id])
+
+  @@index([grupoId, fecha, id])
+  @@map("eventos_grupo")
 }
 
 // Saved in the same transaction as joining. Push is optional, the in-app notice is durable.

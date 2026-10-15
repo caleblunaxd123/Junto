@@ -4,6 +4,7 @@ import { Linking, Platform, TextInput, View } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGrupo } from "../../../src/hooks/useGrupos";
+import { canAddExpenses } from '../../../src/lib/groupLifecycle';
 import { api } from "../../../src/lib/api";
 import { invitationUrl } from "../../../src/lib/invitation";
 import { memberLabels, meFirst } from "../../../src/lib/people";
@@ -137,6 +138,9 @@ export default function Invite() {
     } finally { setBusy(false); }
   }
   const fresh = nuevo === "1";
+  if (group && !canAddExpenses(group)) return <Screen back title="Integrantes del grupo" subtitle={group.nombre}>
+    <Card><Label weight="bold">Este grupo ya no admite integrantes nuevos</Label><Label size={13}>Un administrador puede reabrirlo desde sus opciones. Las cuentas y los pagos anteriores siguen disponibles.</Label><Button title="Volver al grupo" onPress={() => router.dismissTo(`/(app)/grupos/${grupoId}`)} /></Card>
+  </Screen>;
   return (
     <Screen
       title={fresh ? "¡Grupo creado!" : "Invitar personas"}

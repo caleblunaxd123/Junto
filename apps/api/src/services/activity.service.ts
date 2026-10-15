@@ -52,15 +52,17 @@ export function describePayment(
 }
 
 export async function getActivity(userId: string, grupoId?: string) {
-  const memberships = await prisma.grupoMiembro.findMany({ where: { usuarioId: userId, activo: true, ...(grupoId ? { grupoId } : {}) }, select: { grupoId: true, rol: true, grupo: { select: { aprobacionPagos: true } } } });
+  const memberships = await prisma.grupoMiembro.findMany({ where: { usuarioId: userId, activo: true, grupo: { activo: true }, ...(grupoId ? { grupoId } : {}) }, select: { grupoId: true, rol: true, grupo: { select: { aprobacionPagos: true } } } });
   const approves = new Set(memberships.filter((m) => m.rol === 'admin' && m.grupo.aprobacionPagos === 'administrador').map((m) => m.grupoId));
   const groupIds = memberships.map((member) => member.grupoId);
   const person = { select: { id: true, nombre: true } } as const;
-  const [expenses, payments] = await Promise.all([
+  const [expenses, payments, events] = await Promise.all([
     prisma.gasto.findMany({ where: { grupoId: { in: groupIds }, activo: true }, include: { creador: person, grupo: { select: { nombre: true, moneda: true } }, participantes: { where: { usuarioId: userId }, select: { montoAsignado: true } } }, orderBy: { fecha: 'desc' }, take: 80 }),
     prisma.pago.findMany({ where: { grupoId: { in: groupIds } }, include: { pagador: person, receptor: person, resolutor: person, grupo: { select: { nombre: true, moneda: true } } }, orderBy: { fechaPago: 'desc' }, take: 80 }),
+    prisma.eventoGrupo.findMany({ where: { grupoId: { in: groupIds } }, include: { autor: person, grupo: { select: { nombre: true, moneda: true } } }, orderBy: [{ fecha: 'desc' }, { id: 'desc' }], take: 80 }),
   ]);
   return [
+    ...events.map(e => ({ id: `event-${e.id}`, tipo: 'cambio', titulo: `${e.autor.id === userId ? 'Tú' : e.autor.nombre}: ${e.texto}`, detalle: e.grupo.nombre, monto: 0, moneda: e.grupo.moneda, fecha: e.fecha, grupoId: e.grupoId, gastoId: null, pagoId: null, tuParte: null, pagaste: false, requiereAccion: false })),
     ...expenses.map((e) => ({
       id: `expense-${e.id}`,
       tipo: 'gasto',

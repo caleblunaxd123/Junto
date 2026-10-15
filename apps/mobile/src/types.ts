@@ -67,6 +67,11 @@ export interface Grupo {
   fechaCreacion: string;
   activo: boolean;
   miembros: GrupoMiembro[];
+  estado?: 'abierto' | 'por_liquidar' | 'cerrado';
+  cerradoEn?: string | null;
+  cierreSolicitadoEn?: string | null;
+  archivado?: boolean;
+  tieneHistorialFinanciero?: boolean;
 }
 
 /** WhatsApp ticks on what I post: ✓ sent, ✓✓ received (they used JUNTO after), blue ✓✓ seen. */
@@ -140,6 +145,7 @@ export type ChatPersona = { id: string; nombre: string; fotoUrl?: string | null 
 type ChatBase = { id: string; fecha: string; autor: ChatPersona; mio: boolean };
 export type ChatItem = ChatBase & (
   | { tipo: "creado" }
+  | { tipo: 'cambio'; texto: string; evento: string }
   | { tipo: "union"; parte: number | null; activo: boolean; sinCuenta?: boolean }
   | { tipo: "cuenta" | "gasto"; gastoId: string; descripcion: string; monto: number; pagador: ChatPersona; comentarios: number; tuParte: number | null; partes?: number; parte?: number; libres?: number; entrega?: Entrega }
   | { tipo: "pago"; pagoId: string; monto: number; monedaOrigen?: CurrencyCode | null; montoOrigen?: number | null; tipoCambio?: string | null; metodo: string | null; estado: string; receptor: ChatPersona; resolutor: ChatPersona | null; fechaResolucion: string | null; comentarios: number; tieneComprobante?: boolean; puedeVerComprobante?: boolean; apruebaComo: "receptor" | "administrador" | null }
@@ -320,7 +326,7 @@ export interface Recordatorio {
 export interface ActividadEvento {
   moneda?: CurrencyCode;
   id: string;
-  tipo: "gasto" | "pago";
+  tipo: "gasto" | "pago" | 'cambio';
   titulo: string;
   detalle: string;
   monto: number;

@@ -12,6 +12,7 @@ import {
 } from "../domain/money";
 import { allocateParts } from "../domain/billParts";
 import type { Prisma } from "@prisma/client";
+import { requireOpenGroup, groupEvent } from './groupLifecycle.service';
 
 export async function crearGasto(
   grupoId: string,
@@ -25,9 +26,10 @@ export async function crearGasto(
       await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${grupoId}::uuid FOR UPDATE`;
       const miembro = await tx.grupoMiembro.findFirst({ where: { grupoId, usuarioId: creadoPor, activo: true, grupo: { activo: true } } });
       if (!miembro) throw new Error("No perteneces a este grupo");
-      await validarMiembros(grupoId, input.pagadoPor, input.participantes.map((p) => p.usuarioId), tx);
       const previo = await gastoPorSolicitud(grupoId, input, creadoPor, tx);
       if (previo) return { gasto: previo, repetido: true };
+      await requireOpenGroup(tx, grupoId);
+      await validarMiembros(grupoId, input.pagadoPor, input.participantes.map((p) => p.usuarioId), tx);
       const gasto = await tx.gasto.create({
         data: {
           solicitudId: input.solicitudId,
@@ -294,6 +296,8 @@ export async function editarGasto(
 
     if (!miembro || (!esCreador && !esAdmin))
       throw new Error("No tienes permisos para editar este gasto");
+    await requireOpenGroup(tx, gasto.grupoId);
+    const antes = await expenseSnapshot(tx, gastoId);
 
     const cambiaDivision =
       input.montoTotal !== undefined ||
@@ -346,6 +350,13 @@ export async function editarGasto(
         })),
       });
     }
+    const despues = await expenseSnapshot(tx, gastoId);
+    if (JSON.stringify(antes) !== JSON.stringify(despues)) {
+      const { moneda } = await tx.grupo.findUniqueOrThrow({ where: { id: gasto.grupoId }, select: { moneda: true } });
+      await groupEvent(tx, gasto.grupoId, usuarioId, 'gasto_editado', antes.montoTotal !== despues.montoTotal
+        ? `Se corrigió «${despues.descripcion}»: de ${formatMoney(antes.montoTotal, moneda)} a ${formatMoney(despues.montoTotal, moneda)}.`
+        : `Se corrigió «${despues.descripcion}».`, { gastoId, antes, despues });
+    }
     return getGastoDetalle(gastoId, usuarioId, tx);
   });
 }
@@ -365,11 +376,18 @@ export async function eliminarGasto(gastoId: string, usuarioId: string) {
 
     if (!miembro || (!esCreador && !esAdmin))
       throw new Error("No tienes permisos para eliminar este gasto");
+    await requireOpenGroup(tx, gasto.grupoId);
     if (await involvesFormerMembers(gasto, tx)) throw new Error(FORMER_MEMBER, 409);
 
     await tx.gasto.update({
       where: { id: gastoId },
       data: { activo: false },
     });
+    await groupEvent(tx, gasto.grupoId, usuarioId, 'gasto_eliminado', `Se eliminó «${gasto.descripcion}». Ya no cuenta en los saldos.`, { gastoId, antes: await expenseSnapshot(tx, gastoId) });
   });
+}
+
+async function expenseSnapshot(tx: Prisma.TransactionClient, id: string) {
+  const expense = await tx.gasto.findUniqueOrThrow({ where: { id }, select: { descripcion: true, montoTotal: true, pagadoPor: true, categoria: true, fecha: true, notas: true, partes: true, participantes: { select: { usuarioId: true, montoAsignado: true }, orderBy: { usuarioId: 'asc' } } } });
+  return { ...expense, fecha: expense.fecha.toISOString() };
 }

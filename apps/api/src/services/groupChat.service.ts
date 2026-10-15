@@ -18,7 +18,7 @@ export async function getGroupChat(userId: string, grupoId: string) {
   const viewer = await prisma.grupoMiembro.findFirst({ where: { grupoId, usuarioId: userId, activo: true, grupo: { activo: true } }, select: { rol: true, grupo: { select: { aprobacionPagos: true, creadoPor: true, fechaCreacion: true, creador: person, mensajeFijadoId: true } } } });
   if (!viewer) throw new UserError("No perteneces a este grupo", 403);
   const approves = viewer.rol === "admin" && viewer.grupo.aprobacionPagos === "administrador";
-  const [members, notices, expenses, payments, reminders, messages] = await Promise.all([
+  const [members, notices, expenses, payments, reminders, messages, events] = await Promise.all([
     prisma.grupoMiembro.findMany({ where: { grupoId }, include: { usuario: { select: { id: true, nombre: true, fotoUrl: true, sinCuenta: true, ultimaConexion: true } } }, orderBy: { fechaUnion: "desc" }, take: LIMIT }),
     prisma.avisoGrupo.findMany({ where: { grupoId, parte: { not: null } }, select: { integranteId: true, parte: true }, orderBy: { fecha: "desc" }, distinct: ["integranteId"] }),
     prisma.gasto.findMany({ where: { grupoId, activo: true }, include: { creador: person, pagador: person, participantes: { select: { usuarioId: true, montoAsignado: true } }, _count: { select: { comentarios: { where: { eliminado: false } } } } }, orderBy: { fechaRegistro: "desc" }, take: LIMIT }),
@@ -26,6 +26,7 @@ export async function getGroupChat(userId: string, grupoId: string) {
     // A reminder is between who owes and who collects: the rest of the group never sees it.
     prisma.recordatorio.findMany({ where: { grupoId, OR: [{ enviadoPor: userId }, { enviadoA: userId }] }, include: { enviador: person, receptor: person }, orderBy: { fechaEnvio: "desc" }, take: LIMIT }),
     prisma.comentario.findMany({ where: { grupoId, gastoId: null, pagoId: null }, include: { autor: person, reacciones: { select: { usuarioId: true, emoji: true } }, respondeA: { select: { id: true, texto: true, eliminado: true, autor: person } } }, orderBy: { fechaCreacion: "desc" }, take: LIMIT }),
+    prisma.eventoGrupo.findMany({ where: { grupoId }, include: { autor: person }, orderBy: [{ fecha: 'desc' }, { id: 'desc' }], take: LIMIT }),
   ]);
   const parts = new Map(notices.map((n) => [n.integranteId, n.parte!]));
   // Opening the chat reads it, like WhatsApp.
@@ -37,6 +38,7 @@ export async function getGroupChat(userId: string, grupoId: string) {
   const ticks = (own: boolean, fecha: Date) => (own ? { entrega: deliveryState(fecha, audience) } : {});
   const items = [
     { id: `grupo-${grupoId}`, tipo: "creado" as const, fecha: viewer.grupo.fechaCreacion, autor: viewer.grupo.creador, mio: mine(viewer.grupo.creadoPor) },
+    ...events.map(e => ({ id: `evento-${e.id}`, tipo: 'cambio' as const, fecha: e.fecha, autor: e.autor, mio: mine(e.autorId), texto: e.texto, evento: e.tipo })),
     ...members.filter((m) => m.usuarioId !== viewer.grupo.creadoPor || m.fechaUnion.getTime() - viewer.grupo.fechaCreacion.getTime() > 60_000).map((m) => ({
       id: `union-${m.id}`, tipo: "union" as const, fecha: m.fechaUnion, autor: m.usuario, mio: mine(m.usuarioId), parte: parts.get(m.usuarioId) ?? null, activo: m.activo,
       // Added by name (no account): "Se agregó a Ana", not "Ana se unió".
@@ -67,7 +69,7 @@ export async function getGroupChat(userId: string, grupoId: string) {
 /** What happened in the group since the member last opened its chat, not counting their own actions. */
 export async function unreadInGroup(grupoId: string, userId: string, since: Date) {
   const after = { gt: since };
-  const [messages, payments, expenses, joins] = await Promise.all([
+  const [messages, payments, expenses, joins, events] = await Promise.all([
     prisma.comentario.count({ where: { grupoId, gastoId: null, pagoId: null, eliminado: false, autorId: { not: userId }, fechaCreacion: after } }),
     prisma.pago.count({ where: { grupoId, OR: [
       { pagadorId: { not: userId }, fechaPago: after },
@@ -75,8 +77,9 @@ export async function unreadInGroup(grupoId: string, userId: string, since: Date
     ] } }),
     prisma.gasto.count({ where: { grupoId, activo: true, creadoPor: { not: userId }, fechaRegistro: after } }),
     prisma.grupoMiembro.count({ where: { grupoId, usuarioId: { not: userId }, fechaUnion: after } }),
+    prisma.eventoGrupo.count({ where: { grupoId, autorId: { not: userId }, fecha: after } }),
   ]);
-  return messages + payments + expenses + joins;
+  return messages + payments + expenses + joins + events;
 }
 
 /** "En línea" / last seen for the group's members with an account, for members only. */

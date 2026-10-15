@@ -107,7 +107,8 @@ async function run() {
     // The admin may switch to the fewest payments afterwards; every net balance stays the same.
     const switched = await call(`/grupos/${trip.id}`, sofia, 'PUT', { simplificarDeudas: true });
     assert.equal(switched.resumen.simplificado, true);
-    assert.deepEqual(switched.resumen.cuentas.map((a) => a.neto), settled.resumen.cuentas.map((a) => a.neto));
+    const byPerson = (cuentas) => Object.fromEntries(cuentas.map((a) => [a.usuarioId, a.neto]));
+    assert.deepEqual(byPerson(switched.resumen.cuentas), byPerson(settled.resumen.cuentas));
     console.log('PASS: shares split exact to the cent (create and edit, invalid shares rejected), replaced name-only member hidden, direct and simplified debts keep every net, spending by category, double confirmation counted once; person to person by default (Ana owes Sofía 30, pays it, over-payment refused, mode locked while a payment is pending, switch keeps every net). Local data only.');
   } catch (error) {
     console.error(server.log().split(String.fromCharCode(10)).filter((line) => /error/i.test(line)).slice(-8).join(String.fromCharCode(10)));

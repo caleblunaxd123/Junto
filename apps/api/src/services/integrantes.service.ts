@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { UserError as Error } from "../domain/errors";
+import { requireOpenGroup } from './groupLifecycle.service';
 
 /**
  * Members added by name only ("Ana"), so whoever paid can split right away. They are ordinary
@@ -43,6 +44,7 @@ async function lockActiveMember(tx: Tx, grupoId: string, userId: string) {
   await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${grupoId}::uuid FOR UPDATE`;
   const member = await tx.grupoMiembro.findFirst({ where: { grupoId, usuarioId: userId, activo: true, grupo: { activo: true }, usuario: { activo: true, sinCuenta: false } }, select: { rol: true } });
   if (!member) throw new Error("No perteneces a este grupo", 403);
+  await requireOpenGroup(tx, grupoId);
   return member;
 }
 

@@ -5,9 +5,13 @@ import * as recordatoriosController from "../controllers/recordatorios.controlle
 import { authMiddleware } from "../middleware/auth";
 import { z } from "zod";
 import { getGroupChat, groupPresence } from "../services/groupChat.service";
+import { groupStatement } from "../services/statement.service";
+import { statementPdf, statementXlsx } from "../services/statementExport.service";
 import { createComment, pinMessage } from "../services/comentarios.service";
 import { agregarIntegrantes, quitarIntegrante, unirIntegrante } from "../services/integrantes.service";
 import { draftImportSchema, importDraft } from "../services/groupImport.service";
+import { changeGroupLifecycle, archiveGroup } from '../services/groupLifecycle.service';
+import { groupHistory, historyQuery } from '../services/groupHistory.service';
 
 const router = Router();
 
@@ -26,6 +30,24 @@ router.get("/:id/saldos", gruposController.getSaldos);
 router.post("/:id/invitar", gruposController.invitar);
 router.post("/unirse", gruposController.unirse);
 router.delete("/:id/salir", gruposController.salir);
+router.post('/:id/ciclo', async (req, res, next) => {
+  try {
+    const { accion } = z.object({ accion: z.enum(['cerrar', 'reabrir', 'eliminar-vacio']) }).strict().parse(req.body);
+    res.json(await changeGroupLifecycle(z.string().uuid().parse(req.params.id), req.user!.userId, accion));
+  } catch (error) { next(error); }
+});
+router.put('/:id/archivo', async (req, res, next) => {
+  try {
+    const { archivar } = z.object({ archivar: z.boolean() }).strict().parse(req.body);
+    res.json(await archiveGroup(z.string().uuid().parse(req.params.id), req.user!.userId, archivar));
+  } catch (error) { next(error); }
+});
+router.get('/:id/movimientos', async (req, res, next) => {
+  try {
+    res.set('Cache-Control', 'private, no-store');
+    res.json(await groupHistory(req.user!.userId, z.string().uuid().parse(req.params.id), historyQuery.parse(req.query)));
+  } catch (error) { next(error); }
+});
 // People added by name before they have JUNTO.
 router.post("/:id/integrantes", async (req, res, next) => {
   try {
@@ -51,6 +73,24 @@ router.get("/:id/chat", async (req, res, next) => {
   try {
     res.set("Cache-Control", "private, no-store");
     res.json(await getGroupChat(req.user!.userId, z.string().uuid().parse(req.params.id)));
+  } catch (error) { next(error); }
+});
+// The viewer's own notebook, reconciled with the group's current settlement plan.
+router.get("/:id/estado-cuenta", async (req, res, next) => {
+  try {
+    res.set("Cache-Control", "private, no-store");
+    res.json(await groupStatement(req.user!.userId, z.string().uuid().parse(req.params.id)));
+  } catch (error) { next(error); }
+});
+router.get("/:id/estado-cuenta/archivo", async (req, res, next) => {
+  try {
+    const { formato, version, zona } = z.object({ formato: z.enum(['pdf', 'xlsx']), version: z.string().regex(/^[a-f0-9]{64}$/), zona: z.string().max(80).refine(value => { try { new Intl.DateTimeFormat('es', { timeZone: value }); return true; } catch { return false; } }, 'Zona horaria inválida').default('America/Lima') }).parse(req.query);
+    const statement = await groupStatement(req.user!.userId, z.string().uuid().parse(req.params.id));
+    if (statement.version !== version) { res.status(409).json({ error: 'Las cuentas cambiaron. Actualiza el cuaderno y revisa los montos antes de exportar.' }); return; }
+    if (statement.movimientos.length > 5000) { res.status(413).json({ error: 'Este cuaderno es demasiado grande para exportarlo de una sola vez.' }); return; }
+    const buffer = formato === 'pdf' ? await statementPdf(statement, zona) : await statementXlsx(statement, zona);
+    res.set({ 'Cache-Control': 'private, no-store', 'Content-Type': formato === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'Content-Disposition': `attachment; filename="junto-cuentas.${formato}"` });
+    res.send(buffer);
   } catch (error) { next(error); }
 });
 // Who is online now, and when the others were last seen. Members only; people added by name have no presence.

@@ -57,7 +57,7 @@ export default function Activity() {
   const toAnswer = data.filter((e) => e.requiereAccion && e.pagoId);
   const rest = data.filter((e) => !(e.requiereAccion && e.pagoId));
   const open = (e: ActividadEvento) =>
-    router.push(e.gastoId ? `/(app)/gastos/${e.gastoId}` : e.pagoId ? `/(app)/pagos/${e.pagoId}` : `/(app)/grupos/${e.grupoId}`);
+    router.push(e.tipo === 'cambio' ? `/(app)/grupos/movimientos?grupoId=${e.grupoId}` : e.gastoId ? `/(app)/gastos/${e.gastoId}` : e.pagoId ? `/(app)/pagos/${e.pagoId}` : `/(app)/grupos/${e.grupoId}`);
 
   function answer(event: ActividadEvento, received: boolean) {
     Alert.alert(
@@ -138,12 +138,12 @@ export default function Activity() {
             )}
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`${e.titulo}. ${money(e.monto, e.moneda)}. ${impact(e)?.text ?? ""}. ${e.detalle}. ${when(e.fecha)}`}
+              accessibilityLabel={`${e.titulo}. ${e.tipo === 'cambio' ? '' : money(e.monto, e.moneda)}. ${impact(e)?.text ?? ""}. ${e.detalle}. ${when(e.fecha)}`}
               onPress={() => open(e)}
             >
               <Card style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14 }}>
                 <View style={{ width: 40, height: 40, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: e.tipo === "pago" ? palette.mint : palette.lilac }}>
-                  <Ionicons name={e.tipo === "pago" ? "swap-horizontal-outline" : "receipt-outline"} size={20} color={e.tipo === "pago" ? "#007B60" : palette.purple} />
+                  <Ionicons name={e.tipo === 'cambio' ? 'create-outline' : e.tipo === "pago" ? "swap-horizontal-outline" : "receipt-outline"} size={20} color={e.tipo === "pago" ? "#007B60" : palette.purple} />
                 </View>
                 <View style={{ flex: 1, gap: 2 }}>
                   <Label weight="bold" size={14}>{e.titulo}</Label>
@@ -151,7 +151,7 @@ export default function Activity() {
                   {impact(e) && <Label size={12} weight="bold" color={impact(e)!.color}>{impact(e)!.text}</Label>}
                   {e.tipo === "pago" && e.detalle.includes(" · ") && <Label size={12} color={palette.muted}>{e.detalle.split(" · ").slice(1).join(" · ")}</Label>}
                 </View>
-                <Label weight="extra" size={15}>{money(e.monto, e.moneda)}</Label>
+                {e.tipo !== 'cambio' && <Label weight="extra" size={15}>{money(e.monto, e.moneda)}</Label>}
               </Card>
             </Pressable>
             </React.Fragment>

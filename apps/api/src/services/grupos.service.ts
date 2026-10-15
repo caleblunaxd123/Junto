@@ -9,9 +9,15 @@ import { allocateParts, nextPart, partsSummary } from '../domain/billParts';
 import { unreadInGroup } from './groupChat.service';
 import { transactionLock } from '../lib/transactionLock';
 import { crearSinCuenta, heredar, tieneDineroPorRecibir } from './integrantes.service';
+import { requireOpenGroup, groupEvent } from './groupLifecycle.service';
 
 function generateLinkInvitacion(): string {
   return randomBytes(12).toString('base64url');
+}
+
+// Archiving is a personal preference; another member must not receive that timestamp.
+function visibleMembers<T extends { archivadoEn: Date | null }>(members: T[]) {
+  return members.map(({ archivadoEn: _private, ...member }) => member);
 }
 
 export async function crearGrupo(input: CrearGrupoInput, creadoPor: string) {
@@ -60,7 +66,7 @@ export async function crearGrupo(input: CrearGrupoInput, creadoPor: string) {
         },
       });
     }
-    return grupo;
+    return { ...grupo, miembros: visibleMembers(grupo.miembros) };
   });
 }
 
@@ -131,10 +137,11 @@ export async function getGruposUsuario(usuarioId: string) {
 
         return {
           ...m.grupo,
-          miembros: m.grupo.miembros,
+          miembros: visibleMembers(m.grupo.miembros),
           balanceUsuario: { teDeben, debes, neto: teDeben - debes },
           resumen,
           rolUsuario: m.rol,
+          archivado: !!m.archivadoEn,
           // Unread chat items since the last visit (or since joining).
           noLeidos: await unreadInGroup(m.grupo.id, usuarioId, m.ultimaLectura ?? m.fechaUnion),
         };
@@ -150,13 +157,17 @@ export async function editarGrupo(grupoId: string, input: EditarGrupoInput, usua
     // Relation filters on UPDATE may have been evaluated before waiting for a row lock.
     const admin = await tx.grupoMiembro.findFirst({ where: { grupoId, usuarioId, activo: true, rol: 'admin', usuario: { activo: true }, grupo: { activo: true } }, select: { id: true } });
     if (!admin) throw new Error('Solo un administrador activo puede editar este grupo.', 403);
+    await requireOpenGroup(tx, grupoId);
     // A reported payment was checked against the current plan; changing the plan first would leave it out of place.
     if (input.simplificarDeudas !== undefined && await tx.pago.count({ where: { grupoId, estado: 'reportado' } }))
       throw new Error('Hay pagos esperando confirmación. Respóndelos antes de cambiar cómo se reparten las deudas.', 409);
+    const before = await tx.grupo.findUniqueOrThrow({ where: { id: grupoId } });
     await tx.grupo.update({
       where: { id: grupoId },
       data: { ...input, fechaLimite: input.fechaLimite === undefined ? undefined : input.fechaLimite && new Date(input.fechaLimite) },
     });
+    const changed = Object.keys(input).filter(key => JSON.stringify(before[key as keyof typeof before]) !== JSON.stringify(input[key as keyof typeof input]));
+    if (changed.length) await groupEvent(tx, grupoId, usuarioId, 'grupo_editado', 'Se actualizaron las opciones del grupo.', { campos: changed });
   });
   return getGrupoDetalle(grupoId, usuarioId);
 }
@@ -192,7 +203,8 @@ export async function getGrupoDetalle(grupoId: string, usuarioId: string) {
   const debes = resumen.saldos.filter((s) => s.deudorId === usuarioId).reduce((sum, s) => sum + s.monto, 0);
   // Every payment waiting for confirmation in the group, not only the viewer's: shared summaries cite it.
   const [pagosPorConfirmar, cuentasPorPartesDelGrupo] = await Promise.all([prisma.pago.count({ where: { grupoId, estado: 'reportado' } }), cuentasPorPartes(grupoId)]);
-  return { ...grupo, resumen, saldos: resumen.saldos, pagosPorConfirmar, cuenta: cuentasPorPartesDelGrupo[0] ?? null, mensajeFijado: fijado, cuentasPorPartes: cuentasPorPartesDelGrupo, balanceUsuario: { neto: teDeben - debes, teDeben, debes }, rolUsuario: miembro.rol };
+  const tieneHistorialFinanciero = !!(await prisma.gasto.count({ where: { grupoId } })) || !!(await prisma.pago.count({ where: { grupoId } }));
+  return { ...grupo, miembros: visibleMembers(grupo.miembros), archivado: !!miembro.archivadoEn, tieneHistorialFinanciero, resumen, saldos: resumen.saldos, pagosPorConfirmar, cuenta: cuentasPorPartesDelGrupo[0] ?? null, mensajeFijado: fijado, cuentasPorPartes: cuentasPorPartesDelGrupo, balanceUsuario: { neto: teDeben - debes, teDeben, debes }, rolUsuario: miembro.rol };
 }
 
 /**
@@ -200,10 +212,10 @@ export async function getGrupoDetalle(grupoId: string, usuarioId: string) {
  * ("Ana"): joining with it means being Ana in the group.
  */
 export async function resolverCodigo(code: string) {
-  const grupo = await prisma.grupo.findFirst({ where: { linkInvitacion: code, activo: true } });
+  const grupo = await prisma.grupo.findFirst({ where: { linkInvitacion: code, activo: true, estado: 'abierto' } });
   if (grupo) return { grupo, personal: null };
   const member = await prisma.grupoMiembro.findFirst({
-    where: { codigoPersonal: code, activo: true, grupo: { activo: true }, usuario: { sinCuenta: true, activo: true } },
+    where: { codigoPersonal: code, activo: true, grupo: { activo: true, estado: 'abierto' }, usuario: { sinCuenta: true, activo: true } },
     include: { grupo: true, usuario: { select: { id: true, nombre: true } } },
   });
   return member ? { grupo: member.grupo, personal: member.usuario } : null;
@@ -218,6 +230,7 @@ export async function unirseConLink(code: string, usuarioId: string, como?: stri
   const joined = await prisma.$transaction(async (tx) => {
     await transactionLock(tx, `account-membership:${usuarioId}`);
     await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${grupo.id}::uuid FOR UPDATE`;
+    await requireOpenGroup(tx, grupo.id);
     if (!(await tx.usuario.count({ where: { id: usuarioId, activo: true, sinCuenta: false } }))) throw new Error('Tu cuenta ya no está activa. Inicia sesión nuevamente.', 401);
     // Re-read under the lock: the link may have been rotated or the personal code already used.
     const still = resolved.personal
@@ -272,6 +285,8 @@ export async function salirDeGrupo(grupoId: string, usuarioId: string) {
       orderBy: { fechaUnion: 'asc' },
     });
     if (!otros.length) {
+      if (saldos.some(s => s.monto > 0) || await tx.pago.count({ where: { grupoId, estado: 'reportado' } }))
+        throw new Error('Eres la última persona con cuenta y aún quedan deudas o pagos por confirmar. Resuélvelos antes de salir; también puedes archivar el grupo para ti.', 409);
       // Nobody else can see this group any more: close it and its invitation link.
       await tx.grupo.update({ where: { id: grupoId }, data: { activo: false, linkInvitacion: null } });
     } else if (miembro.rol === 'admin' && !otros.some((otro) => otro.rol === 'admin')) {

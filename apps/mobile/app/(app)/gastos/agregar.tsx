@@ -9,6 +9,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
 import DateTimePicker from "../../../src/components/ui/ExpenseDatePicker";
+import { canAddExpenses } from '../../../src/lib/groupLifecycle';
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../src/lib/api";
 import { errorMessage } from "../../../src/lib/errorMessage";
@@ -75,7 +76,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     queryFn: () => api.get(`/gastos/${params.gastoId}`).then((r) => r.data),
     enabled: !!params.gastoId,
   });
-  const { data: groups = [] } = useGrupos();
+  const { data: allGroups = [] } = useGrupos();
+  const groups = allGroups.filter(canAddExpenses);
   const [groupId, setGroupId] = useState(params.grupoId || "");
   // With a single group there is nothing to choose.
   useEffect(() => {
@@ -160,7 +162,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   const captureDraft = useCallback((payload?: ExpenseDraft["pending"]): ExpenseDraft => ({
     amount, description, payer, ids, mode, values, category: category as ExpenseDraft["category"], categoryPicked,
     text, notes, date: date.toISOString(), requestId: requestId.current, savedAt: new Date().toISOString(), pending: payload ?? pending,
-    ...(group ? { group: { id: group.id, nombre: group.nombre, tipo: group.tipo, moneda: group.moneda || "PEN", miembros: group.miembros.map((m) => ({ usuarioId: m.usuarioId, usuario: { id: m.usuarioId, nombre: m.usuario.nombre } })) } } : {}),
+    ...(group ? { group: { id: group.id, nombre: group.nombre, tipo: group.tipo, moneda: group.moneda || "PEN", estado: group.estado, miembros: group.miembros.map((m) => ({ usuarioId: m.usuarioId, usuario: { id: m.usuarioId, nombre: m.usuario.nombre } })) } } : {}),
   }), [amount, description, payer, ids, mode, values, category, categoryPicked, text, notes, date, pending, group]);
   const updateDraft = draft.update;
   useEffect(() => { if (!params.gastoId && formReady && group && focused && !saving.current) updateDraft(captureDraft()); }, [params.gastoId, formReady, group, focused, captureDraft, updateDraft]);
@@ -292,7 +294,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     }
   }
   async function save() {
-    if (!formReady || (!pending && (!valid || !description.trim() || description.trim().length > 200 || !payer || !group?.miembros.some((m) => m.usuarioId === payer) || ids.some((id) => !group?.miembros.some((m) => m.usuarioId === id)) )) || create.isPending || saving.current) return;
+    if (!group || !canAddExpenses(group) || !formReady || (!pending && (!valid || !description.trim() || description.trim().length > 200 || !payer || !group?.miembros.some((m) => m.usuarioId === payer) || ids.some((id) => !group?.miembros.some((m) => m.usuarioId === id)) )) || create.isPending || saving.current) return;
     // State updates are async: a ref stops a second tap before isPending flips.
     saving.current = true;
     try {
@@ -420,6 +422,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
         <ActivityIndicator />
       ) : !group ? (
         <ErrorBox message="No pudimos cargar este grupo. Vuelve y reintenta." />
+      ) : !canAddExpenses(group) ? (
+        <Card><Label weight="bold">Este grupo ya terminó de anotar gastos</Label><Label size={13}>Un administrador puede reabrirlo desde las opciones del grupo. Tus datos sin guardar se conservan como borrador.</Label><Button title="Volver al grupo" onPress={() => router.dismissTo(`/(app)/grupos/${groupId}`)} /></Card>
       ) : (
         <>
           {moneda !== "PEN" && <Label size={13} color={palette.muted}>Gastos y pagos en {moneda}. Usa el formulario; el asistente de texto interpreta soles por ahora. No convertimos monedas.</Label>}

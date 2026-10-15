@@ -21,6 +21,7 @@ import {
   design,
 } from "../../../src/components/ui/Design";
 import { formatMoney } from "@junto/shared/currency";
+import { canAddExpenses } from '../../../src/lib/groupLifecycle';
 export default function ExpenseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const user = useAuthStore((s) => s.usuario);
@@ -36,7 +37,7 @@ export default function ExpenseDetail() {
   const remove = useMutation({
     mutationFn: () => api.delete(`/gastos/${id}`),
     onSuccess: () => {
-      ["gastos", "saldos", "grupos", "actividad"].forEach((key) =>
+      ["gastos", "saldos", "grupos", "actividad", "chat", "estado-cuenta", "movimientos"].forEach((key) =>
         qc.invalidateQueries({ queryKey: [key] }),
       );
       router.dismissTo(`/(app)/grupos/${expense?.grupoId}`);
@@ -123,7 +124,8 @@ export default function ExpenseDetail() {
               })
             }
           />
-          {(expense.creadoPor === user?.id ||
+          <Button title="Ver cambios del grupo" secondary onPress={() => router.push(`/(app)/grupos/movimientos?grupoId=${expense.grupoId}`)} />
+          {!!group && canAddExpenses(group) && (expense.creadoPor === user?.id ||
             group?.rolUsuario === "admin") && (
             <Button
               title="Corregir este gasto"
@@ -135,7 +137,7 @@ export default function ExpenseDetail() {
               }
             />
           )}
-          {(expense.creadoPor === user?.id ||
+          {!!group && canAddExpenses(group) && (expense.creadoPor === user?.id ||
             group?.rolUsuario === "admin") && (
             <Button
               title="Eliminar gasto"

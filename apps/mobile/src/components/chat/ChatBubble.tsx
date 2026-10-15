@@ -132,6 +132,8 @@ export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAns
   // After a preposition: "para ti", "por ti".
   const whom = (person: { id: string; nombre: string }) => (person.id === meId ? "ti" : firstName(person.nombre));
   switch (item.tipo) {
+    case 'cambio':
+      return <SystemNote icon="document-text-outline" label={`${item.autor.nombre}: ${item.texto}`}>{item.autor.nombre} · {item.texto}</SystemNote>;
     case "creado":
       return <SystemNote icon="people-outline" label="Grupo creado">{item.mio ? "Creaste el grupo" : `${Who(item.autor)} creó el grupo`}</SystemNote>;
     case "union": {

@@ -5,6 +5,7 @@ import { transactionLock } from "../lib/transactionLock";
 import { saveJoinNotices, pushJoinNotice } from "./groupNotices.service";
 import { takeFreeParts } from "./billParts.service";
 import { cuentaPorPartes, partesAlUnirse } from "./grupos.service";
+import { requireOpenGroup } from './groupLifecycle.service';
 
 export const INVITE_LIMITS = { perDay: 40, quietDaysAfterRejection: 7 };
 // Same answer whether or not the e-mail/phone has an account: inviting must not reveal who uses JUNTO.
@@ -29,7 +30,7 @@ async function findPerson(identifier: string) {
  */
 export async function invitePerson(grupoId: string, inviterId: string, identifier: string) {
   const inviter = await prisma.grupoMiembro.findFirst({
-    where: { grupoId, usuarioId: inviterId, activo: true, grupo: { activo: true } },
+    where: { grupoId, usuarioId: inviterId, activo: true, grupo: { activo: true, estado: 'abierto' } },
     select: { usuario: { select: { nombre: true } }, grupo: { select: { nombre: true } } },
   });
   if (!inviter) throw new UserError("No perteneces a este grupo.", 403);
@@ -42,6 +43,8 @@ export async function invitePerson(grupoId: string, inviterId: string, identifie
   if (member?.activo) return { alreadyMember: true, mensaje: "Esta persona ya está en el grupo." };
 
   const notify = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${grupoId}::uuid FOR UPDATE`;
+    await requireOpenGroup(tx, grupoId);
     await transactionLock(tx, `invite:${grupoId}:${person.id}`);
     const previous = await tx.invitacion.findUnique({ where: { grupoId_invitadoId: { grupoId, invitadoId: person.id } } });
     if (previous?.estado === "pendiente") return false;
@@ -63,7 +66,7 @@ export async function invitePerson(grupoId: string, inviterId: string, identifie
 /** Invitations waiting for the signed-in person, with only what they need to decide. */
 export async function myInvitations(userId: string) {
   const rows = await prisma.invitacion.findMany({
-    where: { invitadoId: userId, estado: "pendiente", grupo: { activo: true } },
+    where: { invitadoId: userId, estado: "pendiente", grupo: { activo: true, estado: 'abierto' } },
     include: {
       grupo: { select: { id: true, nombre: true, tipo: true, modo: true, moneda: true, _count: { select: { miembros: { where: { activo: true } } } } } },
       anfitrion: { select: { nombre: true } },
@@ -91,6 +94,7 @@ export async function answerInvitation(userId: string, id: string, accept: boole
     const invitation = await tx.invitacion.findFirst({ where: { id, invitadoId: userId }, include: { grupo: { select: { id: true, nombre: true, activo: true } } } });
     if (!invitation || !invitation.grupo.activo) throw new UserError("Esta invitación ya no está disponible.", 404);
     await tx.$queryRaw`SELECT id FROM grupos WHERE id = ${invitation.grupoId}::uuid FOR UPDATE`;
+    await requireOpenGroup(tx, invitation.grupoId);
     if (!(await tx.usuario.count({ where: { id: userId, activo: true } }))) throw new UserError("Tu cuenta ya no está activa. Inicia sesión nuevamente.", 401);
     const current = await tx.invitacion.findUnique({ where: { id }, include: { grupo: { select: { activo: true } } } });
     if (!current?.grupo.activo) throw new UserError("Esta invitación ya no está disponible.", 404);
