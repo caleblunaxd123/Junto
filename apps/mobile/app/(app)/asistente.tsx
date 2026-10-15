@@ -108,7 +108,7 @@ export default function Assistant() {
               <Pressable
                 key={g.id}
                 accessibilityRole="button"
-                accessibilityState={{ selected: chosen.id === g.id }}
+                aria-selected={chosen.id === g.id}
                 onPress={() => {
                   setGroupId(g.id);
                   setReply("");

@@ -1,5 +1,5 @@
 export interface QuickBillPerson { id: string; nombre: string; consumo: number; invitado: boolean; }
-export interface QuickBillInput { nombre: string; participantes: QuickBillPerson[]; extras: number; cobrarA: string; instrucciones: string; division?: "consumos" | "igual"; totalCuenta?: number; }
+export interface QuickBillInput { nombre: string; participantes: QuickBillPerson[]; extras: number; cobrarA: string; instrucciones: string; division?: "consumos" | "igual"; totalCuenta?: number; productos?: import("./receiptItems").ReceiptItem[]; }
 export interface QuickBillResult {
   montoTotal: number; totalInvitados: number; totalExtras: number; cantidadPagadores: number;
   partes: (QuickBillPerson & { invitados: number; extras: number; total: number })[];

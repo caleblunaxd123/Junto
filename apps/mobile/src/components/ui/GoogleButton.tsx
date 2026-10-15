@@ -10,7 +10,7 @@ export function GoogleButton({ onPress, loading = false, disabled = false }: { o
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Continuar con Google"
-      accessibilityState={{ busy: loading, disabled: disabled || loading }}
+      aria-busy={loading} aria-disabled={disabled || loading}
       disabled={disabled || loading}
       onPress={() => onPress()}
       onPressIn={() => setPressed(true)}

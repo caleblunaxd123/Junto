@@ -21,7 +21,7 @@ export function OfflineBanner() {
     >
       <Ionicons name="cloud-offline-outline" size={18} color="white" />
       <Label size={13} color="white" style={{ flex: 1 }}>
-        Sin conexión. Ves los últimos datos; los cambios no se guardarán hasta que vuelvas a estar en línea.
+        Sin conexión. Conservamos tus borradores aquí; guardar y confirmar pagos requieren internet. Nada se envía solo.
       </Label>
     </View>
   );

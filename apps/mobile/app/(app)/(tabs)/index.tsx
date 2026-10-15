@@ -22,7 +22,9 @@ import {
   ErrorBox,
   palette,
   design,
+  SkeletonRow,
 } from "../../../src/components/ui/Design";
+import { BalanceSummary } from "../../../src/components/BalanceSummary";
 import { Brand, SectionTitle } from "../../../src/components/ui/Reference";
 import { centavosASoles } from "../../../src/types";
 import { useQuickBills } from "../../../src/hooks/useQuickBills";
@@ -36,6 +38,8 @@ import { GroupNotices } from "../../../src/components/GroupNotices";
 import { AddButton, CreateSheet } from "../../../src/components/CreateSheet";
 import { clearTryBill, loadTryBill, type SavedTryBill } from "../../../src/lib/tryBillHandoff";
 import { useResponsiveLayout } from "../../../src/components/ui/responsive";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { expenseDraftPrefix } from "../../../src/lib/draftStorage";
 
 import { formatMoney as money } from "@junto/shared/currency";
 
@@ -74,6 +78,14 @@ export default function Home() {
   }, [refetch]));
   // A calculation kept from "Probar sin cuenta" (only with consent, only on this phone).
   const [trial, setTrial] = useState<SavedTryBill | null>(null);
+  // "Mis borradores" only when there is something to resume.
+  const [drafts, setDrafts] = useState(0);
+  useFocusEffect(useCallback(() => {
+    if (!usuario) return;
+    AsyncStorage.getAllKeys()
+      .then((keys) => setDrafts(keys.filter((key) => key.startsWith(expenseDraftPrefix(usuario.id)) || key.startsWith(`junto.billDraft.v1.${usuario.id}.`)).length))
+      .catch(() => setDrafts(0));
+  }, [usuario]));
   useFocusEffect(useCallback(() => { loadTryBill().then(setTrial).catch(() => setTrial(null)); }, []));
   async function continueTrial() {
     if (!trial || !usuario) return;
@@ -118,10 +130,11 @@ export default function Home() {
           <Button compact secondary title="Agregar" onPress={() => setSheet(true)} />
         </View>}
 
+        {!unavailable && !empty && !isError && (isLoading || groups.length > 0) && <BalanceSummary groups={groups} loading={isLoading} />}
         <Invitations />
         <GroupNotices />
-        {/* One way to start, explained with a real example. */}
-          <Pressable accessibilityRole="button" accessibilityLabel="Dividir gastos" accessibilityHint="Agrega a las personas y anota quién pagó para calcular cuánto le toca a cada uno." onPress={() => router.push("/(app)/grupos/crear")}
+        {/* One way to start, explained with a real example; once you have groups, "+" does it. */}
+          {!groups.length && <Pressable accessibilityRole="button" accessibilityLabel="Dividir gastos" accessibilityHint="Agrega a las personas y anota quién pagó para calcular cuánto le toca a cada uno." onPress={() => router.push("/(app)/grupos/crear")}
             onPressIn={() => setSplitPressed(true)} onPressOut={() => setSplitPressed(false)}
             style={{ flexDirection: "row", alignItems: "center", minHeight: 116, gap: 14, padding: 20, borderRadius: 24, backgroundColor: splitPressed ? "#006B55" : "#007B60" }}>
             <View style={{ width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", backgroundColor: "white" }}>
@@ -132,7 +145,8 @@ export default function Home() {
               <Label size={13} color="#FFFFFF">Agrega a tu gente y anota quién pagó. JUNTO calcula cuánto le toca a cada uno.</Label>
             </View>
             <Ionicons name="arrow-forward" size={24} color="white" />
-          </Pressable>
+          </Pressable>}
+        {drafts > 0 && <Button compact secondary title={`Retomar ${drafts === 1 ? "1 borrador" : `${drafts} borradores`}`} onPress={() => router.push("/(app)/borradores")} />}
         {trial && (
           <Card style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", gap: 8 }}>
             <Label weight="bold">Tu cálculo de prueba sigue aquí</Label>
@@ -221,7 +235,7 @@ export default function Home() {
               onPress={() => router.push("/(app)/cuentas/resumen")}
             />
             {isLoading ? (
-              <ActivityIndicator color={palette.primary} />
+              <View accessibilityLabel="Cargando tus grupos" style={{ gap: 12 }}><SkeletonRow /><SkeletonRow /></View>
             ) : isError ? (
               <>
                 <ErrorBox message="No pudimos cargar tus grupos. Revisa tu conexión." />
@@ -246,7 +260,9 @@ export default function Home() {
                 )}
                 {filtered.map((g) => {
                   const net = g.balanceUsuario.neto;
-                  const status = net === 0 ? "Estás al día" : net > 0 ? `Te deben ${money(net, g.moneda)}` : `Debes ${money(-net, g.moneda)}`;
+                  // Person to person you can owe one friend and be owed by another: say both, never only the net.
+                  const { teDeben, debes } = g.balanceUsuario;
+                  const status = teDeben && debes ? `Te deben ${money(teDeben, g.moneda)} · debes ${money(debes, g.moneda)}` : teDeben ? `Te deben ${money(teDeben, g.moneda)}` : debes ? `Debes ${money(debes, g.moneda)}` : net === 0 ? "Estás al día" : net > 0 ? `Te deben ${money(net, g.moneda)}` : `Debes ${money(-net, g.moneda)}`;
                   const waiting = (payments.data ?? []).filter((p) => p.grupoId === g.id && p.estado === "reportado" && p.receptorId === usuario?.id).length;
                   return (
                     <Pressable

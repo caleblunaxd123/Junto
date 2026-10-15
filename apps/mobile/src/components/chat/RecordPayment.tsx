@@ -63,7 +63,7 @@ export function RecordPayment({ person, receiver, moneda = "PEN", grupoId, max, 
           <PaymentExchange received grupoId={grupoId} fecha={date} value={exchange} onChange={(draft) => { setExchange(draft); if (draft) setMethod("transferencia"); }} target={moneda} disabled={!shown || busy} />
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
             {methods.filter((m) => (exchange?.monedaOrigen ?? moneda) === "PEN" || m.id === "efectivo" || m.id === "transferencia").map((m) => (
-              <Pressable key={m.id} accessibilityRole="radio" accessibilityState={{ checked: method === m.id }} accessibilityLabel={m.label} onPress={() => setMethod(m.id)}
+              <Pressable key={m.id} accessibilityRole="radio" aria-checked={method === m.id} accessibilityLabel={m.label} onPress={() => setMethod(m.id)}
                 style={{ minHeight: 42, paddingHorizontal: 14, borderRadius: 21, justifyContent: "center", borderWidth: 1.5, borderColor: method === m.id ? palette.primary : palette.line, backgroundColor: method === m.id ? palette.mint : "white" }}>
                 <Label size={13} weight="bold" color={method === m.id ? "#007B60" : palette.ink}>{m.label}</Label>
               </Pressable>

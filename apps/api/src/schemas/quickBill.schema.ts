@@ -14,6 +14,7 @@ export const quickBillReadSchema = z.object({
   cobrarA: z.string().trim().max(100), instrucciones: z.string().trim().max(500),
   division: z.enum(["consumos", "igual"]).optional(),
   totalCuenta: z.number().int().positive().max(999_999_999).optional(),
+  productos: z.array(z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/), nombre: z.string().trim().min(1).max(100), monto: z.number().int().positive().max(999_999_999), personas: z.array(z.string()).min(1).max(50) }).strict()).min(1).max(100).optional(),
 }).strict();
 // Never infer a new receipt total from the numbers we are meant to validate.
 export const quickBillWriteSchema = quickBillReadSchema.extend({

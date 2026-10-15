@@ -13,7 +13,12 @@ test('country suggests a currency but USD/EUR remain independent choices', () =>
   assert.throws(() => currencyInfo('XYZ'));
 });
 test('amounts retain their original minor units and an unambiguous currency', () => {
-  assert.equal(formatMoney(500000, 'COP'), 'COP 5000.00');
+  assert.equal(formatMoney(500000, 'COP'), 'COP 5,000.00');
+  assert.equal(formatMoney(108000), 'S/ 1,080.00');
+  assert.equal(formatMoney(99999999999), 'S/ 999,999,999.99');
+  assert.equal(formatMoney(-123456), 'S/ -1,234.56');
+  assert.equal(formatMoney(0), 'S/ 0.00');
+  assert.equal(formatMoney(99900), 'S/ 999.00');
   assert.equal(formatMoney(125, 'USD'), 'US$ 1.25');
   assert.equal(formatMoney(-123, 'EUR'), '€ -1.23');
   assert.throws(() => formatMoney(1.5));
@@ -50,9 +55,9 @@ test('personal totals never add dollars, pesos and soles together', () => {
 test('shared text and HTML retain group/expense currency, including escaped names', () => {
   const group = { nombre: '<script>QA</script>', moneda: 'COP', resumen: { totalGastado: 500000, cantidadGastos: 1, cuentas: [{ nombre: 'QA', tuParte: 500000, pagaste: 0, neto: -500000 }] }, saldos: [] };
   const message = groupShareMessage(group);
-  assert.match(message.body, /COP 5000\.00/); assert.doesNotMatch(message.body, /S\//);
+  assert.match(message.body, /COP 5,000\.00/); assert.doesNotMatch(message.body, /S\//);
   const html = shareEmailHtml(message);
-  assert.match(html, /COP 5000\.00/); assert.doesNotMatch(html, /<script>QA<\/script>/);
+  assert.match(html, /COP 5,000\.00/); assert.doesNotMatch(html, /<script>QA<\/script>/);
   const expense = expenseShareMessage({ descripcion: 'QA', montoTotal: 125, pagador: { nombre: 'QA' }, participantes: [{ usuario: { nombre: 'Otro' }, montoAsignado: 125 }] }, 'Viaje', 'USD');
   assert.match(expense.body, /US\$ 1\.25/); assert.equal(expense.preview.moneda, 'USD');
 });

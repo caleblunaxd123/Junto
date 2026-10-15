@@ -38,7 +38,8 @@ export function Sheet({ visible, onClose, title, subtitle, eyebrow, header, chil
   return (
     <Modal transparent statusBarTranslucent navigationBarTranslucent visible={visible} animationType={Platform.OS === "web" ? "fade" : "slide"} onShow={onShow} onRequestClose={close}>
       <Wrapper {...(keyboard && Platform.OS === "ios" ? { behavior: "padding" as const } : {})} style={[styles.scrim, tablet ? styles.centered : styles.bottom]}>
-        <Pressable accessibilityRole="button" accessibilityLabel={closeLabel} onPress={close} style={StyleSheet.absoluteFill} />
+        {/* Tap outside closes; screen readers use the X button only, so it is not announced twice. */}
+        <Pressable aria-hidden accessible={false} importantForAccessibility="no-hide-descendants" tabIndex={-1} onPress={close} style={StyleSheet.absoluteFill} />
         <SafeAreaView edges={tablet ? [] : ["bottom"]} accessibilityViewIsModal
           style={[styles.card, tablet ? [styles.cardCentered, { maxWidth: width, maxHeight: Math.min(height * 0.86, 760) }] : [styles.cardBottom, { maxHeight: height * 0.9 }]]}>
           {!tablet && <View style={styles.handle} />}
@@ -50,7 +51,7 @@ export function Sheet({ visible, onClose, title, subtitle, eyebrow, header, chil
                 {!!subtitle && <Label size={13} color={palette.muted}>{subtitle}</Label>}
               </>}
             </View>
-            <Pressable accessibilityRole="button" accessibilityLabel={closeLabel} accessibilityState={{ disabled: !dismissable }} disabled={!dismissable} hitSlop={8} onPress={close} style={[styles.close, { opacity: dismissable ? 1 : 0.4 }]}>
+            <Pressable accessibilityRole="button" accessibilityLabel={closeLabel} aria-disabled={!dismissable} disabled={!dismissable} hitSlop={8} onPress={close} style={[styles.close, { opacity: dismissable ? 1 : 0.4 }]}>
               <Ionicons name="close" size={22} color={palette.ink} />
             </Pressable>
           </View>

@@ -28,7 +28,7 @@ export function DesktopShell({ children }: { children: React.ReactNode }) {
         {destinations.map(item => {
           const selected = item.path === "/" ? pathname === "/" || pathname === "/index" : pathname === item.path;
           return <Link key={item.path} href={item.href} asChild>
-            <Pressable accessibilityRole="link" accessibilityLabel={item.title} accessibilityState={{ selected }}
+            <Pressable accessibilityRole="link" accessibilityLabel={item.title} aria-selected={selected}
             style={{ flexDirection: "row", gap: 10, alignItems: "center", padding: 12, minHeight: 48, borderRadius: 14, backgroundColor: selected ? palette.mint : "transparent" }}>
             <Ionicons name={item.icon} size={21} color={selected ? "#007B60" : palette.muted} />
             <Label size={13} weight={selected ? "bold" : "medium"} color={selected ? "#007B60" : palette.ink} style={{ flex: 1 }}>{item.title}</Label>

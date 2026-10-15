@@ -36,7 +36,7 @@ export function GroupCurrencyPicker({ country, currency, onChange, disabled }: {
         subtitle={picking === "country" ? "No necesitamos tu ubicación. Elegir el país actualizará la sugerencia; revisa la moneda antes de crear." : "Los gastos y saldos usan esta moneda. Los pagos en otra moneda conservan su importe original y el equivalente acordado."}>
               {options.map((item) => {
                 const checked = item.code === (picking === "country" ? country : currency);
-                return <Pressable key={item.code} accessibilityRole="radio" accessibilityState={{ checked }} accessibilityLabel={`${item.name} (${item.code})`}
+                return <Pressable key={item.code} accessibilityRole="radio" aria-checked={checked} accessibilityLabel={`${item.name} (${item.code})`}
                   onPress={() => {
                     if (picking === "country") {
                       const selected = countries.find((option) => option.code === item.code)!;

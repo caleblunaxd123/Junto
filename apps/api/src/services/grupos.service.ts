@@ -28,6 +28,7 @@ export async function crearGrupo(input: CrearGrupoInput, creadoPor: string) {
         moneda: datos.moneda,
         pais: datos.pais,
         aprobacionPagos: datos.aprobacionPagos,
+        simplificarDeudas: datos.simplificarDeudas,
         modo: datos.modo,
         fechaLimite: datos.fechaLimite ? new Date(datos.fechaLimite) : undefined,
         creadoPor,
@@ -149,6 +150,9 @@ export async function editarGrupo(grupoId: string, input: EditarGrupoInput, usua
     // Relation filters on UPDATE may have been evaluated before waiting for a row lock.
     const admin = await tx.grupoMiembro.findFirst({ where: { grupoId, usuarioId, activo: true, rol: 'admin', usuario: { activo: true }, grupo: { activo: true } }, select: { id: true } });
     if (!admin) throw new Error('Solo un administrador activo puede editar este grupo.', 403);
+    // A reported payment was checked against the current plan; changing the plan first would leave it out of place.
+    if (input.simplificarDeudas !== undefined && await tx.pago.count({ where: { grupoId, estado: 'reportado' } }))
+      throw new Error('Hay pagos esperando confirmación. Respóndelos antes de cambiar cómo se reparten las deudas.', 409);
     await tx.grupo.update({
       where: { id: grupoId },
       data: { ...input, fechaLimite: input.fechaLimite === undefined ? undefined : input.fechaLimite && new Date(input.fechaLimite) },
@@ -183,10 +187,12 @@ export async function getGrupoDetalle(grupoId: string, usuarioId: string) {
     : null;
 
   const resumen = await resumenCuentasGrupo(grupoId);
-  const neto = resumen.cuentas.find((account) => account.usuarioId === usuarioId)?.neto || 0;
+  // From the plan the group follows: person to person, someone can owe one friend and be owed by another.
+  const teDeben = resumen.saldos.filter((s) => s.acreedorId === usuarioId).reduce((sum, s) => sum + s.monto, 0);
+  const debes = resumen.saldos.filter((s) => s.deudorId === usuarioId).reduce((sum, s) => sum + s.monto, 0);
   // Every payment waiting for confirmation in the group, not only the viewer's: shared summaries cite it.
   const [pagosPorConfirmar, cuentasPorPartesDelGrupo] = await Promise.all([prisma.pago.count({ where: { grupoId, estado: 'reportado' } }), cuentasPorPartes(grupoId)]);
-  return { ...grupo, resumen, saldos: resumen.saldos, pagosPorConfirmar, cuenta: cuentasPorPartesDelGrupo[0] ?? null, mensajeFijado: fijado, cuentasPorPartes: cuentasPorPartesDelGrupo, balanceUsuario: { neto, teDeben: Math.max(neto, 0), debes: Math.max(-neto, 0) }, rolUsuario: miembro.rol };
+  return { ...grupo, resumen, saldos: resumen.saldos, pagosPorConfirmar, cuenta: cuentasPorPartesDelGrupo[0] ?? null, mensajeFijado: fijado, cuentasPorPartes: cuentasPorPartesDelGrupo, balanceUsuario: { neto: teDeben - debes, teDeben, debes }, rolUsuario: miembro.rol };
 }
 
 /**

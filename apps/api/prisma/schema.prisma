@@ -117,6 +117,9 @@ model Grupo {
   // Who may approve a reported payment: "receptor" (only who receives it) or "administrador"
   // (who receives it or a group admin). The payer never approves their own payment.
   aprobacionPagos String    @default("receptor") @map("aprobacion_pagos") @db.VarChar(20)
+  // false: who owes whom person to person (each pair nets its own expenses), like Splitwise's default.
+  // true: JUNTO reduces it to the fewest payments. Groups created before this option keep true.
+  simplificarDeudas Boolean @default(false) @map("simplificar_deudas")
   // "cobranza": someone paid everything and the rest pay them back. "division": everyone puts in
   // toward a goal amount. NULL: groups made before, free expenses.
   modo            String?   @db.VarChar(12)

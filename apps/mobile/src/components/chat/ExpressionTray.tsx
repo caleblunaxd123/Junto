@@ -9,7 +9,7 @@ export function ExpressionTray({ onPick, onClose }: { onPick: (value: string) =>
   const [tab, setTab] = useState<"emoji" | "replies">("emoji");
   return <View style={{ marginHorizontal: 12, padding: 12, gap: 8, borderRadius: 20, backgroundColor: "white", borderWidth: 1, borderColor: palette.line }}>
     <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-      {(["emoji", "replies"] as const).map((value) => <Pressable key={value} accessibilityRole="button" accessibilityState={{ selected: tab === value }} onPress={() => setTab(value)} style={{ minHeight: 44, paddingHorizontal: 10, justifyContent: "center", borderRadius: 14, backgroundColor: tab === value ? palette.mint : palette.surface }}><Label size={12} weight="bold">{value === "emoji" ? "Emojis" : "Respuestas rápidas"}</Label></Pressable>)}
+      {(["emoji", "replies"] as const).map((value) => <Pressable key={value} accessibilityRole="button" aria-selected={tab === value} onPress={() => setTab(value)} style={{ minHeight: 44, paddingHorizontal: 10, justifyContent: "center", borderRadius: 14, backgroundColor: tab === value ? palette.mint : palette.surface }}><Label size={12} weight="bold">{value === "emoji" ? "Emojis" : "Respuestas rápidas"}</Label></Pressable>)}
       <Pressable accessibilityRole="button" accessibilityLabel="Cerrar emojis" onPress={onClose} style={{ marginLeft: "auto", width: 44, height: 44, alignItems: "center", justifyContent: "center" }}><Ionicons name="close" size={20} color={palette.muted} /></Pressable>
     </View>
     <ScrollView style={{ maxHeight: 156 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>

@@ -91,7 +91,7 @@ export default function TryWithoutAccount() {
         <Label size={12} color={palette.muted}>Usa el total final. Añade propina abajo solo si no está incluida.</Label>
         <Stepper label="Personas" value={people.length} min={1} max={30} onChange={(v) => resize(v)} />
         {!withNames && <Stepper label="Invitados (no pagan)" value={guests} min={0} max={Math.max(0, people.length - 1)} onChange={setGuestCount} />}
-        <Pressable accessibilityRole="button" accessibilityState={{ expanded: withNames }} onPress={() => setWithNames((v) => !v)} style={[design.row, { minHeight: 44, gap: 8 }]}>
+        <Pressable accessibilityRole="button" aria-expanded={withNames} onPress={() => setWithNames((v) => !v)} style={[design.row, { minHeight: 44, gap: 8 }]}>
           <Ionicons name="people-outline" size={18} color={palette.purple} />
           <Label size={13} weight="bold" color={palette.purple} style={{ flex: 1 }}>{withNames ? "Ocultar nombres" : "Poner nombres y elegir invitados (opcional)"}</Label>
         </Pressable>
@@ -109,7 +109,7 @@ export default function TryWithoutAccount() {
             <Pressable
               accessibilityRole="switch"
               accessibilityLabel={`${p.nombre.trim() || `Persona ${i + 1}`} es invitado y no paga`}
-              accessibilityState={{ checked: p.invitado }}
+              aria-checked={p.invitado}
               onPress={() => setPeople((current) => current.map((other, j) => (j === i ? { ...other, invitado: !other.invitado } : other)))}
               style={{ minHeight: 48, paddingHorizontal: 12, borderRadius: 14, justifyContent: "center", backgroundColor: p.invitado ? palette.lilac : "#F5F5FB", borderWidth: 1, borderColor: p.invitado ? palette.purple : "transparent" }}
             >
@@ -124,7 +124,7 @@ export default function TryWithoutAccount() {
               <Pressable
                 key={value}
                 accessibilityRole="radio"
-                accessibilityState={{ checked: tip === value }}
+                aria-checked={tip === value}
                 onPress={() => setTip(value)}
                 style={{ flex: 1, minHeight: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: tip === value ? palette.mint : "#F5F5FB", borderWidth: 1, borderColor: tip === value ? palette.primary : "transparent" }}
               >

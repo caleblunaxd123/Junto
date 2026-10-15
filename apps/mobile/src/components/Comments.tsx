@@ -149,7 +149,7 @@ export function Comments({ gastoId, pagoId, hint }: { gastoId?: string; pagoId?:
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Enviar comentario"
-          accessibilityState={{ disabled: !trimmed || send.isPending, busy: send.isPending }}
+          aria-disabled={!trimmed || send.isPending} aria-busy={send.isPending}
           disabled={!trimmed || send.isPending}
           onPress={submit}
           style={{ width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center", backgroundColor: trimmed ? palette.primary : palette.line }}

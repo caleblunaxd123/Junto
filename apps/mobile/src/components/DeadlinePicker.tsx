@@ -16,7 +16,7 @@ export function DeadlinePicker({ value, onChange }: { value: string | null; onCh
   const chosen = value ? deadlineText(value) : null;
   const isPreset = (days: number) => !!value && endOfDay(new Date(value)).getTime() === addDays(days).getTime();
   const chip = (label: string, selected: boolean, onPress: () => void) => (
-    <Pressable key={label} accessibilityRole="radio" accessibilityState={{ checked: selected }} accessibilityLabel={label} onPress={onPress}
+    <Pressable key={label} accessibilityRole="radio" aria-checked={selected} accessibilityLabel={label} onPress={onPress}
       style={{ minHeight: 42, paddingHorizontal: 14, borderRadius: 21, justifyContent: "center", borderWidth: 1.5, borderColor: selected ? palette.primary : palette.line, backgroundColor: selected ? palette.mint : "white" }}>
       <Label size={13} weight="bold" color={selected ? "#007B60" : palette.ink}>{label}</Label>
     </Pressable>

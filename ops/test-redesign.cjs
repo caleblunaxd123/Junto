@@ -79,7 +79,8 @@ async function run() {
     "/grupos",
     c.accessToken,
     "POST",
-    { nombre: `QA · Cusco ${suffix}`, tipo: "viaje" },
+    // This fixture checks the fewest-payments plan ("Luis owes Caleb 60"); new groups default to person to person.
+    { nombre: `QA · Cusco ${suffix}`, tipo: "viaje", simplificarDeudas: true },
     201,
   );
   for (const person of [a, l]) {

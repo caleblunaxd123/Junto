@@ -6,8 +6,10 @@ require("ts-node").register({
 });
 const {
   parseMoney,
+  parseShares,
   allocatePreview,
 } = require("../apps/mobile/src/lib/expensePreview.ts");
+const { allocateShares } = require("../apps/api/src/domain/money.ts");
 const { accountSummary } = require("../apps/mobile/src/lib/accountSummary.ts");
 const {
   validInvitationCode,
@@ -210,4 +212,28 @@ test("a kept trial becomes a group import with the same cents, people and tip", 
   assert.equal(input.extras, 1875);
   assert.equal(calculateQuickBill(input).montoTotal, 20625);
   assert.deepEqual(calculateQuickBill(input).partes.map((p) => p.total), [0, 10313, 10312]);
+});
+
+test("participaciones: the preview equals what the API stores, to the cent", () => {
+  assert.equal(parseShares("2"), 2);
+  assert.equal(parseShares("0"), 0);
+  assert.equal(parseShares(" 3 "), 3);
+  for (const input of ["", "1.5", "-1", "1001", "dos"]) assert.equal(parseShares(input), null);
+  for (const [total, units] of [[10001, [2, 1, 1, 0]], [100, [1, 1, 1]], [999_999_999, [3, 7, 11]], [1, [5, 5]]]) {
+    const preview = allocatePreview(total, units);
+    const stored = allocateShares(total, units.map((participaciones, i) => ({ usuarioId: `p${i}`, participaciones }))).map((row) => row.montoAsignado);
+    assert.deepEqual(preview, stored);
+    assert.equal(preview.reduce((a, b) => a + b, 0), total);
+  }
+});
+
+test("payable limit: person-to-person groups cap each payment at the debt with THAT receiver", () => {
+  const { payableLimit } = require("../packages/shared/payable.js");
+  const accounts = [{ usuarioId: "sofia", neto: 13000 }, { usuarioId: "ana", neto: 1000 }, { usuarioId: "luis", neto: -7000 }];
+  const pairs = [{ deudorId: "ana", acreedorId: "sofia", monto: 3000 }, { deudorId: "luis", acreedorId: "ana", monto: 2000 }];
+  // Net rule would refuse Ana (she is owed overall); person to person she owes Sofía 30.
+  assert.equal(payableLimit(accounts, [], "ana", "sofia").limit, 0);
+  assert.equal(payableLimit(accounts, [], "ana", "sofia", pairs).limit, 3000);
+  assert.equal(payableLimit(accounts, [{ pagadorId: "ana", receptorId: "sofia", monto: 1000 }], "ana", "sofia", pairs).limit, 2000);
+  assert.equal(payableLimit(accounts, [], "luis", "sofia", pairs).limit, 0, "no direct debt with Sofía in this example");
 });

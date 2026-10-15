@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto');
 const path = require('node:path');
 const { chromium, webkit } = require('playwright-core');
 require('./local-qa.cjs').localQa();
+const WEB = `http://127.0.0.1:${Number(process.env.JUNTO_QA_WEB_PORT || 8090)}`;
 const { PrismaClient } = require('@prisma/client');
 const jwt = require('jsonwebtoken');
 const { credentialsTag } = require('../apps/api/dist/domain/credentials');
@@ -21,7 +22,8 @@ async function run() {
     browser = await engine.launch(engine === chromium ? { executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true } : { headless: true });
     for (const width of [390, 1440]) {
       const owner = await user('Receptor QA'), payer = await user('Pagador QA');
-      const fecha = new Date().toISOString().slice(0, 10);
+      // The app's "Hoy" is the LOCAL day (UTC is already tomorrow after 7 p.m. in Peru).
+      const now = new Date(); const fecha = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const reference = await db.cotizacionCambio.create({ data: { clave: randomUUID(), origen: 'USD', destino: 'COP', fecha: new Date(fecha + 'T00:00:00Z'), tasa: '4000', fuente: 'Referencia ficticia local QA' } });
       async function post(route, who, body) {
         const r = await fetch('http://127.0.0.1:3041/api' + route, { method: 'POST', headers: { Authorization: `Bearer ${who.token}`, 'Content-Type': 'application/json', 'X-Junto-Currency-Version': '1' }, body: JSON.stringify(body) });
@@ -35,9 +37,9 @@ async function run() {
         const context = await browser.newContext({ viewport: { width, height: 960 } });
         await context.route('**/*', async (route) => {
           const req = route.request(), url = new URL(req.url());
-          if (url.origin === 'http://127.0.0.1:8090') return route.continue();
+          if (url.origin === WEB) return route.continue();
           if (url.origin === 'https://junto.lunalav.pe' && url.pathname.startsWith('/api/')) {
-            const cors = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:8090', 'Access-Control-Allow-Headers': 'authorization,content-type,x-junto-currency-version', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE' };
+            const cors = { 'Access-Control-Allow-Origin': WEB, 'Access-Control-Allow-Headers': 'authorization,content-type,x-junto-currency-version', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE' };
             if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
             if (url.pathname === '/api/pagos/tipo-cambio') return route.fulfill({ status: 200, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify(reference) });
             const response = await fetch('http://127.0.0.1:3041' + url.pathname + url.search, { method: req.method(), headers: { ...req.headers(), host: '127.0.0.1:3041' }, body: req.postData() || undefined });
@@ -50,7 +52,7 @@ async function run() {
       }
       const sender = await contextFor(payer), receiver = await contextFor(owner);
       const page = sender.page;
-      await page.goto('http://127.0.0.1:8090/app/grupos/crear', { waitUntil: 'networkidle' });
+      await page.goto(`${WEB}/app/grupos/crear`, { waitUntil: 'networkidle' });
       await page.getByRole('button', { name: /^País del plan:/ }).click();
       await page.getByRole('radio', { name: 'Colombia (CO)', exact: true }).click();
       await page.getByRole('button', { name: 'Moneda del grupo: Pesos colombianos, COP', exact: true }).waitFor();
@@ -59,7 +61,7 @@ async function run() {
       await page.getByRole('button', { name: /^Moneda del grupo:/ }).click();
       await page.getByRole('radio', { name: 'Euros (EUR)', exact: true }).click();
       await page.getByRole('button', { name: 'Moneda del grupo: Euros, EUR', exact: true }).waitFor();
-      await page.goto(`http://127.0.0.1:8090/app/grupos/${group.id}`, { waitUntil: 'networkidle' });
+      await page.goto(`${WEB}/app/grupos/${group.id}`, { waitUntil: 'networkidle' });
       await page.getByRole('button', { name: 'Ya pagué', exact: true }).click();
       // The payment day is picked (Hoy / Ayer / calendar), today by default.
       assert.equal(await page.getByRole('radio', { name: 'Hoy', exact: true }).getAttribute('aria-checked'), 'true');
@@ -74,21 +76,21 @@ async function run() {
       await page.screenshot({ path: path.join(__dirname, `artifacts/payment-fx-${engine === webkit ? 'webkit' : 'chrome'}-${width}.png`), fullPage: true });
       const reportResponse = page.waitForResponse((r) => r.url().endsWith('/api/pagos/reportar') && r.request().method() === 'POST');
       await page.getByRole('button', { name: 'Avisar que ya pagué', exact: true }).click();
-      const report = await reportResponse; assert.equal(report.status(), 201); const paid = await report.json();
+      const report = await reportResponse; assert.equal(report.status(), 201, await report.text()); const paid = await report.json();
       assert.equal(paid.monto, 400000); assert.equal(paid.tipoCambio, '4000'); assert.equal(paid.referenciaCambio.id, reference.id);
       await page.getByText('Enviado para aprobación', { exact: true }).waitFor();
-      await receiver.page.goto('http://127.0.0.1:8090/app/', { waitUntil: 'networkidle' });
+      await receiver.page.goto(`${WEB}/app/`, { waitUntil: 'networkidle' });
       await receiver.page.getByText('Pago por confirmar', { exact: true }).first().waitFor();
       await receiver.page.getByRole('button', { name: 'Revisar pago', exact: true }).first().click();
       await receiver.page.getByRole('button', { name: 'Sí, lo recibí', exact: true }).click();
       await receiver.page.getByRole('button', { name: 'Sí, aprobar', exact: true }).click();
       await receiver.page.getByText('Pago confirmado', { exact: true }).first().waitFor();
       const summary = receiver.page.getByTestId('payment-summary');
-      assert.equal(await receiver.page.getByTestId('payment-amount').textContent(), 'COP 4000.00');
+      assert.equal(await receiver.page.getByTestId('payment-amount').textContent(), 'COP 4,000.00');
       assert.equal(await receiver.page.getByTestId('payment-amount').evaluate((node) => node.scrollWidth <= node.clientWidth + 1), true, 'Amount is fully visible, never ellipsized');
       assert.equal(await summary.evaluate((element) => [...element.querySelectorAll('*')].every((node) => { const a = element.getBoundingClientRect(), b = node.getBoundingClientRect(); return b.left >= a.left - 1 && b.right <= a.right + 1; })), true, 'Payment metadata stays inside its card');
       await receiver.page.screenshot({ path: path.join(__dirname, `artifacts/payment-confirmed-${engine === webkit ? 'webkit' : 'chrome'}-${width}.png`), fullPage: true });
-      await page.goto('http://127.0.0.1:8090/app/', { waitUntil: 'networkidle' });
+      await page.goto(`${WEB}/app/`, { waitUntil: 'networkidle' });
       await page.getByText('Pago confirmado', { exact: true }).first().waitFor();
       assert.deepEqual(errors, []);
       await sender.context.close(); await receiver.context.close();

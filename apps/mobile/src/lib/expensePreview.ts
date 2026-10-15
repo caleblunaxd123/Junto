@@ -10,6 +10,13 @@ export function parsePercentage(text: string): number | null {
   const value = Number(normalized);
   return value <= 100 ? value : null;
 }
+/** Shares ("participaciones"): a whole number from 0 to 1000; 0 means that person does not pay. */
+export function parseShares(text: string): number | null {
+  const normalized = text.trim();
+  if (!/^\d{1,4}$/.test(normalized)) return null;
+  const value = Number(normalized);
+  return value <= 1000 ? value : null;
+}
 export function allocatePreview(total: number, weights: number[]): number[] {
   if (
     !Number.isSafeInteger(total) ||

@@ -11,6 +11,9 @@ import {
   ViewStyle,
   KeyboardAvoidingView,
   Platform,
+  Animated,
+  AccessibilityInfo,
+  DimensionValue,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -34,6 +37,10 @@ export const palette = {
   blush: "#FFF0F1",
   line: "#E6EAF0",
   yellow: "#FFF4D7",
+  // Semantic money tones (AA on white): "te deben" / "debes". Prefer these over raw hex values.
+  positive: "#007B60",
+  negative: "#D9404C",
+  skeleton: "#E9EEF3",
 };
 export function Label({
   children,
@@ -104,7 +111,7 @@ export function Button({
       accessibilityRole="button"
       accessibilityLabel={title}
       accessibilityHint={accessibilityHint}
-      accessibilityState={{ disabled: disabled || loading, busy: loading }}
+      aria-disabled={disabled || loading} aria-busy={loading}
       disabled={disabled || loading}
       onPress={onPress}
       onPressIn={() => setPressed(true)}
@@ -276,6 +283,40 @@ export function Avatar({
           {initials(name)}
         </Text>
       )}
+    </View>
+  );
+}
+/**
+ * Placeholder while content loads: keeps the layout so nothing jumps when data arrives.
+ * It pulses softly, and stays still when the system asks to reduce motion.
+ */
+export function Skeleton({ width = "100%", height = 16, radius = 8 }: { width?: DimensionValue; height?: number; radius?: number }) {
+  const opacity = React.useRef(new Animated.Value(0.55)).current;
+  React.useEffect(() => {
+    let loop: Animated.CompositeAnimation | undefined;
+    let cancelled = false;
+    AccessibilityInfo.isReduceMotionEnabled().catch(() => false).then((reduce) => {
+      if (cancelled || reduce) return;
+      loop = Animated.loop(Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 700, useNativeDriver: Platform.OS !== "web" }),
+        Animated.timing(opacity, { toValue: 0.55, duration: 700, useNativeDriver: Platform.OS !== "web" }),
+      ]));
+      loop.start();
+    });
+    return () => { cancelled = true; loop?.stop(); };
+  }, [opacity]);
+  return <Animated.View importantForAccessibility="no" accessibilityElementsHidden style={{ width, height, borderRadius: radius, backgroundColor: palette.skeleton, opacity }} />;
+}
+/** A card-shaped placeholder for lists (groups, accounts) while they load. */
+export function SkeletonRow() {
+  return (
+    <View style={[design.card, { padding: 12, flexDirection: "row", alignItems: "center", gap: 12 }]}>
+      <Skeleton width={64} height={64} radius={16} />
+      <View style={{ flex: 1, gap: 8 }}>
+        <Skeleton width="60%" height={16} />
+        <Skeleton width="40%" height={12} />
+        <Skeleton width="50%" height={12} />
+      </View>
     </View>
   );
 }

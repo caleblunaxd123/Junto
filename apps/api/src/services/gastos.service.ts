@@ -8,6 +8,7 @@ import {
   allocateEqual,
   allocateExact,
   allocatePercentages,
+  allocateShares,
 } from "../domain/money";
 import { allocateParts } from "../domain/billParts";
 import type { Prisma } from "@prisma/client";
@@ -120,6 +121,17 @@ function calcularParticipantes(input: CrearGastoInput) {
       participantes.map((p) => ({
         usuarioId: p.usuarioId,
         porcentaje: p.porcentaje ?? 0,
+      })),
+    );
+  }
+
+  if (tipoDivision === "participaciones") {
+    if (participantes.some((p) => p.participaciones === undefined)) throw new Error("Indica cuántas participaciones tiene cada persona. Usa 0 si no le corresponde pagar.");
+    return allocateShares(
+      montoTotal,
+      participantes.map((p) => ({
+        usuarioId: p.usuarioId,
+        participaciones: p.participaciones ?? 0,
       })),
     );
   }

@@ -1,3 +1,4 @@
+const { allocateReceiptItems } = require("./receiptItems");
 /** Exact-cent calculation shared by native preview, API and text export. */
 function calculateQuickBill(input) {
   if (!input || typeof input !== "object") throw new Error("Revisa los datos de la cuenta.");
@@ -20,6 +21,11 @@ function calculateQuickBill(input) {
   if (equal && (!Number.isSafeInteger(input.totalCuenta) || input.totalCuenta <= 0)) throw new Error("Escribe o revisa el total de la boleta.");
   if (input.totalCuenta !== undefined && (!Number.isSafeInteger(input.totalCuenta) || input.totalCuenta <= 0 || input.totalCuenta > 999_999_999)) throw new Error("Escribe un total válido mayor que cero y de hasta S/ 9,999,999.99.");
   const consumptions = people.reduce((sum, p) => sum + p.consumo, 0);
+  if (input.productos !== undefined) {
+    if (equal) throw new Error("El reparto por productos debe conservar sus consumos asignados.");
+    const allocated = allocateReceiptItems(input.productos, people.map((p) => p.id), input.totalCuenta);
+    if (people.some((p) => p.consumo !== allocated[p.id])) throw new Error("Los consumos no coinciden con los productos asignados. Revisa el reparto.");
+  }
   // Older records without a receipt total remain readable. Every new API write
   // requires it; when provided, consumption must match independently of extras.
   if (!equal && input.totalCuenta !== undefined && consumptions !== input.totalCuenta) {
@@ -53,6 +59,10 @@ function quickBillMessage(input, received = []) {
   if (input.division === "igual") lines.push("", `Reparto igual entre ${result.cantidadPagadores} personas que aportan. Los invitados no pagan. No se asignan platos individuales.`);
   if (result.totalInvitados) lines.push("", `Los consumos de invitados (${money(result.totalInvitados)}) se reparten entre ${result.cantidadPagadores} personas que aportan.`);
   if (result.totalExtras) lines.push(`Los extras (${money(result.totalExtras)}) se reparten entre las mismas ${result.cantidadPagadores} personas.`);
+  if (input.productos?.length) {
+    lines.push("", "Productos de la boleta (importe total por línea):");
+    for (const item of input.productos) lines.push(`${item.nombre}: ${money(item.monto)} · ${input.participantes.filter((p) => item.personas.includes(p.id)).map((p) => p.nombre).join(", ")}`);
+  }
   lines.push("", "La suma de las partes coincide con el total, incluido el último céntimo.");
   if (input.cobrarA?.trim()) lines.push(`Pagar a: ${input.cobrarA.trim()}.`);
   if (input.instrucciones?.trim()) lines.push(input.instrucciones.trim());

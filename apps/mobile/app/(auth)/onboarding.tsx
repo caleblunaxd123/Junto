@@ -10,6 +10,7 @@ import { GoogleButton } from "../../src/components/ui/GoogleButton";
 import { googleConfigured } from "../../src/lib/google";
 import { useGoogleLogin } from "../../src/hooks/useGoogleLogin";
 import { useResponsiveLayout } from "../../src/components/ui/responsive";
+import { OnboardingTour } from "../../src/components/OnboardingTour";
 
 const points: { icon: keyof typeof Ionicons.glyphMap; title: string; copy: string; color: string; bg: string }[] = [
   { icon: "people-outline", title: "Arma tu grupo", copy: "Viaje, salida, cumple o depa. Agrega a tu gente por su nombre, aunque no tengan la app.", color: "#007B60", bg: palette.mint },
@@ -84,26 +85,7 @@ export default function Onboarding() {
       }
     >
       <Brand />
-      <View style={{ height: 170, borderRadius: 24, backgroundColor: "#FFF2E4", overflow: "hidden" }}>
-        <Image source={art.welcome} accessibilityIgnoresInvertColors style={{ width: "100%", height: "100%" }} resizeMode="contain" />
-      </View>
-      <View style={{ gap: 6 }}>
-        <Label accessibilityRole="header" size={28} weight="extra" style={{ lineHeight: 33 }}>
-          Divide gastos sin incomodar a nadie.
-        </Label>
-        <Label size={15} color={palette.muted}>Gratis. JUNTO no toca tu dinero: solo lleva las cuentas claras.</Label>
-      </View>
-      {points.map((point) => (
-        <View key={point.title} style={{ flexDirection: "row", gap: 12, alignItems: "flex-start" }}>
-          <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: point.bg, alignItems: "center", justifyContent: "center" }}>
-            <Ionicons name={point.icon} size={22} color={point.color} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Label weight="bold" size={15}>{point.title}</Label>
-            <Label size={13} color={palette.muted}>{point.copy}</Label>
-          </View>
-        </View>
-      ))}
+      <OnboardingTour />
     </Screen>
   );
 }

@@ -10,6 +10,9 @@ type Option = { icon: keyof typeof Ionicons.glyphMap; title: string; subtitle: s
 /** The single "+" entry point: one question instead of four competing buttons. */
 export function CreateSheet({ visible, onClose, groups }: { visible: boolean; onClose: () => void; groups: { id: string }[] }) {
   const [pressedOption, setPressedOption] = React.useState<string | null>(null);
+  // Hover by hand: a function `style` on Pressable is dropped by NativeWind's interop on Android
+  // (each option lost its row layout, border and padding).
+  const [hoveredOption, setHoveredOption] = React.useState<string | null>(null);
   const options: Option[] = [
     ...(groups.length
       ? [{
@@ -37,7 +40,9 @@ export function CreateSheet({ visible, onClose, groups }: { visible: boolean; on
               }}
               onPressIn={() => setPressedOption(option.title)}
               onPressOut={() => setPressedOption(null)}
-              style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, backgroundColor: hovered ? "#F6F8FB" : "white", borderWidth: 1, borderColor: palette.line, opacity: pressedOption === option.title ? 0.8 : 1 })}
+              onHoverIn={() => setHoveredOption(option.title)}
+              onHoverOut={() => setHoveredOption(null)}
+              style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 18, backgroundColor: hoveredOption === option.title ? "#F6F8FB" : "white", borderWidth: 1, borderColor: palette.line, opacity: pressedOption === option.title ? 0.8 : 1 }}
             >
               <View style={{ width: 44, height: 44, borderRadius: 14, backgroundColor: option.bg, alignItems: "center", justifyContent: "center" }}>
                 <Ionicons name={option.icon} size={24} color={option.color} />

@@ -84,12 +84,14 @@ export default function Payment() {
   });
   const myWaiting = (history.data ?? []).filter((p) => p.grupoId === grupoId && p.pagadorId === user?.id && p.estado === "reportado");
   const accounts = group?.resumen.cuentas ?? [];
+  // Person-to-person groups: each payment is capped by the debt with that receiver (same rule as the API).
+  const pairs = group?.resumen.simplificado === false ? group.resumen.deudasDirectas ?? [] : undefined;
   // The app suggests who to pay; but if you already paid someone else who is owed money (the
   // suggestion changed afterwards) and your voucher says so, that person is a valid choice too.
   const suggestedCreditors = (group?.saldos ?? []).filter((s) => s.deudorId === user?.id);
   const voucherFor = lectura?.sugerenciaReceptorId;
   const extra = voucherFor && user && !suggestedCreditors.some((c) => c.acreedorId === voucherFor)
-    ? payableLimit(accounts, myWaiting, user.id, voucherFor).limit
+    ? payableLimit(accounts, myWaiting, user.id, voucherFor, pairs).limit
     : 0;
   const creditors = extra && voucherFor
     ? [...suggestedCreditors, { deudorId: user!.id, deudorNombre: user!.nombre, acreedorId: voucherFor, acreedorNombre: group?.miembros.find((m) => m.usuarioId === voucherFor)?.usuario.nombre ?? "", monto: extra }]
@@ -97,7 +99,7 @@ export default function Payment() {
   const selected = creditorId ?? (creditors.length === 1 ? creditors[0].acreedorId : null);
   // Same rule as the server: what you still owe and what that person is still owed, after payments
   // waiting for approval — not only the suggested transfer, which can change after you paid.
-  const limit = selected && user ? payableLimit(accounts, myWaiting, user.id, selected).limit : 0;
+  const limit = selected && user ? payableLimit(accounts, myWaiting, user.id, selected, pairs).limit : 0;
   // Without a voucher, propose the suggested transfer (what the row says you owe this person).
   const edge = creditors.find((c) => c.acreedorId === selected)?.monto ?? 0;
   const suggested = lectura?.monto && lectura.monto <= limit ? lectura.monto : Math.min(limit, edge || limit);
@@ -250,10 +252,17 @@ export default function Payment() {
           <Label weight="bold" size={16}>No le debes nada a nadie en este grupo</Label>
           <Label size={13}>Cuando debas algo, aquí podrás registrar tu pago para que quien recibe lo confirme.</Label>
         </Card>
+        {group.balanceUsuario.teDeben > 0 && (
+          <Card style={{ gap: 8 }}>
+            <Label weight="bold" size={16}>¿Te pagaron a ti?</Label>
+            <Label size={13}>Aquí te deben {formatMoney(group.balanceUsuario.teDeben, group.moneda)}. Si alguien ya te pagó por Yape, Plin, transferencia o en efectivo, regístralo desde las cuentas del grupo: su deuda baja al instante porque lo confirmas tú.</Label>
+            <Button title="Registrar un pago que recibí" onPress={() => router.dismissTo(`/(app)/grupos/${grupoId}?cuentas=1`)} />
+          </Card>
+        )}
         {params.compartido === "1" && !!peekSharedVoucher() && (
           <Button title="Elegir otro grupo para la imagen" onPress={() => router.replace("/(app)/pagos/compartido")} />
         )}
-        <Button title="Volver al grupo" secondary={params.compartido === "1"} onPress={() => router.dismissTo(`/(app)/grupos/${grupoId}`)} />
+        <Button title="Volver al grupo" secondary={params.compartido === "1" || group.balanceUsuario.teDeben > 0} onPress={() => router.dismissTo(`/(app)/grupos/${grupoId}`)} />
       </Screen>
     );
 
@@ -284,7 +293,7 @@ export default function Payment() {
             <Pressable
               key={c.acreedorId}
               accessibilityRole="radio"
-              accessibilityState={{ checked: active }}
+              aria-checked={active}
               accessibilityLabel={`${nombre(c.acreedorId)}. Le debes ${money(c.monto)}`}
               onPress={() => { setCreditorId(c.acreedorId); setTyped(null); setExchange(null); }}
               style={[design.card, { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderWidth: 1.5, borderColor: active ? palette.primary : palette.line, backgroundColor: active ? palette.mint : "white" }]}
@@ -408,7 +417,7 @@ export default function Payment() {
                 key={m.id}
                 accessibilityRole="radio"
                 accessibilityLabel={m.id === "transferencia" ? "Transferencia" : m.name}
-                accessibilityState={{ checked: active }}
+                aria-checked={active}
                 onPress={() => setMethod(m.id)}
                 style={{ flex: 1, minHeight: 72, borderRadius: 14, borderWidth: 1, borderColor: active ? palette.purple : palette.line, backgroundColor: active ? palette.lilac : "white", alignItems: "center", justifyContent: "center", gap: 4 }}
               >

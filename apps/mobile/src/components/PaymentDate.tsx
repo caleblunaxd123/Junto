@@ -25,7 +25,7 @@ export function PaymentDate({ value, onChange, disabled, label = "¿Qué día pa
   const yesterday = yesterdayLocal();
   const other = !!value && value !== today && value !== yesterday;
   const chip = (title: string, selected: boolean, onPress: () => void, icon?: keyof typeof Ionicons.glyphMap) => (
-    <Pressable key={title} accessibilityRole="radio" accessibilityState={{ checked: selected, disabled }} accessibilityLabel={title} disabled={disabled} onPress={onPress}
+    <Pressable key={title} accessibilityRole="radio" aria-checked={selected} aria-disabled={disabled} accessibilityLabel={title} disabled={disabled} onPress={onPress}
       style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44, paddingHorizontal: 14, borderRadius: 22, borderWidth: 1.5, borderColor: selected ? palette.primary : palette.line, backgroundColor: selected ? palette.mint : "white", opacity: disabled ? 0.6 : 1 }}>
       {icon && <Ionicons name={icon} size={16} color={selected ? "#007B60" : palette.ink} />}
       <Label size={14} weight="bold" color={selected ? "#007B60" : palette.ink}>{title}</Label>

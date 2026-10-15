@@ -1,4 +1,4 @@
-import { receiptTotals } from "../domain/receipt";
+import { receiptTotals, receiptItems } from "../domain/receipt";
 import { decodeImage, recognizeText, PSM } from "./ocr.service";
 
 export async function readReceipt(base64: string) {
@@ -13,5 +13,5 @@ export async function readReceipt(base64: string) {
     failed: "No pudimos leer la foto. Prueba una imagen más nítida o escribe el total.",
   });
   const proposal = receiptTotals(texts.join("\n"));
-  return { ...proposal, confianzaLectura: confidence, texto: texts[0].slice(0, 8000) };
+  return { ...proposal, productos: receiptItems(texts[0]), confianzaLectura: confidence, texto: texts[0].slice(0, 8000) };
 }

@@ -7,6 +7,8 @@ const grupoSchema = z.object({
   // "administrador": who receives a payment or a group admin may approve it (never the payer).
   aprobacionPagos: z.enum(['receptor', 'administrador']).optional(),
   modo: z.enum(['cobranza', 'division']).optional(),
+  // true: fewest payments; false (default): person to person.
+  simplificarDeudas: z.boolean().optional(),
   // null removes it. A deadline already in the past would only send "venció" reminders.
   fechaLimite: z.string().datetime({ offset: true }).nullable().optional()
     .refine((value) => !value || new Date(value).getTime() > Date.now() - 60_000, 'La fecha límite debe ser futura')

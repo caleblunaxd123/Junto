@@ -10,7 +10,7 @@ export function HowItWorks({ title = "¿Cómo funciona?", points }: { title?: st
     <View style={{ gap: 6 }}>
       <Pressable
         accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
+        aria-expanded={open}
         onPress={() => setOpen((v) => !v)}
         style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44 }}
       >

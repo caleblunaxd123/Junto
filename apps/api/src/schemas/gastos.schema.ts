@@ -4,6 +4,7 @@ const participanteSchema = z.object({
   usuarioId: z.string().uuid(),
   monto: z.number().int().nonnegative().max(999_999_999).optional(), // una persona puede tener parte cero
   porcentaje: z.number().min(0).max(100).optional(),
+  participaciones: z.number().int().min(0).max(1000).optional(),
 }).strict();
 
 export const crearGastoSchema = z.object({
@@ -20,7 +21,7 @@ export const crearGastoSchema = z.object({
       "otro",
     ])
     .default("otro"),
-  tipoDivision: z.enum(["igual", "exacto", "porcentaje"]).default("igual"),
+  tipoDivision: z.enum(["igual", "exacto", "porcentaje", "participaciones"]).default("igual"),
   // Equal parts, counting people who have not joined yet: the payer holds the free ones.
   partes: z.number().int().min(2, "Divide la cuenta entre al menos 2 personas.").max(100, "Divide la cuenta entre máximo 100 personas.").optional(),
   participantes: z.array(participanteSchema).min(1),

@@ -1,11 +1,13 @@
 // New group screen against fictional local API data; all network traffic stays in loopback.
 const assert = require('node:assert/strict');
+const WEB = `http://127.0.0.1:${Number(process.env.JUNTO_QA_WEB_PORT || 8090)}`;
 const fs = require('node:fs'); const path = require('node:path');
 const { chromium, webkit } = require('playwright-core');
 require('./local-qa.cjs').localQa();
 const helpers = require('./test-share-email-api.cjs');
 async function run() {
   const fixture = JSON.parse(fs.readFileSync(path.join(__dirname, 'artifacts/group-contribution-private.json')));
+  const anaName = fixture.ana.usuario.nombre.split(' ')[0];
   const server = helpers.startApi(3033, {});
   let browser;
   try {
@@ -16,9 +18,9 @@ async function run() {
     let delayMessageResponse = false;
     await context.route('**/*', async route => {
       const request = route.request(); const url = new URL(request.url());
-      if (url.origin === 'http://127.0.0.1:8090') return route.continue();
+      if (url.origin === WEB) return route.continue();
       if (url.origin === 'https://junto.lunalav.pe' && url.pathname.startsWith('/api/')) {
-        const cors = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:8090', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE', 'Access-Control-Allow-Headers': 'authorization,content-type,x-junto-currency-version' };
+        const cors = { 'Access-Control-Allow-Origin': WEB, 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE', 'Access-Control-Allow-Headers': 'authorization,content-type,x-junto-currency-version' };
         if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
         const result = await fetch('http://127.0.0.1:3033' + url.pathname + url.search, { method: request.method(), headers: { ...request.headers(), host: '127.0.0.1:3033' }, body: request.postData() || undefined });
         if (delayMessageResponse && request.method() === 'POST' && url.pathname.endsWith('/mensajes')) await new Promise(resolve => setTimeout(resolve, 1000));
@@ -33,21 +35,21 @@ async function run() {
     }, fixture);
     for (const width of [360, 390, 768, 1440, 1920]) {
       await page.setViewportSize({ width, height: 960 });
-      await page.goto(`http://127.0.0.1:8090/app/grupos/${fixture.groupId}`, { waitUntil: 'networkidle' });
+      await page.goto(`${WEB}/app/grupos/${fixture.groupId}`, { waitUntil: 'networkidle' });
       // The group opens as a chat: pinned summary, bubbles, quick actions and a message box.
-      await page.getByText('Deudas pagadas: S/ 50.00 de S/ 400.00', { exact: false }).first().waitFor().catch(async (error) => {
+      // The pinned summary now names people: "<Ana> te debe S/ 50.00" (all debts are in its accessible label).
+      await page.getByRole('button', { name: new RegExp(`${anaName} te debe S/ 50\.00`) }).first().waitFor().catch(async (error) => {
         await page.screenshot({ path: path.join(__dirname, 'artifacts/group-chat-web-failure.png') });
         console.error('Page errors:', errors.join(' | '));
         throw error;
       });
-      await page.getByText('Te deben S/ 350.00', { exact: true }).first().waitFor();
       assert.ok(await page.getByText(/PAGO · YAPE/).count() >= 1, 'payment bubble');
       assert.ok(await page.getByLabel('Escribe un mensaje al grupo').count() === 1, 'message box');
       await page.getByRole('button', { name: 'Cuentas', exact: true }).click();
       await page.getByText('Cuentas del grupo', { exact: true }).waitFor();
       await page.getByText('Para quedar a mano', { exact: true }).waitFor();
       await page.getByText('Debe S/ 50.00', { exact: true }).waitFor();
-      await page.getByText('Sin gastos', { exact: true }).waitFor();
+      await page.getByText('Sin parte asignada', { exact: true }).waitFor();
       if (width === 360) await page.screenshot({ path: path.join(__dirname, 'artifacts/group-chat-web-whopaid-360.png') });
       await page.getByRole('button', { name: 'Cerrar panel' }).click();
       await page.getByText('Cuentas del grupo', { exact: true }).waitFor({ state: 'hidden' });
@@ -62,10 +64,9 @@ async function run() {
     }
     const payment = await call('/pagos/reportar', fixture.ana, { grupoId: fixture.groupId, receptorId: fixture.owner.usuario.id, monto: 2500, metodo: 'plin' });
     await page.getByText('PAGO · PLIN', { exact: true }).waitFor({ timeout: 12000 });
-    await page.getByText('Deudas pagadas: S/ 50.00 de S/ 400.00', { exact: false }).first().waitFor();
+    await page.getByRole('button', { name: new RegExp(`${anaName} te debe S/ 50\.00`) }).first().waitFor();
     await call(`/pagos/${payment.id}/confirmar`, fixture.owner);
-    await page.getByText('Deudas pagadas: S/ 75.00 de S/ 400.00', { exact: false }).first().waitFor({ timeout: 12000 });
-    await page.getByText('Te deben S/ 325.00', { exact: true }).first().waitFor();
+    await page.getByRole('button', { name: new RegExp(`${anaName} te debe S/ 25\.00`) }).first().waitFor({ timeout: 12000 });
     await page.getByRole('button', { name: 'Cuentas', exact: true }).click();
     await page.getByText('Debe S/ 25.00', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Cerrar panel' }).click();
@@ -76,11 +77,11 @@ async function run() {
     await input.fill('Segundo mensaje aún sin enviar');
     await page.getByText('Primer mensaje QA', { exact: true }).waitFor({ timeout: 12000 });
     assert.equal(await input.inputValue(), 'Segundo mensaje aún sin enviar', 'typing during send is never discarded');
-    await page.goto('http://127.0.0.1:8090/app/', { waitUntil: 'networkidle' });
+    await page.goto(`${WEB}/app/`, { waitUntil: 'networkidle' });
     await page.getByText(/se unieron a «/).first().waitFor();
-    await page.getByText('Nuevo grupo', { exact: true }).first().waitFor();
+    await page.getByText('Tus grupos', { exact: true }).first().waitFor();
     assert.equal(errors.length, 0, errors.join('\n'));
-    console.log('PASS: five viewport sizes, debts-paid progress and group accounts panel, live payment/confirmation updates without reopening, unsent text preserved during delivery, grouped join notices. No external requests.');
+    console.log('PASS: five viewport sizes, who-owes-whom header and group accounts panel, live payment/confirmation updates without reopening, unsent text preserved during delivery, grouped join notices. No external requests.');
   } finally { if (browser) await browser.close(); server.child.kill(); }
 }
 run().catch(e => { console.error(e.stack); process.exitCode = 1; });

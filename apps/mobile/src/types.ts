@@ -56,6 +56,8 @@ export interface Grupo {
   moneda?: CurrencyCode;
   pais?: CountryCode | null;
   aprobacionPagos?: AprobacionPagos;
+  /** true: fewest payments. false: person to person (default for new groups). */
+  simplificarDeudas?: boolean;
   /** "cobranza": someone paid and the rest pay back. "division": everyone puts in toward a goal. */
   modo?: "cobranza" | "division" | null;
   /** Until when people can pay; reminders go out automatically as it approaches. */
@@ -89,8 +91,18 @@ export interface GrupoConBalance extends Grupo {
       pagosRecibidos: number;
       pagosPorConfirmar?: number;
       neto: number;
+      /** false: no longer in the group but still has history here. */
+      activo?: boolean;
     }[];
     saldos?: Saldo[];
+    /** Which plan `saldos` is: simplified (fewest payments) or person to person. */
+    simplificado?: boolean;
+    /** The fewest-payments plan, always available to compare. */
+    saldosSimplificados?: Saldo[];
+    /** Who owes whom before simplifying (per pair). Same net per person as `saldos`. */
+    deudasDirectas?: { deudorId: string; acreedorId: string; monto: number }[];
+    /** What the group spent per category (payments between people are not spending). */
+    porCategoria?: { categoria: string; monto: number; cantidad: number }[];
   };
   balanceUsuario: {
     teDeben: number; // en centavos
@@ -145,7 +157,7 @@ export type GastoCategoria =
   | "compras"
   | "otro";
 
-export type TipoDivision = "igual" | "exacto" | "porcentaje";
+export type TipoDivision = "igual" | "exacto" | "porcentaje" | "participaciones";
 
 export interface GastoParticipante {
   id: string;

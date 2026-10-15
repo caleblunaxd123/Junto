@@ -36,7 +36,7 @@ export function useConfirmQuickBill(id: string) {
     onSuccess: async (data) => { qc.setQueryData(["cuentas-rapidas", id], data); await qc.invalidateQueries({ queryKey: ["cuentas-rapidas"] }); },
   });
 }
-export interface ReceiptProposal { totalPropuesto: number | null; candidatos: { monto: number; linea: string }[]; necesitaRevision: boolean; advertencia: string; confianzaLectura: number; texto: string; }
+export interface ReceiptProposal { totalPropuesto: number | null; candidatos: { monto: number; linea: string }[]; productos: { nombre: string; monto: number; linea: string }[]; necesitaRevision: boolean; advertencia: string; confianzaLectura: number; texto: string; }
 export function useReadReceipt() {
   return useMutation({ mutationFn: (data: { imagen: string; signal: AbortSignal }) => api.post<ReceiptProposal>("/cuentas-rapidas/leer-boleta", { imagen: data.imagen }, { timeout: 40_000, signal: data.signal }).then((r) => r.data) });
 }

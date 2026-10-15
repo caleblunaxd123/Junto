@@ -56,7 +56,7 @@ function ChannelButton({ title, icon, onPress, disabled, primary = false, subtle
 }) {
   const [pressed, setPressed] = React.useState(false);
   const color = primary ? "white" : subtle ? palette.muted : "#6543C4";
-  return <Pressable accessibilityRole="button" accessibilityLabel={title} accessibilityState={{ disabled }} disabled={disabled}
+  return <Pressable accessibilityRole="button" accessibilityLabel={title} aria-disabled={disabled} disabled={disabled}
     onPress={onPress} onPressIn={() => setPressed(true)} onPressOut={() => setPressed(false)}
     style={{ flex: 1, minHeight: subtle ? 44 : 62, borderRadius: 18, padding: 10, gap: 8,
       flexDirection: "row", alignItems: "center", justifyContent: "center",
@@ -139,7 +139,7 @@ export function ShareSummary({ message, reportRef }: { message: ShareMessage; re
     {!!preview && <Label size={10} color={palette.muted} style={{ textAlign: "center", paddingHorizontal: 8 }}>JUNTO no mueve dinero. Este resumen no es un comprobante de pago.</Label>}
     </View>
     {!!preview && <>
-      <Pressable accessibilityRole="button" accessibilityState={{ expanded }} accessibilityLabel={expanded ? "Ocultar mensaje completo" : "Ver mensaje completo"}
+      <Pressable accessibilityRole="button" aria-expanded={expanded} accessibilityLabel={expanded ? "Ocultar mensaje completo" : "Ver mensaje completo"}
         onPress={() => setExpanded(!expanded)} style={{ minHeight: 44, paddingHorizontal: 4, gap: 8, flexDirection: "row", alignItems: "center" }}>
         <Ionicons name="document-text-outline" size={18} color={palette.muted} />
         <Label size={12} weight="bold" color={palette.muted} style={{ flex: 1 }}>{expanded ? "Ocultar mensaje completo" : "Ver mensaje completo"}</Label>
@@ -269,7 +269,7 @@ export function ShareChannels({ message, disabled = false, reportRef, initialCha
   const mailContent =
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <View style={{ padding: 16, flexDirection: "row", alignItems: "center", gap: 12 }}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Volver a las opciones para compartir" accessibilityState={{ disabled: busy }} disabled={busy} onPress={() => setShowMail(false)} style={{ width: 44, height: 44, backgroundColor: "#F0F5FC", borderRadius: 22, justifyContent: "center", alignItems: "center" }}><Ionicons name="arrow-back" size={22} color={palette.ink} /></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Volver a las opciones para compartir" aria-disabled={busy} disabled={busy} onPress={() => setShowMail(false)} style={{ width: 44, height: 44, backgroundColor: "#F0F5FC", borderRadius: 22, justifyContent: "center", alignItems: "center" }}><Ionicons name="arrow-back" size={22} color={palette.ink} /></Pressable>
             <View style={{ flex: 1 }}><Label weight="extra" size={22}>Compartir por correo</Label><Label size={11} color={palette.muted}>Gmail, Outlook o tu app de correo.</Label></View>
           </View>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}>

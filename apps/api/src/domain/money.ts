@@ -89,6 +89,21 @@ export function allocatePercentages(
   );
 }
 
+/**
+ * Shares ("participaciones"): Marco 2, Andrea 1, Lucía 1 → 50 % / 25 % / 25 %. Whole numbers only,
+ * zero means "does not pay"; same largest-remainder rule, so the parts always add up to the total.
+ */
+export function allocateShares(
+  total: number,
+  inputs: Array<{ usuarioId: string; participaciones: number }>
+): MoneyAllocation[] {
+  if (inputs.some((input) => !Number.isSafeInteger(input.participaciones) || input.participaciones < 0 || input.participaciones > 1000)) {
+    throw new Error('Cada persona necesita un número entero de participaciones, de 0 a 1000');
+  }
+  if (!inputs.some((input) => input.participaciones > 0)) throw new Error('Al menos una persona debe tener participaciones');
+  return allocateByWeights(total, inputs.map((input) => ({ usuarioId: input.usuarioId, weight: input.participaciones })));
+}
+
 export function allocateExact(
   total: number,
   inputs: Array<{ usuarioId: string; monto: number }>

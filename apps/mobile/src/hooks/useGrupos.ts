@@ -53,7 +53,7 @@ export function useCrearGrupo() {
 export function useEditarGrupo(grupoId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { nombre?: string; tipo?: GrupoTipo; descripcion?: string; aprobacionPagos?: AprobacionPagos }) =>
+    mutationFn: (data: { nombre?: string; tipo?: GrupoTipo; descripcion?: string; aprobacionPagos?: AprobacionPagos; simplificarDeudas?: boolean }) =>
       api.put<GrupoConBalance>(`/grupos/${grupoId}`, data).then((r) => r.data),
     onSuccess: async () => {
       await Promise.all([

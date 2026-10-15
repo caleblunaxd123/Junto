@@ -2,11 +2,13 @@ import React from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { z } from "zod";
 import { useFocusEffect } from "expo-router";
-const pendingSchema = z.object({ nombre: z.string(), cobrarA: z.string(), instrucciones: z.string(), extras: z.number().int(), division: z.enum(["igual", "consumos"]), totalCuenta: z.number().optional(), participantes: z.array(z.object({ id: z.string(), nombre: z.string(), consumo: z.number().int(), invitado: z.boolean() })), version: z.number().optional(), solicitudId: z.string().optional() });
+const product = z.object({ id: z.string().max(80), nombre: z.string().max(100), monto: z.number().int().positive().max(999_999_999), personas: z.array(z.string().max(80)).max(50) });
+const pendingSchema = z.object({ nombre: z.string(), cobrarA: z.string(), instrucciones: z.string(), extras: z.number().int(), division: z.enum(["igual", "consumos"]), totalCuenta: z.number().optional(), participantes: z.array(z.object({ id: z.string(), nombre: z.string(), consumo: z.number().int(), invitado: z.boolean() })), productos: z.array(product).max(100).optional(), version: z.number().optional(), solicitudId: z.string().optional() });
 const schema = z.object({
   step: z.number().int().min(0).max(2), name: z.string().max(100), people: z.array(z.object({ id: z.string(), nombre: z.string().max(100), consumo: z.string(), invitado: z.boolean() })).min(1).max(50),
   extras: z.string(), recipient: z.string().max(100), instructions: z.string().max(500), names: z.string().max(6000), commonAmount: z.string(),
   division: z.enum(["igual", "consumos"]), billTotal: z.string(), scanApproved: z.boolean(), requestId: z.string(), baseVersion: z.number().optional(), pending: pendingSchema.optional(),
+  itemsMode: z.boolean().default(false), items: z.array(z.object({ id: z.string().max(80), nombre: z.string().max(100), importe: z.string().max(16), personas: z.array(z.string().max(80)).max(50) })).max(100).default([]),
 });
 export type BillDraft = z.infer<typeof schema>;
 const queues = new Map<string, Promise<unknown>>();

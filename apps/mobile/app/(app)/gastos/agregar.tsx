@@ -33,9 +33,11 @@ import {
 } from "../../../src/components/ui/Design";
 import { formatMoney, currencyInfo } from "@junto/shared/currency";
 import { centavosASoles, TipoDivision, Gasto } from "../../../src/types";
-import { parseMoney, parsePercentage, allocatePreview } from "../../../src/lib/expensePreview";
+import { parseMoney, parsePercentage, parseShares, allocatePreview } from "../../../src/lib/expensePreview";
 import { ExpenseDictation } from "../../../src/components/ExpenseDictation";
-import { groupCover } from "../../../src/components/ui/Artwork";
+import { useExpenseDraft } from "../../../src/hooks/useExpenseDraft";
+import type { ExpenseDraft } from "../../../src/lib/draftStorage";
+import { groupCover, expenseIcons } from "../../../src/components/ui/Artwork";
 import { memberLabels, meFirst } from "../../../src/lib/people";
 import { guessCategory } from "../../../src/lib/category";
 const newRequestId = () => `gasto_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -80,9 +82,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     if (!groupId && !params.gastoId && groups.length === 1) setGroupId(groups[0].id);
   }, [groupId, groups, params.gastoId]);
   const fixedGroup = !!params.grupoId || !!params.gastoId;
-  const { data: group, isLoading } = useGrupo(groupId);
-  const moneda = group?.moneda ?? "PEN";
-  const money = (value: number) => formatMoney(value, moneda);
+  const groupQuery = useGrupo(groupId);
+  const { isLoading } = groupQuery;
   const user = useAuthStore((s) => s.usuario);
   const create = useCrearGasto(groupId, params.gastoId);
   const interpret = useInterpretarGasto();
@@ -126,6 +127,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   const [datePicker, setDatePicker] = useState(false);
   const [notes, setNotes] = useState("");
   const [detail, setDetail] = useState(false);
+  // Splitwise-style: the default split is a sentence; the full editor opens on request.
+  const [customSplit, setCustomSplit] = useState(false);
   const [picker, setPicker] = useState<"grupo" | "pagador" | null>(null);
   const saving = useRef(false);
   const requestId = useRef(newRequestId());
@@ -135,11 +138,37 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   useEffect(() => {
     if (params.texto) setWriteIt(true);
   }, [params.texto]);
+  const initialDraft: ExpenseDraft = { amount: "", description: "", payer: user?.id || "", ids: [], mode: "igual", values: {}, category: "otro", categoryPicked: false, text: params.texto || "", notes: "", date: new Date().toISOString(), requestId: requestId.current, savedAt: new Date().toISOString() };
+  const draft = useExpenseDraft(user?.id, groupId, initialDraft, !!params.gastoId);
+  const [hydratedKey, setHydratedKey] = useState("");
+  const [pending, setPending] = useState<ExpenseDraft["pending"]>();
+  const formReady = !!params.gastoId || (draft.ready && hydratedKey === groupId);
+  const cachedGroup = useRef<ExpenseDraft["group"]>(undefined);
+  const group = groupQuery.data ?? (hydratedKey === groupId ? cachedGroup.current : undefined);
+  const moneda = group?.moneda ?? "PEN";
+  const money = (value: number) => formatMoney(value, moneda);
+  useEffect(() => {
+    if (params.gastoId || !draft.ready || !draft.data || hydratedKey === groupId) return;
+    const value = draft.data;
+    cachedGroup.current = value.group;
+    setAmount(value.amount); setDescription(value.description); setPayer(value.payer); setIds(value.ids);
+    setMode(value.mode); setValues(value.values); setCategory(value.category); setCategoryPicked(value.categoryPicked);
+    setText(value.text); setNotes(value.notes); setDate(new Date(value.date)); requestId.current = value.requestId;
+    setPending(value.pending); setHydratedKey(groupId);
+    if (draft.restored) initializedGroup.current = groupId;
+  }, [draft.ready, draft.data, draft.restored, groupId, hydratedKey, params.gastoId]);
+  const captureDraft = useCallback((payload?: ExpenseDraft["pending"]): ExpenseDraft => ({
+    amount, description, payer, ids, mode, values, category: category as ExpenseDraft["category"], categoryPicked,
+    text, notes, date: date.toISOString(), requestId: requestId.current, savedAt: new Date().toISOString(), pending: payload ?? pending,
+    ...(group ? { group: { id: group.id, nombre: group.nombre, tipo: group.tipo, moneda: group.moneda || "PEN", miembros: group.miembros.map((m) => ({ usuarioId: m.usuarioId, usuario: { id: m.usuarioId, nombre: m.usuario.nombre } })) } } : {}),
+  }), [amount, description, payer, ids, mode, values, category, categoryPicked, text, notes, date, pending, group]);
+  const updateDraft = draft.update;
+  useEffect(() => { if (!params.gastoId && formReady && group && focused && !saving.current) updateDraft(captureDraft()); }, [params.gastoId, formReady, group, focused, captureDraft, updateDraft]);
   const labels = memberLabels(group?.miembros.map((m) => ({ ...m.usuario, id: m.usuarioId })) ?? [], user?.id);
   const nameOf = (id: string) => labels.get(id) ?? "?";
-  const orderedMembers = group ? meFirst(group.miembros, (m) => m.usuarioId, user?.id) : [];
+  const orderedMembers = group ? meFirst<{ usuarioId: string; usuario: { id: string; nombre: string; fotoUrl?: string | null } }>(group.miembros, (m) => m.usuarioId, user?.id) : [];
   useEffect(() => {
-    if (!params.gastoId && group && initializedGroup.current !== group.id) {
+    if (!params.gastoId && formReady && group && initializedGroup.current !== group.id) {
       initializedGroup.current = group.id;
       setIds(group.miembros.map((m) => m.usuarioId));
       setPayer(
@@ -150,7 +179,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       setMode("igual");
       setValues({});
     }
-  }, [group, user, params.gastoId]);
+  }, [group, user, params.gastoId, formReady]);
   useEffect(() => {
     const expense = original.data;
     if (
@@ -184,13 +213,17 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     );
   }, [original.data, group, focused]);
   const total = parseMoney(amount) || 0;
+  const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
   const parsedPct = ids.map((id) => parsePercentage(values[id] || ""));
   const pct = parsedPct.map((value) => value ?? 0);
   const pctSum = pct.reduce((a, b) => a + b, 0);
+  const parsedUnits = ids.map((id) => parseShares(values[id] ?? ""));
+  const units = parsedUnits.map((value) => value ?? 0);
+  const unitsSum = units.reduce((a, b) => a + b, 0);
   const shares =
     mode === "exacto"
       ? ids.map((id) => parseMoney(values[id] || "") || 0)
-      : allocatePreview(total, mode === "igual" ? ids.map(() => 1) : pct);
+      : allocatePreview(total, mode === "igual" ? ids.map(() => 1) : mode === "participaciones" ? units : pct);
   const valid =
     total > 0 &&
     ids.length > 0 &&
@@ -201,8 +234,13 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
         ? shares.reduce((a, b) => a + b, 0) === total &&
           ids.every((id) => parseMoney(values[id] || "") !== null) &&
           shares.every((s) => s >= 0)
+        : mode === "participaciones"
+          ? parsedUnits.every((value) => value !== null) && unitsSum > 0 && shares.reduce((a, b) => a + b, 0) === total
         : parsedPct.every((value) => value !== null) && Math.abs(pctSum - 100) < 0.000001 &&
           pct.every((p) => p >= 0 && p <= 100));
+  // The usual case (you paid, everyone in the group, equal parts) shows as one sentence.
+  const simpleSplit = !customSplit && !params.gastoId && params.cuenta !== "1" && mode === "igual" && !!group &&
+    payer === user?.id && ids.length === group.miembros.length && group.miembros.some((m) => m.usuarioId === user?.id);
   function changeMode(m: TipoDivision) {
     cancelProposal();
     setMode(m);
@@ -216,7 +254,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
           ids.map((id, i) => [id, (hundredths[i] / 100).toFixed(2)]),
         ),
       );
-    } else setValues({});
+    } else if (m === "participaciones") setValues(Object.fromEntries(ids.map((id) => [id, "1"])));
+    else setValues({});
   }
   async function prepare() {
     if (preparing || !groupId || text.trim().length < 3) return;
@@ -253,13 +292,13 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     }
   }
   async function save() {
-    if (!valid || !description.trim() || description.trim().length > 200 || !payer || !group?.miembros.some((m) => m.usuarioId === payer) || ids.some((id) => !group?.miembros.some((m) => m.usuarioId === id)) || create.isPending || saving.current) return;
+    if (!formReady || (!pending && (!valid || !description.trim() || description.trim().length > 200 || !payer || !group?.miembros.some((m) => m.usuarioId === payer) || ids.some((id) => !group?.miembros.some((m) => m.usuarioId === id)) )) || create.isPending || saving.current) return;
     // State updates are async: a ref stops a second tap before isPending flips.
     saving.current = true;
     try {
       cancelProposal();
       setError("");
-      await create.mutateAsync({
+      const payload = pending || {
         ...(params.gastoId ? {} : { solicitudId: requestId.current }),
         descripcion: description.trim(),
         montoTotal: total,
@@ -274,9 +313,24 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
             ? { monto: shares[i] }
             : mode === "porcentaje"
               ? { porcentaje: pct[i] }
-              : {}),
+              : mode === "participaciones"
+                ? { participaciones: units[i] }
+                : {}),
         })),
-      });
+      };
+      if (!params.gastoId) {
+        // Reconnect does not send anything. This explicit tap first refreshes group membership/currency.
+        const refreshed = await api.get(`/grupos/${groupId}`).catch(() => null);
+        if (!refreshed?.data) throw new Error("Sin conexión: el borrador sigue aquí. Vuelve a intentarlo cuando tengas internet.");
+        if (refreshed.data.moneda !== (group?.moneda || "PEN")) throw new Error("La moneda del grupo cambió. Revisa el gasto antes de enviarlo.");
+        if (!refreshed.data.miembros.some((m: { usuarioId: string }) => m.usuarioId === payload.pagadoPor) || payload.participantes.some((p) => !refreshed.data.miembros.some((m: { usuarioId: string }) => m.usuarioId === p.usuarioId))) throw new Error("Los integrantes del grupo cambiaron. Revisa las personas antes de guardar.");
+        const frozen = { ...payload, solicitudId: requestId.current };
+        const snapshot = captureDraft(frozen);
+        await draft.persist(snapshot); setPending(frozen);
+        await create.mutateAsync(frozen);
+        await draft.clear();
+      } else await create.mutateAsync(payload);
+      setPending(undefined);
       setAmount("");
       setDescription("");
       setText("");
@@ -284,6 +338,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       setNotes("");
       setValues({});
       setMode("igual");
+      setCustomSplit(false);
       setCategory("otro");
       setCategoryPicked(false);
       setDate(new Date());
@@ -302,12 +357,20 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       // A 4xx answer is final (409: that key already saved a different expense, and the message says
       // so): the next attempt is a new request. With no answer (timeout, no signal) we keep the key,
       // so retrying cannot create a second copy.
-      if (status && status >= 400 && status < 500) requestId.current = newRequestId();
+      if (status && status >= 400 && status < 500 && status !== 401 && status !== 409) { requestId.current = newRequestId(); setPending(undefined); }
       setError(errorMessage(err, "No sabemos si se guardó: revisa tu conexión y vuelve a tocar Guardar. Se comprobará la misma solicitud para evitar un gasto repetido."));
     } finally {
       saving.current = false;
     }
   }
+  if (pending && !params.gastoId && formReady) return <Screen title="Guardado por comprobar" subtitle={group?.nombre} back>
+    <Card style={{ backgroundColor: palette.yellow }}><Label weight="bold">{pending.descripcion}</Label><Label size={26} weight="extra">{money(pending.montoTotal)}</Label><Label size={13}>Esta solicitud pudo llegar al servidor. La conservamos sin cambios para que reintentar no duplique el gasto.</Label></Card>
+    {!!error && <ErrorBox message={error} />}
+    {draft.storageError && <ErrorBox message="No pudimos actualizar el borrador del dispositivo. Mantén la app abierta." />}
+    <Button title="Comprobar y reintentar la misma solicitud" loading={create.isPending} onPress={save} />
+    <Button secondary title="Ver gastos del grupo" onPress={() => router.push(`/(app)/grupos/${groupId}`)} />
+    <Label size={12} color={palette.muted}>No enviamos nada automáticamente al recuperar conexión. Si cambió el grupo, revisa sus gastos antes de continuar.</Label>
+  </Screen>;
   const selectedPayer = group?.miembros.find((m) => m.usuarioId === payer);
   return (
     <Screen
@@ -322,6 +385,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       }
       back
     >
+      {!params.gastoId && (draft.storageError || draft.restored) && <Card style={{ backgroundColor: draft.storageError ? palette.yellow : palette.mint, padding: 12, gap: 6 }}><Label size={13} weight="bold">{draft.storageError ? "No pudimos proteger el borrador" : draft.restored ? "Retomamos tu borrador" : "Borrador en este dispositivo"}</Label><Label size={12}>{draft.storageError ? "No cierres la app. Revisa el espacio del dispositivo antes de continuar." : "Puedes completar los datos sin conexión. Nada se envía solo; al guardar comprobamos el grupo otra vez."}</Label>{!groupQuery.data && draft.data?.group && <Label size={12} color={palette.muted}>Últimos integrantes consultados. No son saldos actualizados.</Label>}</Card>}
       {params.cuenta === "1" && !params.gastoId && <Card style={{ backgroundColor: palette.mint, gap: 8 }}>
         <Label weight="bold">Registra la cuenta una sola vez</Label>
         <Label size={13}>Escribe el total ya pagado, elige quién lo adelantó y reparte entre quienes participaron. Ejemplo: {money(50000)} entre 5 son {money(10000)} por persona.</Label>
@@ -352,7 +416,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
             />
           )}
         </>
-      ) : isLoading ? (
+      ) : (!formReady || (isLoading && !group)) ? (
         <ActivityIndicator />
       ) : !group ? (
         <ErrorBox message="No pudimos cargar este grupo. Vuelve y reintenta." />
@@ -362,7 +426,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
           {!params.gastoId && moneda === "PEN" && (
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ expanded: writeIt }}
+              aria-expanded={writeIt}
               onPress={() => setWriteIt((v) => !v)}
               style={[design.row, { minHeight: 44, gap: 8 }]}
             >
@@ -464,7 +528,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                   },
                 ]}
               >
-                <Ionicons name="restaurant-outline" size={23} color="#D68C13" />
+                {/* Follows the category guessed from the text ("Taxi" → car), so the icon never contradicts it. */}
+                <Ionicons name={`${expenseIcons[(category in expenseIcons ? category : "otro") as keyof typeof expenseIcons]}-outline`} size={23} color="#D68C13" />
                 <TextInput
                   accessibilityLabel="Descripción del gasto"
                   value={description}
@@ -485,39 +550,6 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                 />
               </View>
             </Field>
-            <Field label="Fecha">
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Elegir fecha del gasto"
-                onPress={() => setDatePicker(true)}
-                style={[design.input, design.row]}
-              >
-                <Ionicons
-                  name="calendar-outline"
-                  size={21}
-                  color={palette.ink}
-                />
-                <Label size={13} style={{ flex: 1 }}>
-                  {date.toLocaleDateString("es-PE", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </Label>
-                <Ionicons name="chevron-down" size={17} color={palette.muted} />
-              </Pressable>
-            </Field>
-            {datePicker && (
-              <DateTimePicker
-                value={date}
-                mode="date"
-                maximumDate={new Date()}
-                onChange={(_, value) => {
-                  setDatePicker(false);
-                  if (value) { cancelProposal(); setDate(value); }
-                }}
-              />
-            )}
             {!fixedGroup && (
             <Field label="Grupo">
               <Pressable
@@ -542,6 +574,26 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
               </Pressable>
             </Field>
             )}
+            {simpleSplit ? (
+              // The usual case in one sentence (you paid, everyone, equal parts); details only on request.
+              <View style={{ gap: 10, padding: 12, borderRadius: 16, backgroundColor: palette.lilac }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <View style={{ flexDirection: "row" }}>
+                    {orderedMembers.slice(0, 4).map((m, i) => (
+                      <View key={m.usuarioId} style={{ marginLeft: i ? -8 : 0, borderWidth: 2, borderColor: palette.lilac, borderRadius: 16 }}>
+                        <Avatar name={m.usuario.nombre} seed={m.usuarioId} size={28} />
+                      </View>
+                    ))}
+                  </View>
+                  <Label size={14} style={{ flex: 1 }}>
+                    <Label size={14} weight="bold">Pagaste tú</Label> y se divide <Label size={14} weight="bold">en partes iguales</Label> entre {ids.length === 1 ? "1 persona" : `${ids.length} personas`}
+                  </Label>
+                </View>
+                {total > 0 && <Label size={15} weight="extra" color={palette.positive}>{shares.every((v) => v === shares[0]) ? `${money(shares[0] ?? 0)} cada uno` : `Desde ${money(Math.min(...shares))} cada uno`} · te deben {money(total - (shares[ids.indexOf(user?.id ?? "")] ?? 0))}</Label>}
+                <Button compact secondary title="Cambiar quién pagó o cómo se divide" onPress={() => { cancelProposal(); setCustomSplit(true); }} />
+              </View>
+            ) : (
+              <>
             <Field label={params.cuenta === "1" ? "¿Quién adelantó el total?" : "¿Quién pagó?"}>
               <Pressable
                 accessibilityRole="button"
@@ -575,9 +627,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                     <Pressable
                       key={m.usuarioId}
                       accessibilityRole="checkbox"
-                      accessibilityState={{
-                        checked: ids.includes(m.usuarioId),
-                      }}
+                      aria-checked={ids.includes(m.usuarioId)}
                       accessibilityLabel={nameOf(m.usuarioId) === "Tú" ? "Tú" : m.usuario.nombre}
                       onPress={() => {
                         cancelProposal();
@@ -631,35 +681,39 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
             <Label weight="bold" size={16}>
               ¿Cómo se divide?
             </Label>
-            <View style={{ flexDirection: "row", gap: 6 }}>
+            <View accessibilityRole="radiogroup" accessibilityLabel="Cómo se divide" style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
               {(
                 [
-                  ["igual", "Por partes iguales"],
-                  ["exacto", "Por montos"],
-                  ["porcentaje", "Por porcentajes"],
+                  ["igual", "Partes iguales", "Todos pagan lo mismo"],
+                  ["exacto", "Por montos", "Cada uno, su monto"],
+                  ["porcentaje", "Por porcentajes", "Deben sumar 100 %"],
+                  ["participaciones", "Por participaciones", "Ej.: 2 para una pareja"],
                 ] as const
-              ).map(([m, title]) => (
+              ).map(([m, title, hint]) => (
                 <Pressable
                   key={m}
                   accessibilityRole="radio"
-                  accessibilityState={{ checked: mode === m }}
+                  accessibilityLabel={`${title}. ${hint}`}
+                  aria-checked={mode === m}
                   onPress={() => changeMode(m)}
                   style={{
-                    flex: 1,
-                    padding: 10,
-                    minHeight: 48,
+                    flexGrow: 1,
+                    flexBasis: "45%",
+                    paddingVertical: 8,
+                    paddingHorizontal: 10,
+                    minHeight: 52,
                     borderRadius: 14,
                     justifyContent: "center",
+                    borderWidth: 1,
+                    borderColor: mode === m ? "#9BDCC7" : "transparent",
                     backgroundColor: mode === m ? palette.mint : "#F5F5FB",
                   }}
                 >
-                  <Label
-                    size={11}
-                    weight="bold"
-                    color={mode === m ? "#078B70" : "#526284"}
-                    style={{ textAlign: "center" }}
-                  >
+                  <Label size={13} weight="bold" color={mode === m ? "#078B70" : "#3D4B66"}>
                     {title}
+                  </Label>
+                  <Label size={11} color={mode === m ? "#0A6B57" : palette.muted}>
+                    {hint}
                   </Label>
                 </Pressable>
               ))}
@@ -716,8 +770,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                           cancelProposal();
                           setValues((current) => ({ ...current, [id]: v }));
                         }}
-                        keyboardType="decimal-pad"
-                        placeholder={mode === "exacto" ? "Soles" : "%"}
+                        keyboardType={mode === "participaciones" ? "number-pad" : "decimal-pad"}
+                        placeholder={mode === "exacto" ? "Soles" : mode === "participaciones" ? "Ej. 1" : "%"}
                         style={[
                           design.input,
                           { fontSize: 13, padding: 7, minHeight: 40 },
@@ -737,18 +791,55 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                     ? "✓ La suma coincide hasta el último céntimo."
                     : mode === "porcentaje"
                       ? `Los porcentajes suman ${pctSum.toFixed(2)}%. Deben sumar 100%.`
+                      : mode === "participaciones"
+                        ? "Escribe un número entero de 0 a 1000 para cada persona; al menos una con 1 o más."
                       : `Asignado: ${money(shares.reduce((a, b) => a + b, 0))} de ${money(total)}.`}
               </Label>
             </View>
+              </>
+            )}
           </Card>
           {mode === "porcentaje" && parsedPct.some((value) => value === null) && <ErrorBox message="Completa cada porcentaje: entre 0 y 100, con máximo 2 decimales. Usa 0 explícitamente si no participa en el costo." />}
-          <Pressable accessibilityRole="button" accessibilityState={{ expanded: detail }} onPress={() => setDetail((v) => !v)} style={{ minHeight: 44, justifyContent: "center" }}>
+          <Pressable accessibilityRole="button" aria-expanded={detail} onPress={() => setDetail((v) => !v)} style={{ minHeight: 44, justifyContent: "center" }}>
             <Label color={palette.muted} size={13}>
-              {detail ? "Ocultar detalles" : `＋ Categoría (${({ comida: "Comida", transporte: "Transporte", alojamiento: "Alojamiento", entretenimiento: "Diversión", compras: "Compras", otro: "Otro" } as Record<string, string>)[category] ?? "Otro"}) y nota`}
+              {detail ? "Ocultar detalles" : `＋ ${sameDay(date, new Date()) ? "Hoy" : date.toLocaleDateString("es-PE", { day: "numeric", month: "short" })} · Categoría (${({ comida: "Comida", transporte: "Transporte", alojamiento: "Alojamiento", entretenimiento: "Diversión", compras: "Compras", otro: "Otro" } as Record<string, string>)[category] ?? "Otro"}) y nota`}
             </Label>
           </Pressable>
           {detail && (
             <Card>
+            <Field label="Fecha">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Elegir fecha del gasto"
+                onPress={() => setDatePicker(true)}
+                style={[design.input, design.row]}
+              >
+                <Ionicons
+                  name="calendar-outline"
+                  size={21}
+                  color={palette.ink}
+                />
+                <Label size={13} style={{ flex: 1 }}>
+                  {date.toLocaleDateString("es-PE", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </Label>
+                <Ionicons name="chevron-down" size={17} color={palette.muted} />
+              </Pressable>
+            </Field>
+            {datePicker && (
+              <DateTimePicker
+                value={date}
+                mode="date"
+                maximumDate={new Date()}
+                onChange={(_, value) => {
+                  setDatePicker(false);
+                  if (value) { cancelProposal(); setDate(value); }
+                }}
+              />
+            )}
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {[
                   ["comida", "Comida"],
@@ -761,7 +852,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                   <Pressable
                     key={id}
                     accessibilityRole="button"
-                    accessibilityState={{ selected: category === id }}
+                    aria-selected={category === id}
                     onPress={() => { cancelProposal(); setCategory(id); setCategoryPicked(true); }}
                     style={{
                       padding: 10,
@@ -789,7 +880,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
             title={params.gastoId ? "Guardar corrección" : params.cuenta === "1" ? "Guardar total y reparto" : "Guardar gasto"}
             onPress={save}
             loading={create.isPending}
-            disabled={!valid || !description.trim() || !payer}
+            disabled={!formReady || draft.storageError || !valid || !description.trim() || !payer}
           />
           <ExpenseDictation visible={dictating && focused && moneda === "PEN" && !params.gastoId} replacing={!!text.trim()} onClose={() => setDictating(false)} onUse={(value) => { cancelProposal(); setText(value); }} />
       <Sheet visible={picker !== null} onClose={() => setPicker(null)} title={picker === "grupo" ? "Elige el grupo" : "¿Quién pagó?"} width={560}>
@@ -812,7 +903,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                         <Pressable
                           key={m.usuarioId}
                           accessibilityRole="button"
-                          accessibilityState={{ selected: payer === m.usuarioId }}
+                          aria-selected={payer === m.usuarioId}
                           onPress={() => {
                             cancelProposal();
                             setPayer(m.usuarioId);

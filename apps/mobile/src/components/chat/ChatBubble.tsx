@@ -67,7 +67,7 @@ function Bubble({ item, children, onPress, onLongPress, onQuickReact, onReply, l
         {webReact && picking && (
           <View accessibilityRole="radiogroup" accessibilityLabel="Reaccionar al mensaje" style={{ flexDirection: "row", gap: 2, padding: 4, marginBottom: 4, borderRadius: 24, backgroundColor: "white", borderWidth: 1, borderColor: palette.line, shadowColor: palette.ink, shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } }}>
             {chatReactions.map((emoji) => (
-              <Pressable key={emoji} accessibilityRole="button" accessibilityLabel={`Reaccionar ${emoji}`} accessibilityState={{ selected: mineReaction === emoji }}
+              <Pressable key={emoji} accessibilityRole="button" accessibilityLabel={`Reaccionar ${emoji}`} aria-selected={mineReaction === emoji}
                 onPress={() => { setPicking(false); onQuickReact?.(emoji); }}
                 style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: mineReaction === emoji ? palette.mint : hovered ? "#F1F4F8" : "transparent", transform: [{ scale: hovered ? 1.15 : 1 }] })}>
                 <Label size={22}>{emoji}</Label>
@@ -92,7 +92,7 @@ function SideActions({ open, onReact, onReply }: { open: boolean; onReact: () =>
   const button = ({ hovered }: { hovered?: boolean }, active = false) => ({ width: 30, height: 30, borderRadius: 15, alignItems: "center" as const, justifyContent: "center" as const, backgroundColor: active || hovered ? "white" : "transparent", borderWidth: active ? 1 : 0, borderColor: palette.line });
   return (
     <View style={{ alignSelf: "center", flexDirection: "row", gap: 2 }}>
-      <Pressable accessibilityRole="button" accessibilityLabel={open ? "Cerrar reacciones" : "Reaccionar"} accessibilityState={{ expanded: open }} onPress={onReact} hitSlop={4} style={(state) => button(state as { hovered?: boolean }, open)}>
+      <Pressable accessibilityRole="button" accessibilityLabel={open ? "Cerrar reacciones" : "Reaccionar"} aria-expanded={open} onPress={onReact} hitSlop={4} style={(state) => button(state as { hovered?: boolean }, open)}>
         <Ionicons name={open ? "close" : "happy-outline"} size={18} color={open ? palette.ink : "#9AA6B8"} />
       </Pressable>
       {!!onReply && !open && (
@@ -169,9 +169,14 @@ export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAns
           {bill && item.partes ? (
             <Label size={13} color={palette.muted}>{item.partes} {words.parts} {item.monto % item.partes ? "desde" : "de"} {money(Math.floor(item.monto / item.partes))} · {words.holder(who(item.pagador))}</Label>
           ) : (
-            <Label size={13} color={palette.muted}>Pagó {who(item.pagador)}</Label>
+            // One line with what it means for you, instead of "who paid" plus "your part" to subtract.
+            // Who paid and your share of THIS expense. What you finally owe is netted across all
+            // expenses in the header ("le debes" here could contradict it after compensation).
+            <Label size={13} color={palette.muted}>
+              {item.pagador.id === meId ? "Pagaste tú" : `Pagó ${who(item.pagador)}`} · {item.tuParte ? <Label size={13} weight="bold" color={palette.ink}>tu parte {money(item.tuParte)}</Label> : "no te toca"}
+            </Label>
           )}
-          {!!item.tuParte && <Label size={13} weight="bold" color="#007B60">Tu {words.part}: {money(item.tuParte)}</Label>}
+          {bill && !!item.tuParte && <Label size={13} weight="bold" color="#007B60">Tu {words.part}: {money(item.tuParte)}</Label>}
           {!!item.comentarios && <Label size={12} color={palette.purple}>💬 {item.comentarios}</Label>}
         </Bubble>
       );

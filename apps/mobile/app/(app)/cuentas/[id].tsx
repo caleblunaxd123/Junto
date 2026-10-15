@@ -19,6 +19,7 @@ import { groupCover, art } from "../../../src/components/ui/Artwork";
 import { formatMoney } from "@junto/shared/currency";
 import { ShareMessageSheet } from "../../../src/components/ui/ShareMessage";
 import { groupShareMessage, type ShareMessage } from "../../../src/lib/shareMessage";
+import { GroupInsights, SimplifyExplained } from "../../../src/components/GroupInsights";
 function Step({
   number,
   title,
@@ -332,9 +333,8 @@ export default function Accounts() {
                 </Label>
               </View>
             ))}
-          <Label size={11} color={palette.muted}>
-            Compensamos los gastos para reducir la cantidad de pagos necesarios.
-          </Label>
+          <SimplifyExplained group={group} nameOf={nameOf} />
+          <GroupInsights group={group} nameOf={nameOf} />
           <Button title="Compartir cuentas por WhatsApp o correo" secondary disabled={payments.isError || payments.isLoading || isError || payments.isFetching} onPress={() => setShareMessage(groupShareMessage(group, group.pagosPorConfirmar ?? payments.data?.filter(p => p.grupoId === id && p.estado === "reportado").length ?? 0))} />
           {payments.isError && <><ErrorBox message="Actualiza los pagos antes de compartir las cuentas." /><Button title="Actualizar pagos" secondary onPress={() => payments.refetch()} /></>}
           <Button title="¡Entendido!" onPress={() => router.back()} />

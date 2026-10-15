@@ -105,10 +105,10 @@ export async function reportarPago(
     const moneda = await paymentCurrency(tx, input);
     const conversion = await paymentConversion(tx, input, moneda);
     // Read the ledger through this transaction (one pool connection, consistent with the lock).
-    const { cuentas } = await resumenCuentasGrupo(input.grupoId, tx);
+    const { cuentas, simplificado, deudasDirectas } = await resumenCuentasGrupo(input.grupoId, tx);
     const waiting = await tx.pago.findMany({ where: { grupoId: input.grupoId, estado: "reportado" }, select: { pagadorId: true, receptorId: true, monto: true } });
-    const { owes, owed, limit } = payableLimit(cuentas, waiting, pagadorId, input.receptorId);
-    if (!owes) throw new Error("No tienes una deuda pendiente en este grupo");
+    const { owes, owed, limit } = payableLimit(cuentas, waiting, pagadorId, input.receptorId, simplificado ? undefined : deudasDirectas);
+    if (!owes) throw new Error(simplificado ? "No tienes una deuda pendiente en este grupo" : "No le debes nada a esta persona en este grupo. Págale a quien te indica la app.");
     if (!owed) throw new Error("Esta persona no tiene dinero por recibir en el grupo. Págale a quien te indica la app.");
     if (!limit) throw new Error("Ya hay pagos esperando aprobación que cubren este monto. Espera a que los revisen.");
     if (input.monto > limit) {
@@ -348,9 +348,9 @@ export async function registrarRecibido(input: RegistrarRecibidoInput, userId: s
       throw new Error("Solo un administrador puede registrar pagos recibidos por alguien sin cuenta.", 403);
     // An administrator cannot use this shortcut to confirm their own outgoing payment.
     if (userId === input.pagadorId) throw new Error("No puedes confirmar tu propio pago. Regístralo como pago por confirmar.", 403);
-    const { cuentas } = await resumenCuentasGrupo(input.grupoId, tx);
+    const { cuentas, simplificado, deudasDirectas } = await resumenCuentasGrupo(input.grupoId, tx);
     const waiting = await tx.pago.findMany({ where: { grupoId: input.grupoId, estado: "reportado" }, select: { pagadorId: true, receptorId: true, monto: true } });
-    const { owes, owed, limit } = payableLimit(cuentas, waiting, input.pagadorId, receptorId);
+    const { owes, owed, limit } = payableLimit(cuentas, waiting, input.pagadorId, receptorId, simplificado ? undefined : deudasDirectas);
     if (!owes) throw new Error("Esta persona no tiene una deuda pendiente en el grupo");
     if (!owed) throw new Error(receptorId === userId ? "No tienes dinero por recibir en este grupo" : "Esta persona no tiene dinero por recibir en el grupo");
     if (!limit) throw new Error("Ya hay pagos de esta persona esperando tu confirmación: confírmalos primero.");

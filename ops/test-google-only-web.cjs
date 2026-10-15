@@ -3,6 +3,7 @@
 // Local fictional data only; every request stays in loopback. Needs the web export served on :8090.
 // Usage: DATABASE_URL=<local QA db> node ops/test-google-only-web.cjs   (after `npm run build` in apps/api)
 const assert = require('node:assert/strict');
+const WEB = `http://127.0.0.1:${Number(process.env.JUNTO_QA_WEB_PORT || 8090)}`;
 const crypto = require('node:crypto');
 const { chromium, webkit } = require('playwright-core');
 require('./local-qa.cjs').localQa();
@@ -37,10 +38,10 @@ async function run() {
     const errors = [];
     await context.route('**/*', async (route) => {
       const request = route.request(); const url = new URL(request.url());
-      if (url.origin === 'http://127.0.0.1:8090') return route.continue();
+      if (url.origin === WEB) return route.continue();
       if (url.origin === 'https://accounts.google.com') return route.abort();
       if (url.origin === 'https://junto.lunalav.pe' && url.pathname.startsWith('/api/')) {
-        const cors = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:8090', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE', 'Access-Control-Allow-Headers': 'authorization,content-type,x-junto-currency-version' };
+        const cors = { 'Access-Control-Allow-Origin': WEB, 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE', 'Access-Control-Allow-Headers': 'authorization,content-type,x-junto-currency-version' };
         if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
         const result = await fetch('http://127.0.0.1:3036' + url.pathname + url.search, { method: request.method(), headers: { ...request.headers(), host: '127.0.0.1:3036' }, body: request.postData() || undefined });
         return route.fulfill({ status: result.status, body: Buffer.from(await result.arrayBuffer()), headers: { 'Content-Type': result.headers.get('content-type') || 'application/json', ...cors } });
@@ -51,7 +52,7 @@ async function run() {
     page.on('pageerror', (e) => errors.push(e.message));
 
     // 1. The invitation link, signed out → "Ya tengo cuenta".
-    await page.goto(`http://127.0.0.1:8090/app/unirse/${group.linkInvitacion}`, { waitUntil: 'networkidle' });
+    await page.goto(`${WEB}/app/unirse/${group.linkInvitacion}`, { waitUntil: 'networkidle' });
     await page.getByRole('button', { name: 'Ya tengo cuenta', exact: true }).click();
     // 2. Tries a password: no dead end, an explanation and a way forward.
     await page.getByLabel('Correo electrónico').fill(anaEmail);

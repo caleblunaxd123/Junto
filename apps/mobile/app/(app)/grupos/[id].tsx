@@ -12,7 +12,7 @@ import { avatarColors } from "../../../src/lib/people";
 import { useGrupo, usePagos, useResolverPago } from "../../../src/hooks/useGrupos";
 import { api } from "../../../src/lib/api";
 import { useAuthStore } from "../../../src/store/auth.store";
-import { Label, Button, ErrorBox, palette, design } from "../../../src/components/ui/Design";
+import { Label, Button, ErrorBox, palette, design, Skeleton } from "../../../src/components/ui/Design";
 import { groupArt } from "../../../src/components/ui/Artwork";
 import { PendingActions } from "../../../src/components/PendingActions";
 import { pendingActions } from "../../../src/lib/pending";
@@ -166,6 +166,8 @@ export default function Group() {
 
   // Long press on a message: react, pin or delete.
   const [actionsFor, setActionsFor] = useState<Extract<ChatItem, { tipo: "mensaje" }> | null>(null);
+  // Hover by hand: a function `style` on Pressable is dropped by NativeWind's interop on Android.
+  const [hoveredEmoji, setHoveredEmoji] = useState<string | null>(null);
   // "Responder": the message being answered shows above the box until sent or dismissed.
   const [replyTo, setReplyTo] = useState<Extract<ChatItem, { tipo: "mensaje" }> | null>(null);
   const messageBox = useRef<TextInput>(null);
@@ -269,7 +271,21 @@ export default function Group() {
   if (isLoading || !group) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: palette.background }}>
-        {isLoading ? <ActivityIndicator style={{ margin: 40 }} color={palette.primary} /> : (
+        {isLoading ? (
+          <View accessibilityLabel="Abriendo el grupo" style={{ flex: 1 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 12, backgroundColor: chatColors.header }}>
+              <View style={{ width: 40 }} />
+              <View style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: "#FFFFFF55" }} />
+              <View style={{ flex: 1, gap: 6 }}><View style={{ width: "55%", height: 16, borderRadius: 8, backgroundColor: "#FFFFFF66" }} /><View style={{ width: "35%", height: 12, borderRadius: 6, backgroundColor: "#FFFFFF44" }} /></View>
+            </View>
+            <View style={{ padding: 12, gap: 8, backgroundColor: "white" }}><Skeleton width="70%" height={16} /><Skeleton height={6} /><Skeleton width="45%" height={12} /></View>
+            <View style={{ flex: 1, padding: 12, gap: 12, backgroundColor: chatColors.feed, justifyContent: "flex-end" }}>
+              <Skeleton width="62%" height={88} radius={16} />
+              <View style={{ alignSelf: "flex-end", width: "55%" }}><Skeleton height={64} radius={16} /></View>
+              <Skeleton width="48%" height={56} radius={16} />
+            </View>
+          </View>
+        ) : (
           <View style={{ padding: 16, gap: 16 }}>
             <Button title="Volver" secondary onPress={() => router.back()} />
             <ErrorBox message="No pudimos abrir el grupo. Revisa tu conexión." />
@@ -280,13 +296,10 @@ export default function Group() {
     );
   }
 
-  // The pinned summary: what was spent, where you stand, how much of the debts is already paid.
+  // The pinned summary: where you stand with each person, then the group total.
   const total = group.resumen.totalGastado;
-  const returned = group.resumen.cuentas.reduce((sum, a) => sum + a.pagosEnviados, 0);
-  const pending = group.resumen.cuentas.reduce((sum, a) => sum + Math.max(0, -a.neto), 0);
-  const progress = returned + pending > 0 ? returned / (returned + pending) : 0;
   const me = group.resumen.cuentas.find((a) => a.usuarioId === user?.id);
-  const noApp = group.miembros.filter(sinCuenta);
+  const noApp = group.miembros.filter(sinCuenta).sort((a, b) => a.usuario.nombre.localeCompare(b.usuario.nombre, "es"));
   // "🟢 Ana, Luis en línea": others whose app talked to JUNTO in the last minute.
   const onlineNames = (presence.data ?? []).filter((p) => p.enLinea && p.usuarioId !== user?.id)
     .map((p) => group.miembros.find((m) => m.usuarioId === p.usuarioId)?.usuario.nombre.split(" ")[0]).filter((n): n is string => !!n);
@@ -300,7 +313,43 @@ export default function Group() {
         ? { text: "Estás a mano ✓", color: "#007B60" }
         : null;
 
-  const items = chat.data ?? [];
+  // Your debts in this group as sentences about people, largest first.
+  const firstName = (name: string) => name.split(" ")[0];
+  // People who owe you the same amount share one sentence: "Ana, Luis y Marta te deben S/ 50.00 cada uno".
+  const byName = (a: string, b: string) => a.localeCompare(b, "es");
+  const listNames = (unsorted: string[]) => { const names = [...unsorted].sort(byName); return names.length > 1 ? `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}` : names[0]; };
+  const owedGroups = new Map<number, string[]>();
+  for (const d of group.resumen.saldos ?? []) if (d.acreedorId === user?.id) owedGroups.set(d.monto, [...(owedGroups.get(d.monto) ?? []), firstName(d.deudorNombre)]);
+  const myDebts = [
+    ...[...owedGroups].sort((a, b) => b[0] * b[1].length - a[0] * a[1].length).map(([monto, names]) => ({
+      key: `owed-${monto}`,
+      text: names.length === 1 ? `${names[0]} te debe ${money(monto)}` : `${listNames(names)} te deben ${money(monto)} cada uno`,
+      color: palette.positive,
+    })),
+    ...(group.resumen.saldos ?? []).filter((d) => d.deudorId === user?.id).sort((a, b) => b.monto - a.monto)
+      .map((d) => ({ key: `owe-${d.acreedorId}`, text: `Le debes ${money(d.monto)} a ${firstName(d.acreedorNombre)}`, color: palette.negative })),
+  ];
+  const others = (group.resumen.saldos ?? []).filter((d) => d.deudorId !== user?.id && d.acreedorId !== user?.id)
+    .map((d) => `${firstName(d.deudorNombre)} le paga ${money(d.monto)} a ${firstName(d.acreedorNombre)}`);
+  // Why: what you put in and what your share is, so "te debe" is never read as "gastó".
+  const everyoneSame = !!me && group.resumen.cuentas.filter((a) => a.tuParte > 0).every((a) => a.tuParte === me.tuParte);
+  const why = !me ? "" : me.pagaste > 0
+    ? `Pagaste ${money(me.pagaste)} · ${everyoneSame && me.tuParte ? `a cada uno le toca ${money(me.tuParte)}` : `tu parte es ${money(me.tuParte)}`}`
+    : me.tuParte > 0 ? `No has pagado nada aún · tu parte es ${money(me.tuParte)}` : "";
+  // "Creaste el grupo" + one "Se agregó a X por su nombre" per person become one line:
+  // "Creaste el grupo con Ana, Luis y Marta". Names added later keep their own line.
+  const rawItems = chat.data ?? [];
+  const items: ChatItem[] = [];
+  const addedNames: Record<string, string[]> = {};
+  for (const item of rawItems) {
+    const previous = items[items.length - 1];
+    if (item.tipo === "union" && item.sinCuenta && previous?.tipo === "creado" && Math.abs(new Date(item.fecha).getTime() - new Date(previous.fecha).getTime()) < 120_000) {
+      (addedNames[previous.id] ??= []).push(item.autor.nombre.split(" ")[0]);
+      continue;
+    }
+    items.push(item);
+  }
+  const joinNames = (names: string[]) => names.length > 1 ? `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}` : names[0];
   const lastIndex = items.length - 1;
 
   return (
@@ -335,25 +384,18 @@ export default function Group() {
         {/* Pinned message: the bill and how much of it is settled. */}
         <View style={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "white", borderBottomWidth: 1, borderColor: palette.line }}>
           {group.resumen.cantidadGastos ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={`Total gastado ${money(total)}. ${status?.text ?? ""}. Ver cuentas del grupo`} onPress={() => setWhoPaid(true)} style={{ gap: 6 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <Ionicons name="pin" size={14} color="#007B60" />
-                <Label size={14} weight="extra" style={{ flex: 1 }}>
-                  Total gastado: {money(total)}
-                  <Label size={12} color={palette.muted}>{`  ${group.resumen.cantidadGastos} ${group.resumen.cantidadGastos === 1 ? "gasto" : "gastos"}`}</Label>
+            <Pressable accessibilityRole="button" accessibilityLabel={`${myDebts.map((d) => d.text).join(". ") || status?.text || ""}. ${why}. Total ${money(total)} en ${group.resumen.cantidadGastos} gastos. Ver cuentas del grupo`} onPress={() => setWhoPaid(true)} style={{ gap: 4 }}>
+              {/* Who owes whom, said about people (like "Marco te debe S/ 145.01"); the totals stay in "Cuentas". */}
+              {myDebts.length ? myDebts.slice(0, 2).map((debt) => (
+                <Label key={debt.key} size={15} weight="extra" color={debt.color} numberOfLines={1}>{debt.text}</Label>
+              )) : status && <Label size={15} weight="extra" color={status.color}>{status.text}</Label>}
+              {!!why && <Label size={13} color={palette.ink}>{why}</Label>}
+              {/* Payments between the others explain why amounts differ ("Marta te debe 60, Luis 70"). */}
+              {others.length > 0 && <Label size={12} color={palette.muted} numberOfLines={2}>Entre los demás: {others.slice(0, 2).join(" · ")}{others.length > 2 ? ` y ${others.length - 2} más` : ""}</Label>}
+              <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", columnGap: 10 }}>
+                <Label size={12} color={palette.muted} style={{ flex: 1 }}>
+                  {myDebts.length > 2 ? `y ${myDebts.length - 2} más · ` : ""}Total del grupo {money(total)} · {group.resumen.cantidadGastos} {group.resumen.cantidadGastos === 1 ? "gasto" : "gastos"}
                 </Label>
-                <Label size={12} weight="bold" color={palette.purple}>Ver cuentas ›</Label>
-              </View>
-              {returned + pending > 0 && (
-                <>
-                  <View style={{ height: 6, backgroundColor: palette.line, borderRadius: 6, overflow: "hidden" }}>
-                    <View style={{ height: "100%", width: `${progress * 100}%`, backgroundColor: palette.primary }} />
-                  </View>
-                  <Label size={12} color={palette.muted}>Deudas pagadas: {money(returned)} de {money(returned + pending)}</Label>
-                </>
-              )}
-              <View style={{ flexDirection: "row", flexWrap: "wrap", columnGap: 10 }}>
-                {status && <Label size={13} weight="bold" color={status.color}>{status.text}</Label>}
                 {!!group.fechaLimite && (() => {
                   const due = deadlineText(group.fechaLimite);
                   return (
@@ -363,13 +405,13 @@ export default function Group() {
                     </View>
                   );
                 })()}
+                <Label size={12} weight="bold" color={palette.purple}>Ver cuentas ›</Label>
               </View>
             </Pressable>
           ) : (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
               <Ionicons name="pin" size={14} color={palette.purple} />
-              <Label size={13} style={{ flex: 1 }}>Aún no hay gastos. Anota el primero: cuánto, quién pagó y entre quiénes.</Label>
-              <Button compact title="Agregar gasto" onPress={goExpense} />
+              <Label size={13} style={{ flex: 1 }}>Aún no hay gastos. Cuando anotes uno, aquí verás quién te debe.</Label>
             </View>
           )}
         </View>
@@ -420,7 +462,12 @@ export default function Group() {
             return (
               <View key={item.id} style={{ gap: 8, marginTop: showAuthor && index ? 4 : 0 }}>
                 {newDay && <DaySeparator date={day} />}
-                <ChatBubble item={item} meId={user?.id} modo={group.modo} moneda={group.moneda} showAuthor={showAuthor} busy={resolve.isPending} onAnswer={answer} onDelete={remove} onMessageActions={setActionsFor} onReply={answerMessage} onReact={(comentarioId, emoji) => { void react(comentarioId, emoji); }} />
+                {item.tipo === "creado" && addedNames[item.id] ? (
+                  <View accessible accessibilityLabel={`Grupo creado con ${joinNames(addedNames[item.id])}`} style={{ alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, backgroundColor: "#FFF8E1", borderWidth: 1, borderColor: "#F3E3B0", maxWidth: 360 }}>
+                    <Ionicons name="people-outline" size={16} color="#8A5A00" />
+                    <Label size={13} color="#6B4A00" style={{ flexShrink: 1 }}>{item.mio ? "Creaste el grupo" : `${item.autor.nombre.split(" ")[0]} creó el grupo`} con {joinNames(addedNames[item.id])}</Label>
+                  </View>
+                ) : <ChatBubble item={item} meId={user?.id} modo={group.modo} moneda={group.moneda} showAuthor={showAuthor} busy={resolve.isPending} onAnswer={answer} onDelete={remove} onMessageActions={setActionsFor} onReply={answerMessage} onReact={(comentarioId, emoji) => { void react(comentarioId, emoji); }} />}
               </View>
             );
           })}
@@ -433,11 +480,15 @@ export default function Group() {
             </View>
           )}
           {!chat.isLoading && owingNoApp.length > 0 && !!group.resumen.cantidadGastos && (
-            <View style={{ alignSelf: "center", maxWidth: 380, padding: 14, gap: 8, borderRadius: 16, backgroundColor: palette.lilac, borderWidth: 1, borderColor: "#C9B8FF" }}>
-              <Label weight="bold">{owingNoApp.map((m) => m.usuario.nombre.split(" ")[0]).slice(0, 3).join(", ")}{owingNoApp.length > 3 ? ` y ${owingNoApp.length - 3} más` : ""} {owingNoApp.length === 1 ? "debe y aún no tiene" : "deben y aún no tienen"} JUNTO</Label>
-              <Label size={13} color={palette.muted}>Envíales su enlace por WhatsApp: verán cuánto deben y podrán registrar su pago.</Label>
-              <Button compact title="Ver cuentas y enviar enlaces" onPress={() => setWhoPaid(true)} />
-            </View>
+            // One quiet line, not a card: the debts themselves are already in the header.
+            <Pressable accessibilityRole="button" onPress={() => setWhoPaid(true)}
+              style={{ alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, minHeight: 36, borderRadius: 18, backgroundColor: "#FFFFFFCC" }}>
+              <Ionicons name="logo-whatsapp" size={16} color={palette.positive} />
+              <Label size={12} color={palette.muted}>
+                {owingNoApp.length > 2 ? `${owingNoApp.slice(0, 2).map((m) => m.usuario.nombre.split(" ")[0]).join(", ")} y ${owingNoApp.length - 2} más` : joinNames(owingNoApp.map((m) => m.usuario.nombre.split(" ")[0]))} {owingNoApp.length === 1 ? "no tiene" : "no tienen"} JUNTO ·{" "}
+                <Label size={12} weight="bold" color={palette.positive}>Enviar su enlace</Label>
+              </Label>
+            </Pressable>
           )}
           {lastIndex < 0 && !chat.isLoading && !chat.isError && <Label size={13} color={palette.muted} style={{ textAlign: "center" }}>Aún no hay mensajes.</Label>}
         </ScrollView>
@@ -474,7 +525,7 @@ export default function Group() {
           )}
           <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 4, paddingHorizontal: 8 }}>
             <Pressable accessibilityRole="button" accessibilityLabel="Adjuntar comprobante de pago" onPress={() => { Keyboard.dismiss(); setAttachment(true); }} style={{ width: 44, height: 48, alignItems: "center", justifyContent: "center" }}><Ionicons name="attach" size={27} color={chatColors.header} /></Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Emojis y respuestas rápidas" accessibilityState={{ expanded: expressions }} onPress={() => { Keyboard.dismiss(); setExpressions(!expressions); }} style={{ width: 44, height: 48, alignItems: "center", justifyContent: "center" }}><Ionicons name={expressions ? "close-circle-outline" : "happy-outline"} size={27} color={chatColors.header} /></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Emojis y respuestas rápidas" aria-expanded={expressions} onPress={() => { Keyboard.dismiss(); setExpressions(!expressions); }} style={{ width: 44, height: 48, alignItems: "center", justifyContent: "center" }}><Ionicons name={expressions ? "close-circle-outline" : "happy-outline"} size={27} color={chatColors.header} /></Pressable>
             <TextInput
               ref={messageBox}
               accessibilityLabel={replyTo ? `Respuesta a ${replyTo.autor.nombre}` : "Escribe un mensaje al grupo"}
@@ -497,7 +548,7 @@ export default function Group() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Enviar mensaje"
-              accessibilityState={{ disabled: !text.trim() || sending }}
+              aria-disabled={!text.trim() || sending}
               disabled={!text.trim() || sending}
               onPress={send}
               style={{ width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center", backgroundColor: text.trim() ? chatColors.send : "#9FB8AE" }}
@@ -530,8 +581,9 @@ export default function Group() {
             {chatReactions.map((emoji) => {
               const mine = actionsFor.reacciones?.some((r) => r.emoji === emoji && r.mia);
               return (
-                <Pressable key={emoji} accessibilityRole="button" accessibilityLabel={`Reaccionar ${emoji}`} accessibilityState={{ selected: !!mine }} onPress={() => { void react(actionsFor.comentarioId, emoji); }}
-                  style={({ hovered }: { pressed: boolean; hovered?: boolean }) => ({ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: mine ? palette.mint : hovered ? "#F1F4F8" : "transparent" })}>
+                <Pressable key={emoji} accessibilityRole="button" accessibilityLabel={`Reaccionar ${emoji}`} aria-selected={!!mine} onPress={() => { void react(actionsFor.comentarioId, emoji); }}
+                  onHoverIn={() => setHoveredEmoji(emoji)} onHoverOut={() => setHoveredEmoji(null)}
+                  style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: mine ? palette.mint : hoveredEmoji === emoji ? "#F1F4F8" : "transparent" }}>
                   <Label size={24}>{emoji}</Label>
                 </Pressable>
               );

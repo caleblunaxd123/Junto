@@ -94,6 +94,7 @@ export default function QuickBillDetail() {
           {!p.invitado && p.total > 0 && <><Label size={12}>Confirmado {money(confirmed)} · falta {money(p.total - confirmed)}</Label><Button title={confirmed === p.total ? "Ver o corregir aporte" : confirmed ? "Registrar otro pago" : "Registrar aporte recibido"} secondary disabled={disabled} onPress={() => { const complete = confirmed === p.total; setMode(complete ? "corregir" : "ahora"); setAmount(centavosASoles(complete ? confirmed : p.total - confirmed)); setSelected(p.id); }} /></>}
         </Card>;
       })}
+      {!!bill.datos.productos?.length && <Card><Label weight="bold">Productos de la boleta</Label>{bill.datos.productos.map((item) => <View key={item.id} style={{ gap: 3 }}><View style={design.row}><Label style={{ flex: 1 }} weight="bold" size={13}>{item.nombre}</Label><Label size={13}>{money(item.monto)}</Label></View><Label size={12} color={palette.muted}>{bill.datos.participantes.filter((p) => item.personas.includes(p.id)).map((p) => p.nombre).join(", ")}</Label></View>)}</Card>}
       <Card><Label weight="bold">¿A quién se aporta?</Label><Label>{bill.datos.cobrarA || "La organización aún no indicó quién recibe."}</Label>{!!bill.datos.instrucciones && <Label size={13}>{bill.datos.instrucciones}</Label>}<Label size={12} color={palette.muted}>JUNTO no verifica Yape ni Plin. Si adelantaste la boleta, puedes confirmar tu propia parte cubierta y registrar los aportes de los demás al recibirlos.</Label></Card>
       {!!error && <ErrorBox message={error} />}
       <Button title={history ? "Ocultar historial" : "Ver historial de cambios"} secondary onPress={() => setHistory(!history)} />
@@ -110,7 +111,7 @@ export default function QuickBillDetail() {
         </View>
         <View accessibilityRole="radiogroup" style={{ flexDirection: "row", gap: 8 }}>
           {([["ahora", "Recibí un pago"], ["corregir", "Corregir el total"]] as const).map(([value, title]) => (
-            <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: mode === value, disabled: value === "ahora" && paid === part?.total }} disabled={mutation.isPending || (value === "ahora" && paid === part?.total)}
+            <Pressable key={value} accessibilityRole="radio" aria-checked={mode === value} aria-disabled={value === "ahora" && paid === part?.total} disabled={mutation.isPending || (value === "ahora" && paid === part?.total)}
               onPress={() => { setMode(value); setAmount(part ? centavosASoles(value === "ahora" ? part.total - paid : paid) : ""); }}
               style={{ flex: 1, minHeight: 48, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: mode === value ? palette.mint : "#F5F5FB", borderWidth: 1, borderColor: mode === value ? palette.primary : "transparent", opacity: value === "ahora" && paid === part?.total ? 0.5 : 1 }}>
               <Label weight="bold" size={13} color={mode === value ? "#007B60" : palette.muted}>{title}</Label>

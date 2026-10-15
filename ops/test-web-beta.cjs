@@ -1,9 +1,10 @@
 // Production web bundle, real local API + loopback SMTP. No request goes to production or friends.
 const assert=require('node:assert/strict');const path=require('node:path');const fs=require('node:fs');
+const WEB = `http://127.0.0.1:${Number(process.env.JUNTO_QA_WEB_PORT || 8090)}`;
 const {chromium,webkit}=require('playwright-core');const {PrismaClient}=require('@prisma/client');
 require('./local-qa.cjs').localQa();
 const helpers=require('./test-share-email-api.cjs');const db=new PrismaClient();
-const WEB='http://127.0.0.1:8090';const API='http://127.0.0.1:3029/api';const suffix=Date.now();
+const API='http://127.0.0.1:3029/api';const suffix=Date.now();
 async function run(){
  const smtp=await helpers.startSmtp();const server=helpers.startApi(3029,{PUBLIC_WEB_URL:'https://junto.lunalav.pe',FRONTEND_URL:WEB,SMTP_HOST:'127.0.0.1',SMTP_PORT:String(smtp.port),SMTP_USER:'qa@example.invalid',SMTP_PASS:'fictional-only',SMTP_ALLOW_INSECURE_LOCAL:'true',EMAIL_FROM:'JUNTO <no-reply@example.invalid>'});
  let browser, closing=false;

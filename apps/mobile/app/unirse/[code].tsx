@@ -118,7 +118,7 @@ export default function Join() {
                       {[...names.map((n) => ({ id: n.id as string | null, label: n.nombre })), { id: null, label: "Ninguno, soy nuevo" }].map((option) => {
                         const selected = como === option.id;
                         return (
-                          <Pressable key={option.id ?? "nuevo"} accessibilityRole="radio" accessibilityState={{ checked: selected }} accessibilityLabel={option.id ? `Soy ${option.label}` : option.label} onPress={() => setComo(option.id)}
+                          <Pressable key={option.id ?? "nuevo"} accessibilityRole="radio" aria-checked={selected} accessibilityLabel={option.id ? `Soy ${option.label}` : option.label} onPress={() => setComo(option.id)}
                             style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 12, borderRadius: 16, borderWidth: 1.5, borderColor: selected ? palette.primary : palette.line, backgroundColor: selected ? palette.mint : "white" }}>
                             {option.id ? <Avatar name={option.label} size={32} /> : <Ionicons name="person-add-outline" size={24} color={palette.purple} />}
                             <Label weight="bold" style={{ flex: 1 }}>{option.id ? `Soy ${option.label}` : option.label}</Label>

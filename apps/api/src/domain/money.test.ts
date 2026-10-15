@@ -4,6 +4,7 @@ import {
   allocateEqual,
   allocateExact,
   allocatePercentages,
+  allocateShares,
   simplifyNetBalances,
 } from './money';
 
@@ -41,4 +42,18 @@ test('one-cent debt is never discarded', () => {
   );
   assert.equal(result.length, 1);
   assert.equal(result[0].monto, 1);
+});
+
+test('shares split: 2-1-1 of S/ 100.01 is exact to the cent and rejects invalid shares', () => {
+  const result = allocateShares(10001, [
+    { usuarioId: 'marco', participaciones: 2 },
+    { usuarioId: 'andrea', participaciones: 1 },
+    { usuarioId: 'lucia', participaciones: 1 },
+    { usuarioId: 'sofia', participaciones: 0 },
+  ]);
+  assert.deepEqual(result.map((r) => r.montoAsignado), [5001, 2500, 2500, 0]);
+  assert.equal(result.reduce((sum, r) => sum + r.montoAsignado, 0), 10001);
+  assert.throws(() => allocateShares(1000, [{ usuarioId: 'a', participaciones: 0 }]), /Al menos una persona/);
+  assert.throws(() => allocateShares(1000, [{ usuarioId: 'a', participaciones: 1.5 }]), /número entero/);
+  assert.throws(() => allocateShares(1000, [{ usuarioId: 'a', participaciones: -1 }]), /número entero/);
 });

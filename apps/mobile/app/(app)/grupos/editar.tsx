@@ -25,17 +25,17 @@ export default function EditGroup() {
   const query = useGrupo(grupoId);
   const focused = useIsFocused();
   const update = useEditarGrupo(grupoId);
-  const [draft, setDraft] = React.useState<{ id: string; nombre: string; tipo: GrupoTipo; descripcion: string; aprobacionPagos: AprobacionPagos }>();
+  const [draft, setDraft] = React.useState<{ id: string; nombre: string; tipo: GrupoTipo; descripcion: string; aprobacionPagos: AprobacionPagos; simplificarDeudas: boolean }>();
   const [error, setError] = React.useState("");
   React.useEffect(() => {
     if (focused && query.data && draft?.id !== grupoId) {
-      setDraft({ id: grupoId, nombre: query.data.nombre, tipo: query.data.tipo, descripcion: query.data.descripcion || "", aprobacionPagos: query.data.aprobacionPagos ?? "receptor" });
+      setDraft({ id: grupoId, nombre: query.data.nombre, tipo: query.data.tipo, descripcion: query.data.descripcion || "", aprobacionPagos: query.data.aprobacionPagos ?? "receptor", simplificarDeudas: query.data.simplificarDeudas ?? true });
       setError("");
     }
   }, [focused, query.data, grupoId, draft?.id]);
   React.useEffect(() => { if (!focused) setDraft(undefined); }, [focused]);
   const group = query.data;
-  const dirty = !!group && !!draft && (draft.nombre.trim() !== group.nombre || draft.tipo !== group.tipo || draft.descripcion.trim() !== (group.descripcion || "") || draft.aprobacionPagos !== (group.aprobacionPagos ?? "receptor"));
+  const dirty = !!group && !!draft && (draft.nombre.trim() !== group.nombre || draft.tipo !== group.tipo || draft.descripcion.trim() !== (group.descripcion || "") || draft.aprobacionPagos !== (group.aprobacionPagos ?? "receptor") || draft.simplificarDeudas !== (group.simplificarDeudas ?? true));
   const leave = React.useCallback(() => {
     if (update.isPending) return;
     function goBack() {
@@ -57,7 +57,7 @@ export default function EditGroup() {
     if (!draft || !dirty || update.isPending || draft.nombre.trim().length < 2) return;
     setError("");
     try {
-      await update.mutateAsync({ nombre: draft.nombre.trim(), tipo: draft.tipo, descripcion: draft.descripcion.trim(), aprobacionPagos: draft.aprobacionPagos });
+      await update.mutateAsync({ nombre: draft.nombre.trim(), tipo: draft.tipo, descripcion: draft.descripcion.trim(), aprobacionPagos: draft.aprobacionPagos, ...(draft.simplificarDeudas !== (group?.simplificarDeudas ?? true) ? { simplificarDeudas: draft.simplificarDeudas } : {}) });
       router.dismissTo(`/(app)/grupos/${grupoId}`);
     } catch (err) {
       setError(errorMessage(err, "No pudimos confirmar los cambios. Tus datos siguen aquí; actualiza el grupo antes de volver a guardar."));
@@ -77,7 +77,7 @@ export default function EditGroup() {
         <FormField label="Nombre del grupo" icon="people-outline" accessibilityLabel="Nombre del grupo" value={draft.nombre} maxLength={100} editable={!update.isPending} onChangeText={(nombre) => setDraft({ ...draft, nombre })} placeholder="Ej. Gastos de nuestro depa" />
         <Label weight="extra" size={20}>Tipo de grupo</Label>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {types.map((item) => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.label} accessibilityState={{ selected: draft.tipo === item.id }} disabled={update.isPending} onPress={() => setDraft({ ...draft, tipo: item.id })} style={{ width: "31%", minHeight: 100, padding: 8, alignItems: "center", borderRadius: 18, borderWidth: 1.5, borderColor: draft.tipo === item.id ? palette.primary : palette.line, backgroundColor: draft.tipo === item.id ? palette.mint : "white" }}>
+          {types.map((item) => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={item.label} aria-selected={draft.tipo === item.id} disabled={update.isPending} onPress={() => setDraft({ ...draft, tipo: item.id })} style={{ width: "31%", minHeight: 100, padding: 8, alignItems: "center", borderRadius: 18, borderWidth: 1.5, borderColor: draft.tipo === item.id ? palette.primary : palette.line, backgroundColor: draft.tipo === item.id ? palette.mint : "white" }}>
             <Image source={item.image} style={{ width: "100%", height: 62 }} resizeMode="contain" />
             <Label size={11} weight="bold" style={{ textAlign: "center" }}>{item.label}</Label>
           </Pressable>)}
@@ -85,6 +85,26 @@ export default function EditGroup() {
         <Label weight="bold">Descripción (opcional)</Label>
         <TextInput accessibilityLabel="Descripción del grupo" value={draft.descripcion} onChangeText={(descripcion) => setDraft({ ...draft, descripcion })} editable={!update.isPending} maxLength={500} multiline placeholder="Ej. Alquiler, compras y servicios del mes" style={[design.input, { minHeight: 90, textAlignVertical: "top" }]} />
         <Label size={12} color={palette.muted}>{draft.descripcion.length}/500 caracteres</Label>
+        <Label weight="extra" size={20}>¿Cómo se pagan las deudas?</Label>
+        <Card style={{ gap: 10 }}>
+          <View style={[design.row, { gap: 12 }]}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Label weight="bold">Simplificar pagos</Label>
+              <Label size={12} color={palette.muted}>
+                {draft.simplificarDeudas
+                  ? "JUNTO reduce los pagos al mínimo: alguien puede pagarte lo que le debía a otra persona. Cada uno paga o recibe lo mismo en total."
+                  : "Persona a persona: cada uno le paga a quien le pagó algo. «Ana te debe 30» es lo que Ana te debe a ti."}
+              </Label>
+            </View>
+            <Switch
+              accessibilityLabel="Simplificar pagos del grupo"
+              value={draft.simplificarDeudas}
+              disabled={update.isPending}
+              onValueChange={(on) => setDraft({ ...draft, simplificarDeudas: on })}
+              trackColor={{ true: palette.primary }}
+            />
+          </View>
+        </Card>
         <Label weight="extra" size={20}>¿Quién aprueba los pagos?</Label>
         <Card style={{ gap: 10 }}>
           <View style={[design.row, { gap: 12 }]}>

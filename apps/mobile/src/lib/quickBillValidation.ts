@@ -1,10 +1,12 @@
 import { calculateQuickBill, QuickBillInput, QuickBillResult } from "@junto/shared/quickBill";
 import { parseMoney } from "./expensePreview";
+import { allocateReceiptItems, ReceiptItem } from "@junto/shared/receiptItems";
 
 type BillFields = {
   name: string; recipient: string; instructions: string; billTotal: string; extras: string;
   division: "igual" | "consumos"; scanApproved: boolean; names: string;
   people: { id: string; nombre: string; consumo: string; invitado: boolean }[];
+  itemsMode?: boolean; items?: { id: string; nombre: string; importe: string; personas: string[] }[];
 };
 export function validateQuickBillDraft(d: BillFields) {
   const fields: Record<string, string> = {};
@@ -20,13 +22,20 @@ export function validateQuickBillDraft(d: BillFields) {
   if (!d.people.length || d.people.length > 50) fields.people = "Añade entre 1 y 50 personas.";
   if (d.people.length && d.people.every((p) => p.invitado)) fields.people = "Al menos una persona debe aportar. No pueden ser todos invitados.";
   const names = new Map<string, string>();
+  let products: ReceiptItem[] | undefined; let allocated: Record<string, number> | undefined;
+  if (d.itemsMode) {
+    products = (d.items || []).map((p) => ({ id: p.id, nombre: p.nombre.trim(), monto: parseMoney(p.importe) ?? -1, personas: p.personas }));
+    try { allocated = allocateReceiptItems(products, d.people.map((p) => p.id), total ?? 0); }
+    catch (err) { fields.products = (err as Error).message; }
+    if (d.division !== "consumos") fields.products = "Selecciona reparto por productos antes de continuar.";
+  }
   const participants = d.people.map((p) => {
     const name = p.nombre.trim();
     const key = name.replace(/\s+/g, " ").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     if (!name || name.length > 100 || /[\u0000-\u001f\u007f]/.test(name)) fields[`name:${p.id}`] = "Escribe un nombre válido, de hasta 100 caracteres.";
     else if (names.has(key)) { fields[`name:${p.id}`] = "Este nombre está repetido. Añade un apellido."; fields[`name:${names.get(key)}`] = fields[`name:${p.id}`]; }
     else names.set(key, p.id);
-    const consumo = d.division === "igual" ? 0 : parseMoney(p.consumo);
+    const consumo = d.itemsMode ? (allocated?.[p.id] ?? 0) : d.division === "igual" ? 0 : parseMoney(p.consumo);
     if (consumo === null) fields[`amount:${p.id}`] = "Indica su consumo con máximo 2 decimales. Usa 0 si no consumió.";
     return { ...p, nombre: name, consumo: consumo ?? 0 };
   });
@@ -38,11 +47,11 @@ export function validateQuickBillDraft(d: BillFields) {
   let input: QuickBillInput | undefined;
   let result: QuickBillResult | undefined;
   if (total && extras !== null && !Object.keys(fields).some((key) => key !== "name" && key !== "recipient" && key !== "instructions" && key !== "scan" && key !== "names")) {
-    input = { nombre: d.name.trim(), cobrarA: d.recipient.trim(), instrucciones: d.instructions.trim(), totalCuenta: total, extras, division: d.division, participantes: participants };
+    input = { nombre: d.name.trim(), cobrarA: d.recipient.trim(), instrucciones: d.instructions.trim(), totalCuenta: total, extras, division: d.division, participantes: participants, ...(products ? { productos: products } : {}) };
     try { result = calculateQuickBill(input); }
     catch (err) { fields.people = (err as Error).message; input = undefined; }
   }
   const firstError = (keys: string[]) => keys.map((key) => fields[key]).find(Boolean) || "";
-  const stepErrors = [firstError(["total", "scan"]), firstError(["total", "scan", "people", ...d.people.flatMap((p) => [`name:${p.id}`, `amount:${p.id}`]), "extras", "names", "reconciliation"]), Object.values(fields)[0] || ""];
+  const stepErrors = [firstError(["total", "scan"]), firstError(["total", "scan", "people", "products", ...d.people.flatMap((p) => [`name:${p.id}`, `amount:${p.id}`]), "extras", "names", "reconciliation"]), Object.values(fields)[0] || ""];
   return { fields, total, extras, consumptions, difference, input, result, stepErrors, valid: !Object.keys(fields).length && !!result };
 }

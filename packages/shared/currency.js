@@ -24,9 +24,13 @@ function currencyInfo(code = "PEN") {
   if (!info) throw new Error("Moneda no admitida");
   return info;
 }
+// Peruvian convention, shared by every supported currency here: comma for thousands, dot for
+// decimals (S/ 1,080.00). Integer arithmetic only; the value is never parsed back.
 function formatMoney(minor, code = "PEN") {
   if (!Number.isSafeInteger(minor)) throw new Error("Monto inválido");
-  return `${currencyInfo(code).symbol} ${(minor / 100).toFixed(2)}`;
+  const units = String(Math.floor(Math.abs(minor) / 100)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  const cents = String(Math.abs(minor) % 100).padStart(2, "0");
+  return `${currencyInfo(code).symbol} ${minor < 0 ? "-" : ""}${units}.${cents}`;
 }
 // Agreed rate: target units per ONE origin unit, six decimals, half-up to a minor
 // unit. Integer/BigInt arithmetic avoids binary-float or model rounding errors.

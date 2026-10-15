@@ -30,7 +30,7 @@ export function PaymentExchange({ value, onChange, target, disabled, grupoId, fe
       <Label weight="bold">Tipo de cambio acordado</Label>
       <Label size={13}>Elige la moneda que pagaste. La referencia del mercado es orientativa: puedes usarla o escribir el cambio que acordaron. Quien recibe revisará el equivalente en {target}.</Label>
       <View accessibilityRole="radiogroup" style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {currencies.filter((currency) => currency.code !== target).map((currency) => <Pressable key={currency.code} accessibilityRole="radio" accessibilityState={{ checked: currency.code === value.monedaOrigen, disabled }} accessibilityLabel={`Pago en ${currency.code}`} disabled={disabled}
+        {currencies.filter((currency) => currency.code !== target).map((currency) => <Pressable key={currency.code} accessibilityRole="radio" aria-checked={currency.code === value.monedaOrigen} aria-disabled={disabled} accessibilityLabel={`Pago en ${currency.code}`} disabled={disabled}
           onPress={() => onChange({ ...value, monedaOrigen: currency.code, rate: "", cotizacionId: undefined })}
           style={{ minHeight: 44, paddingHorizontal: 14, borderRadius: 14, justifyContent: "center", borderWidth: 1.5, borderColor: currency.code === value.monedaOrigen ? palette.purple : palette.line, backgroundColor: "white" }}>
           <Label size={13} weight="bold">{currency.code}</Label>

@@ -1,5 +1,6 @@
 // Browser QA with fictional accounts; production-shaped requests are intercepted into loopback.
 const assert = require('node:assert/strict');
+const WEB = `http://127.0.0.1:${Number(process.env.JUNTO_QA_WEB_PORT || 8090)}`;
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { chromium, webkit } = require('playwright-core');
@@ -13,17 +14,18 @@ async function run() {
   const server = startApi(3037, {}); let browser;
   try {
     await server.ready;
-    const user = await db.usuario.create({ data: { nombre: 'Caleb QA', email: `${randomUUID()}@example.invalid`, passwordHash: '!', emailVerificado: true } });
-    const token = jwt.sign({ userId: user.id, email: user.email, credentialsTag: credentialsTag(user.passwordHash, process.env.JWT_SECRET) }, process.env.JWT_SECRET, { expiresIn: '10m' });
     const engine = process.env.JUNTO_QA_WEBKIT === 'true' ? webkit : chromium;
     browser = await engine.launch(engine === chromium ? { executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true } : { headless: true });
     for (const width of [390, 1440]) {
+      // A first-time person per size: "Dividir gastos" is the big starting action only while you have no groups.
+      const user = await db.usuario.create({ data: { nombre: 'Caleb QA', email: `${randomUUID()}@example.invalid`, passwordHash: '!', emailVerificado: true } });
+      const token = jwt.sign({ userId: user.id, email: user.email, credentialsTag: credentialsTag(user.passwordHash, process.env.JWT_SECRET) }, process.env.JWT_SECRET, { expiresIn: '10m' });
       const context = await browser.newContext({ viewport: { width, height: 960 } }); const errors = [];
       await context.route('**/*', async (route) => {
         const req = route.request(); const url = new URL(req.url());
-        if (url.origin === 'http://127.0.0.1:8090') return route.continue();
+        if (url.origin === WEB) return route.continue();
         if (url.origin === 'https://junto.lunalav.pe' && url.pathname.startsWith('/api/')) {
-          const cors = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:8090', 'Access-Control-Allow-Headers': 'authorization,content-type,x-junto-currency-version', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE' };
+          const cors = { 'Access-Control-Allow-Origin': WEB, 'Access-Control-Allow-Headers': 'authorization,content-type,x-junto-currency-version', 'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE' };
           if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
           const response = await fetch('http://127.0.0.1:3037' + url.pathname + url.search, { method: req.method(), headers: { ...req.headers(), host: '127.0.0.1:3037' }, body: req.postData() || undefined });
           return route.fulfill({ status: response.status, headers: { ...cors, 'Content-Type': response.headers.get('content-type') || 'application/json' }, body: Buffer.from(await response.arrayBuffer()) });
@@ -36,7 +38,7 @@ async function run() {
         localStorage.setItem('junto.tryBill.v1', JSON.stringify({ total: 20000, tip: 0, extras: 0, savedAt: Date.now() + (width === 1440 ? -1 : 0), people: ['Caleb', 'Ana', 'Luis', 'Marta', 'Jaime'].map((nombre, i) => ({ nombre, invitado: i === 4 })) }));
       }, { token, userId: user.id, width });
       const page = await context.newPage(); page.on('pageerror', (err) => errors.push(err.message));
-      await page.goto('http://127.0.0.1:8090/app/', { waitUntil: 'networkidle' });
+      await page.goto(`${WEB}/app/`, { waitUntil: 'networkidle' });
       const primary = page.getByRole('button', { name: 'Dividir gastos', exact: true });
       await primary.waitFor();
       const box = await primary.boundingBox();
@@ -46,7 +48,7 @@ async function run() {
       await primary.click();
       await page.getByLabel('Nombre del grupo').waitFor();
       await page.getByText('Primero, ponle nombre al plan y agrega a tu gente.', { exact: true }).waitFor();
-      await page.goto('http://127.0.0.1:8090/app/cuentas/pasar-a-grupo?prueba=1', { waitUntil: 'networkidle' });
+      await page.goto(`${WEB}/app/cuentas/pasar-a-grupo?prueba=1`, { waitUntil: 'networkidle' });
       await page.getByText('Tu cálculo, en un grupo', { exact: true }).waitFor();
       await page.getByLabel('Nombre del grupo').fill('Cumpleaños QA ' + width);
       await page.getByRole('radio', { name: 'Caleb', exact: true }).first().click();
@@ -58,7 +60,9 @@ async function run() {
       await page.getByRole('button', { name: 'Crear grupo con este reparto', exact: true }).click();
       assert.equal((await response).status(), 201);
       await page.getByLabel('Escribe un mensaje al grupo').waitFor();
-      await page.getByText('Te deben S/ 150.00', { exact: true }).first().waitFor();
+      // Header names people with the reason: Caleb paid 200 for 4 payers (Jaime is a guest).
+      await page.getByText('Ana, Luis y Marta te deben S/ 50.00 cada uno', { exact: true }).first().waitFor().catch(async (e) => { await page.screenshot({ path: path.join(__dirname, 'artifacts/group-import-header-failure.png') }); throw e; });
+      await page.getByText('Pagaste S/ 200.00 · a cada uno le toca S/ 50.00', { exact: true }).first().waitFor();
       assert.equal(await page.evaluate(() => localStorage.getItem('junto.tryBill.v1')), null, 'trial removed only after confirmed creation');
       // The admin can record receipt for two people added by name, but not their own payment.
       async function localPost(route, body) {
@@ -70,7 +74,7 @@ async function run() {
       const ana = names.find((m) => m.usuario.nombre === 'Ana').usuarioId;
       const luis = names.find((m) => m.usuario.nombre === 'Luis').usuarioId;
       await localPost(`/grupos/${fixture.id}/gastos`, { descripcion: 'Cena QA', montoTotal: 10000, pagadoPor: ana, participantes: [{ usuarioId: luis }] });
-      await page.goto(`http://127.0.0.1:8090/app/grupos/${fixture.id}`, { waitUntil: 'networkidle' });
+      await page.goto(`${WEB}/app/grupos/${fixture.id}`, { waitUntil: 'networkidle' });
       await page.getByRole('button', { name: 'Cuentas', exact: true }).click();
       await page.getByRole('button', { name: 'Registrar pago recibido por Ana', exact: true }).click();
       await page.getByText('Luis pagó a Ana', { exact: true }).waitFor();

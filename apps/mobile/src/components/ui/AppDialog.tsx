@@ -57,7 +57,7 @@ export function DialogHost() {
         </ScrollView>
         <View style={[styles.actions, horizontal && { flexDirection: "row" }]}>{dialog.buttons.map((button, index) => {
           const secondary = button.style === "cancel";
-          return <Pressable key={`${button.text}-${index}`} accessibilityRole="button" accessibilityLabel={button.text} accessibilityState={{ disabled: dialog.busy, busy: dialog.busy }} disabled={dialog.busy} android_ripple={{ color: secondary ? "#08264412" : "#FFFFFF33" }} onPress={() => action(index)} style={[styles.button, horizontal && { flex: 1 }, secondary && styles.secondary, { opacity: dialog.busy ? 0.72 : 1 }]}>
+          return <Pressable key={`${button.text}-${index}`} accessibilityRole="button" accessibilityLabel={button.text} aria-disabled={dialog.busy} aria-busy={dialog.busy} disabled={dialog.busy} android_ripple={{ color: secondary ? "#08264412" : "#FFFFFF33" }} onPress={() => action(index)} style={[styles.button, horizontal && { flex: 1 }, secondary && styles.secondary, { opacity: dialog.busy ? 0.72 : 1 }]}>
             {secondary ? <Text style={[styles.buttonText, { color: palette.ink }]}>{button.text}</Text> : <LinearGradient colors={button.style === "destructive" ? ["#CD3544", "#BD2938"] : ["#00856A", "#007B60"]} style={styles.primary}>
               <Text style={styles.buttonText}>{button.text}</Text>
             </LinearGradient>}

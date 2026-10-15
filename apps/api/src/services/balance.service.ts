@@ -11,12 +11,13 @@ export async function resumenCuentasGrupo(grupoId: string, tx?: Prisma.Transacti
     db.grupoMiembro.findMany({ where: { grupoId }, include: { usuario: { select: { id: true, nombre: true } } } }),
     db.gasto.findMany({ where: { grupoId, activo: true }, include: { participantes: true } }),
     db.pago.findMany({ where: { grupoId } }),
+    db.grupo.findUnique({ where: { id: grupoId }, select: { simplificarDeudas: true } }),
   ] as const;
   // One snapshot: totals and settlement edges must describe the same ledger.
-  const [members, expenses, payments] = tx
+  const [members, expenses, payments, group] = tx
     ? await Promise.all(queries(tx))
     : await prisma.$transaction([...queries(prisma)], { isolationLevel: 'RepeatableRead' });
-  return calculateAccounts(members.map((member) => member.usuario), expenses, payments);
+  return calculateAccounts(members.map((member) => ({ ...member.usuario, activo: member.activo })), expenses, payments, group?.simplificarDeudas ?? true);
 }
 export async function calcularSaldosGrupo(grupoId: string, tx?: Prisma.TransactionClient): Promise<Saldo[]> { return (await resumenCuentasGrupo(grupoId, tx)).saldos; }
 export async function balancePersonal(usuarioId: string) {
