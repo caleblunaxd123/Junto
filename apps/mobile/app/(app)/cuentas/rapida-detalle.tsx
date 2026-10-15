@@ -143,7 +143,7 @@ export default function QuickBillDetail() {
         {shareMessage && <ShareSummary reportRef={emailReport} message={shareMessage} />}
         <Button compact title={exportPreview ? "Ocultar imagen por páginas" : "Crear imagen por páginas (opcional)"} secondary onPress={() => setExportPreview(!exportPreview)} />
         {exportPreview && <>
-        <View ref={image} collapsable={false} key={`${bill.version}-${page}`} onLayout={() => setImageReady(true)} style={{ padding: 20, gap: 12, backgroundColor: "#FFFCF7", borderRadius: 16 }}>
+        <View ref={image} collapsable={false} key={`${bill.version}-${page}`} onLayout={() => setImageReady(true)} style={{ padding: 20, gap: 12, backgroundColor: palette.background, borderRadius: 16 }}>
           <Brand compact /><Label weight="extra" size={23}>{bill.datos.nombre}</Label><Label size={13}>Total {money(bill.resultado.montoTotal)} · {bill.resultado.cantidadPagadores} aportan</Label>
           <View style={[design.row, { borderBottomWidth: 1, borderBottomColor: palette.line, paddingBottom: 8 }]}><Label size={12} weight="bold" style={{ flex: 1 }}>Persona</Label><Label size={12} weight="bold">Su parte / pendiente</Label></View>
           {bill.resultado.partes.slice(page * 10, page * 10 + 10).map((p) => <View key={p.id} style={[design.row, { justifyContent: "space-between", borderBottomWidth: 1, borderBottomColor: palette.line, paddingBottom: 8 }]}><View style={{ flex: 1 }}><Label weight="bold" size={14}>{p.nombre}</Label>{p.invitado && <Label size={11} color={palette.purple}>Invitado · no paga</Label>}</View><View><Label weight="bold" size={14}>{money(p.total)}</Label>{!p.invitado && <Label size={11} color={palette.muted}>Pendiente {money(p.total - (bill.aportes[p.id] || 0))}</Label>}</View></View>)}

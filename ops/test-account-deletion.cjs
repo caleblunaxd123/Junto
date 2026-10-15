@@ -10,7 +10,7 @@ const password = `JuntoQA${suffix}!`;
 async function request(path, token, method = "GET", body, status = 200) {
   const response = await fetch(origin + path, {
     method,
-    headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: { "Content-Type": "application/json", "X-Junto-Currency-Version": "1", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = response.status === 204 ? null : await response.json();
@@ -38,8 +38,14 @@ async function run() {
   assert.ok(activity.some((e) => e.requiereAccion && e.titulo === "Luis dice que te pagó"));
   assert.ok(activity.some((e) => e.titulo === "Agregaste “Luz”"));
 
+  const usd = await request("/grupos", ana.accessToken, "POST", { nombre: `QA · USD ${suffix}`, tipo: "viaje", moneda: "USD" }, 201);
+  await request("/grupos/unirse", luis.accessToken, "POST", { link: usd.linkInvitacion });
+  await request(`/grupos/${usd.id}/gastos`, ana.accessToken, "POST", {
+    descripcion: "Hotel", montoTotal: 9000, pagadoPor: ana.usuario.id, participantes: [{ usuarioId: ana.usuario.id }, { usuarioId: luis.usuario.id }],
+  }, 201);
   const summary = await request("/auth/me/eliminacion", ana.accessToken);
-  assert.deepEqual([summary.grupos, summary.teDeben, summary.pagosPorConfirmar], [1, 6000, 1]);
+  assert.deepEqual([summary.grupos, summary.teDeben, summary.pagosPorConfirmar], [2, 6000, 1]);
+  assert.deepEqual(summary.porMoneda, [{ moneda: "PEN", debes: 0, teDeben: 6000 }, { moneda: "USD", debes: 0, teDeben: 4500 }]);
   await request("/auth/me", ana.accessToken, "DELETE", { password: "incorrecta1" }, 400);
   await request("/auth/me", ana.accessToken, "DELETE", { password }, 204);
 
@@ -51,6 +57,10 @@ async function run() {
   assert.equal(view.rolUsuario, "admin");
   assert.equal(view.miembros.length, 1);
   assert.deepEqual(view.saldos.map((s) => [s.deudorId, s.acreedorNombre, s.monto]), [[luis.usuario.id, "Usuario eliminado", 6000]]);
+  const usdView = await request(`/grupos/${usd.id}`, luis.accessToken);
+  assert.equal(usdView.rolUsuario, "admin");
+  assert.equal(usdView.moneda, "USD");
+  assert.deepEqual(usdView.saldos.map((s) => [s.deudorId, s.acreedorNombre, s.monto]), [[luis.usuario.id, "Usuario eliminado", 4500]]);
   const payments = await request("/pagos/historial", luis.accessToken);
   assert.equal(payments[0].estado, "cancelado");
   const deleted = await db.usuario.findUniqueOrThrow({ where: { id: ana.usuario.id } });

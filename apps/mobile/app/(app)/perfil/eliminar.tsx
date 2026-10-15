@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { ActivityIndicator, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -8,7 +8,7 @@ import { forgetAccountDrafts } from "../../../src/lib/localData";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
 import { Screen, Card, Label, Button, ErrorBox, palette, design } from "../../../src/components/ui/Design";
-import { centavosASoles } from "../../../src/types";
+import { formatMoney, type CurrencyCode } from '@junto/shared/currency';
 import { errorMessage } from "../../../src/lib/errorMessage";
 
 type Summary = {
@@ -16,11 +16,11 @@ type Summary = {
   gruposConSaldo: { id: string; nombre: string }[];
   debes: number;
   teDeben: number;
+  porMoneda?: { moneda: CurrencyCode; debes: number; teDeben: number }[];
   pagosPorConfirmar: number;
   cuentasPuntuales: number;
   tienePassword: boolean;
 };
-const money = (value: number) => `S/ ${centavosASoles(value)}`;
 
 function Line({ icon, color, children }: { icon: keyof typeof Ionicons.glyphMap; color: string; children: React.ReactNode }) {
   return (
@@ -40,8 +40,11 @@ export default function DeleteAccount() {
   });
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const removing = useRef(false);
   const [error, setError] = useState("");
   const data = summary.data;
+  const balances = data?.porMoneda ?? (data ? [{ moneda: 'PEN' as const, debes: data.debes, teDeben: data.teDeben }] : []);
+  const hasBalance = balances.some(row => row.debes > 0 || row.teDeben > 0);
 
   function confirm() {
     Alert.alert(
@@ -55,6 +58,8 @@ export default function DeleteAccount() {
   }
 
   async function remove() {
+    if (removing.current) return;
+    removing.current = true;
     try {
       setBusy(true);
       setError("");
@@ -67,6 +72,7 @@ export default function DeleteAccount() {
     } catch (err) {
       setError(errorMessage(err, "No pudimos confirmar la eliminación. Comprueba tu conexión y el acceso a tu cuenta antes de repetirla."));
     } finally {
+      removing.current = false;
       setBusy(false);
     }
   }
@@ -95,11 +101,14 @@ export default function DeleteAccount() {
               Los gastos y pagos de tus {data.grupos} {data.grupos === 1 ? "grupo" : "grupos"} quedan como «Usuario eliminado», para que las cuentas de los demás no cambien.
             </Line>
           </Card>
-          {(data.debes > 0 || data.teDeben > 0 || data.pagosPorConfirmar > 0) && (
+          {(hasBalance || data.pagosPorConfirmar > 0) && (
             <Card style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", gap: 8 }}>
               <Label weight="extra">Antes de irte</Label>
-              {data.debes > 0 && <Label size={14}>Debes {money(data.debes)}. La deuda seguirá visible para tus grupos.</Label>}
-              {data.teDeben > 0 && <Label size={14}>Te deben {money(data.teDeben)}. Ya no podrás confirmar esos pagos.</Label>}
+              {balances.map(row => <React.Fragment key={row.moneda}>
+                {row.debes > 0 && <Label size={14}>Debes {formatMoney(row.debes, row.moneda)}. La deuda seguirá visible para tus grupos.</Label>}
+                {row.teDeben > 0 && <Label size={14}>Te deben {formatMoney(row.teDeben, row.moneda)}. Ya no podrás confirmar esos pagos.</Label>}
+              </React.Fragment>)}
+              {balances.length > 1 && hasBalance && <Label size={12} color={palette.muted}>Cada moneda se conserva por separado; no se convierten ni se compensan entre sí.</Label>}
               {data.pagosPorConfirmar > 0 && (
                 <Label size={14}>
                   Tienes {data.pagosPorConfirmar} {data.pagosPorConfirmar === 1 ? "pago" : "pagos"} esperando tu confirmación; se cancelarán.
@@ -122,6 +131,7 @@ export default function DeleteAccount() {
                   setError("");
                 }}
                 secureTextEntry
+                editable={!busy}
                 autoCapitalize="none"
                 autoComplete="current-password"
                 style={design.input}
@@ -138,6 +148,7 @@ export default function DeleteAccount() {
                   setError("");
                 }}
                 autoCapitalize="characters"
+                editable={!busy}
                 autoCorrect={false}
                 placeholder="ELIMINAR"
                 placeholderTextColor="#8B98AE"
@@ -149,7 +160,7 @@ export default function DeleteAccount() {
           <Button
             title="Eliminar mi cuenta"
             loading={busy}
-            disabled={data.tienePassword ? !password : password.trim().toUpperCase() !== "ELIMINAR"}
+            disabled={busy || (data.tienePassword ? !password : password.trim().toUpperCase() !== "ELIMINAR")}
             onPress={confirm}
           />
         </>

@@ -2,6 +2,16 @@ import type { GrupoConBalance, Pago } from "../types";
 import type { CurrencyCode } from "@junto/shared/currency";
 import { formatMoney } from "@junto/shared/currency";
 
+/** A person's net may be zero while they still need to pay and collect from different people. */
+export function outstanding(account: { usuarioId: string; neto: number }, debts?: readonly { deudorId: string; acreedorId: string; monto: number }[]) {
+  return debts === undefined
+    ? { owes: Math.max(0, -account.neto), owed: Math.max(0, account.neto) }
+    : {
+      owes: debts.filter(debt => debt.deudorId === account.usuarioId).reduce((sum, debt) => sum + debt.monto, 0),
+      owed: debts.filter(debt => debt.acreedorId === account.usuarioId).reduce((sum, debt) => sum + debt.monto, 0),
+    };
+}
+
 /** Expense advances and settlement payments are different contributions. */
 export function groupAccountExplanation(account: Pick<GrupoConBalance['resumen']['cuentas'][number], 'pagaste' | 'tuParte' | 'pagosEnviados' | 'pagosRecibidos'> | undefined, everyoneSame: boolean, moneda = "PEN") {
   if (!account) return "";
@@ -36,7 +46,7 @@ export function accountSummary(
     // Legacy callers may show a single total only when it has exactly one currency.
     owed: byCurrency.length === 1 ? byCurrency[0].owed : null,
     owes: byCurrency.length === 1 ? byCurrency[0].owes : null,
-    current: groups.filter((group) => group.balanceUsuario.neto === 0).length,
+    current: groups.filter((group) => group.balanceUsuario.debes === 0 && group.balanceUsuario.teDeben === 0).length,
     pending: payments.filter(
       (payment) => ids.has(payment.grupoId) && payment.estado === "reportado",
     ),

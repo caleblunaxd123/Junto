@@ -10,6 +10,7 @@ import { type GrupoConBalance, type Presencia } from "../../types";
 import { router } from "expo-router";
 
 import { formatMoney } from "@junto/shared/currency";
+import { outstanding } from '../../lib/accountSummary';
 type Member = GrupoConBalance["miembros"][number];
 
 /** "en línea", "visto hace 5 min", "visto hoy 18:20", "visto el 3 oct". */
@@ -101,10 +102,13 @@ export function WhoPaid({ group, payments = [], userId, visible, onClose, onPay,
               const member = members.get(account.usuarioId)!;
               const mine = account.usuarioId === userId;
               const noApp = sinCuenta(member);
-              const state = account.neto > 0
-                ? { text: `${mine ? "Te" : "Le"} deben ${money(account.neto)}`, color: "#007B60" }
-                : account.neto < 0
-                  ? { text: `${mine ? "Debes" : "Debe"} ${money(-account.neto)}`, color: palette.coral }
+              const { owed, owes } = outstanding(account, group.resumen.saldos);
+              const state = owed && owes
+                ? { text: `${mine ? 'Debes' : 'Debe'} ${money(owes)}\n${mine ? 'Te' : 'Le'} deben ${money(owed)}`, color: palette.ink }
+                : owed > 0
+                ? { text: `${mine ? "Te" : "Le"} deben ${money(owed)}`, color: "#007B60" }
+                : owes > 0
+                  ? { text: `${mine ? "Debes" : "Debe"} ${money(owes)}`, color: palette.coral }
                   : { text: account.tuParte || account.pagaste ? "A mano" : group.resumen.cantidadGastos ? "Sin parte asignada" : "Sin gastos", color: palette.muted };
               return (
                 <View key={account.usuarioId} style={{ padding: 12, gap: 8, borderRadius: 16, backgroundColor: "white", borderWidth: 1, borderColor: mine ? "#A4EDD7" : palette.line }}>

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { validShareEmail } from '@junto/shared/share';
+import { passwordWithinLimit } from '@junto/shared/password';
 const correo = z.string().trim().toLowerCase().max(254, 'Usa un correo de hasta 254 caracteres.').email('Usa un correo como nombre@correo.com, sin espacios.').refine(validShareEmail, 'Usa un solo correo válido, sin espacios.');
 
 const celularPeru = z
@@ -13,7 +14,8 @@ export const registerSchema = z.object({
   password: z
     .string()
     .min(8, 'La contraseña debe tener al menos 8 caracteres')
-    .regex(/\d/, 'La contraseña debe contener al menos un número'),
+    .regex(/\d/, 'La contraseña debe contener al menos un número')
+    .refine(passwordWithinLimit, 'Usa una contraseña de hasta 72 bytes; las tildes y los emojis ocupan más de uno.'),
 });
 
 export const loginSchema = z.object({
@@ -31,7 +33,8 @@ export const resetPasswordSchema = z.object({
   newPassword: z
     .string()
     .min(8, 'La contraseña debe tener al menos 8 caracteres')
-    .regex(/\d/, 'La contraseña debe contener al menos un número'),
+    .regex(/\d/, 'La contraseña debe contener al menos un número')
+    .refine(passwordWithinLimit, 'Usa una contraseña de hasta 72 bytes; las tildes y los emojis ocupan más de uno.'),
 });
 
 export const refreshTokenSchema = z.object({

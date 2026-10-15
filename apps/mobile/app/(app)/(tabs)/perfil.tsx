@@ -3,6 +3,7 @@ import {
   View,
   Pressable,
   Linking,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { AppDialog as Alert } from "../../../src/components/ui/AppDialog";
@@ -18,6 +19,7 @@ import {
 } from "../../../src/components/ui/Design";
 import { IconBubble } from "../../../src/components/ui/Reference";
 import Constants from "expo-constants";
+import { pushSupported } from '../../../src/lib/push';
 function Row({
   icon,
   title,
@@ -37,18 +39,19 @@ function Row({
     <Pressable
       accessibilityRole="button"
       onPress={onPress}
-      style={[design.row, { paddingVertical: 10, gap: 10 }]}
+      accessibilityLabel={`${title}. ${subtitle}`}
+      style={[design.row, { minHeight: 64, paddingVertical: 10, gap: 10 }]}
     >
       <IconBubble name={icon} size={36} color={color} background={bg} />
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, minWidth: 0 }}>
         <Label
           weight="bold"
-          size={13}
+          size={14}
           color={title === "Cerrar sesión" ? palette.coral : palette.ink}
         >
           {title}
         </Label>
-        <Label size={11} color={palette.muted}>
+        <Label size={12} color={palette.muted}>
           {subtitle}
         </Label>
       </View>
@@ -63,6 +66,23 @@ export default function Profile() {
     if (!url?.startsWith("https://")) { show(title, "Esta página todavía no está publicada en esta versión de pruebas."); return; }
     try { await Linking.openURL(url); } catch { show(title, "No pudimos abrir el enlace. Revisa tu conexión y vuelve a intentarlo."); }
   };
+  function notifications() {
+    if (Platform.OS === 'web') {
+      show('Notificaciones en la web', 'Los avisos de pagos y recordatorios aparecen en Inicio y Actividad. Las notificaciones con la app cerrada se ofrecen en la app Android cuando están configuradas.');
+      return;
+    }
+    if (!pushSupported()) {
+      show('Avisos dentro de JUNTO', 'Esta build todavía no tiene habilitado el servicio de notificaciones del teléfono. Puedes revisar pagos por confirmar y recordatorios en Inicio y Actividad. Dar permiso en Android no activa por sí solo este servicio.');
+      return;
+    }
+    Alert.alert('Notificaciones', 'Los avisos de pagos y recordatorios requieren el permiso del teléfono. Puedes revisarlo en los ajustes de JUNTO.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Abrir ajustes', onPress: async () => {
+        try { await Linking.openSettings(); }
+        catch { show('No pudimos abrir los ajustes', 'Abre Ajustes del teléfono → Aplicaciones → JUNTO → Notificaciones. Tus avisos internos siguen disponibles en Inicio y Actividad.'); }
+      } },
+    ]);
+  }
   function exit() {
     Alert.alert(
       "¿Cerrar sesión?",
@@ -123,7 +143,7 @@ export default function Profile() {
           onPress={() =>
             show(
               "¿Cómo funciona JUNTO?",
-              "Para una salida: toca «+» en Inicio → Una cuenta de hoy. Escribe el total o revisa la lectura de una boleta, añade personas y marca a los invitados. Revisa y guarda el reparto. Comparte el mensaje o la imagen; tú confirmas los aportes recibidos, incluso parciales. No necesitan registrarse.\n\nPara gastos continuos: «+» → Un grupo nuevo. Invita a quienes comparten contigo, registra quién pagó y para quién fue. Tus cuentas explicadas muestra cada cálculo. Un pago externo reduce la deuda solo cuando el receptor confirma.\n\nLas cuentas puntuales y las deudas de grupos no se mezclan. JUNTO no guarda ni transfiere dinero.",
+              "Para una salida: crea una cuenta de un día desde Inicio. Escribe el total o revisa la lectura de una boleta, añade personas y marca a los invitados. Revisa y guarda el reparto. Comparte el mensaje o la imagen; tú confirmas los aportes recibidos, incluso parciales. No necesitan registrarse.\n\nPara gastos continuos: crea un grupo, agrega a tu gente y anota quién pagó y para quién fue. En «Sacar cuentas» verás cuánto debes, cuánto te deben y los movimientos con fecha. Puedes compartir el estado de cuenta en PDF o Excel. Un pago externo reduce la deuda solo cuando quien recibe confirma.\n\nCerrar un grupo detiene los gastos nuevos y permite terminar de pagar. El historial se conserva. Las cuentas de un día y las deudas de grupos no se mezclan. JUNTO no guarda ni transfiere dinero.",
             )
           }
         />
@@ -143,16 +163,7 @@ export default function Profile() {
           subtitle="Pagos por confirmar y recordatorios"
           color="#DB9700"
           bg={palette.yellow}
-          onPress={() =>
-            Alert.alert(
-              "Notificaciones",
-              "Te avisamos cuando alguien dice que te pagó o te recuerda un pago. Puedes cambiar el permiso en los ajustes del teléfono.",
-              [
-                { text: "Cancelar", style: "cancel" },
-                { text: "Abrir ajustes", onPress: () => Linking.openSettings() },
-              ],
-            )
-          }
+          onPress={notifications}
         />
         <Row
           icon="shield-checkmark-outline"

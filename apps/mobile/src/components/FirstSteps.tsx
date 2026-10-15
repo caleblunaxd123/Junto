@@ -1,10 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Linking, Modal, Platform, Pressable, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { Button, Label, palette } from "./ui/Design";
-import { firstSteps, tourStorageKey } from "../lib/firstSteps";
+import { firstSteps } from "../lib/firstSteps";
 import { enableNotifications } from "../lib/push";
 import { useAuthStore } from "../store/auth.store";
 
@@ -25,14 +24,11 @@ export function FirstSteps({ userId, onBrand = false }: { userId: string; onBran
   const [busy, setBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
   useEffect(() => {
-    let current = true;
-    setVisible(false); setStep(0); setResult("");
-    AsyncStorage.getItem(tourStorageKey(userId)).then((saved) => { if (current && !saved) setVisible(true); }).catch(() => { /* Manual guide remains available if storage fails. */ });
-    return () => { current = false; controller.current?.abort(); };
+    setVisible(false); setStep(0); setResult(""); setBusy(false);
+    return () => { controller.current?.abort(); };
   }, [userId]);
   const close = () => {
     controller.current?.abort(); setBusy(false); setVisible(false);
-    void AsyncStorage.setItem(tourStorageKey(userId), "seen").catch(() => undefined);
   };
   async function activate() {
     if (busy) return;

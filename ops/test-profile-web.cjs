@@ -1,0 +1,164 @@
+// Compiled app QA: all API requests use fictional fixtures, all other remote requests are blocked.
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const fs = require('node:fs');
+const { chromium } = require('playwright-core');
+const build = path.resolve(process.argv[2] || 'ops/artifacts/profile-audit/web');
+assert.ok(fs.existsSync(path.join(build, 'index.html')), 'Export the web app first, then pass its build directory.');
+const artifacts = path.resolve(__dirname, 'artifacts/profile-audit');
+fs.mkdirSync(artifacts, { recursive: true });
+const server = require('./web/server.cjs').createServer(build);
+const gid = 'b24a0000-1111-4111-8111-000000000001';
+const uid = 'b24a0000-1111-4111-8111-000000000010';
+const baseUser = { id: uid, nombre: 'Ana Visual', email: 'ana@example.invalid', emailVerificado: true, celular: null, fotoUrl: null, tienePassword: true };
+const requests = [];
+require('ts-node').register({ transpileOnly: true, skipProject: true, compilerOptions: { module: 'CommonJS', moduleResolution: 'node', target: 'ES2022' } });
+const { calculateAccounts } = require('../apps/api/src/domain/accounts.ts');
+const members = [{ id: uid, nombre: 'Ana Visual' }, { id: 'caleb', nombre: 'Caleb QA' }, { id: 'luis', nombre: 'Luis QA' }];
+const expenses = [{ montoTotal: 12000, pagadoPor: 'caleb', participantes: members.map(m => ({ usuarioId: m.id, montoAsignado: 4000 })) }, { montoTotal: 6000, pagadoPor: uid, participantes: members.map(m => ({ usuarioId: m.id, montoAsignado: 2000 })) }];
+const summary = calculateAccounts(members, expenses, [], false);
+const group = { id: gid, nombre: 'Cena QA', moneda: 'PEN', estado: 'abierto', tipo: 'salida', rolUsuario: 'admin', miembros: members.map(m => ({ usuarioId: m.id, usuario: m, rol: 'miembro' })), resumen: summary, saldos: summary.saldos, balanceUsuario: { debes: 2000, teDeben: 2000, neto: 0 }, pagosPorConfirmar: 0 };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+(async () => {
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const browser = await chromium.launch({ executablePath: process.env.CHROME_BIN || (process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : '/usr/bin/google-chrome'), headless: true });
+  try {
+    for (const width of [320, 390, 1280]) {
+      let user = { ...baseUser }, photoRelease, photoStarted;
+      const photoSeen = new Promise(r => photoStarted = r);
+      const photoGate = new Promise(r => photoRelease = r);
+      const context = await browser.newContext({ viewport: { width, height: 950 } });
+      await context.route('**/*', async route => {
+        const req = route.request(), u = new URL(req.url());
+        if (!u.pathname.startsWith('/api/')) return u.origin === origin ? route.continue() : route.abort();
+        const p = u.pathname.slice(4), method = req.method();
+        if (method === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*' } });
+        requests.push({ width, p, method, body: req.postDataJSON() });
+        let body = [], status = 200;
+        if (p === '/auth/login' && req.postDataJSON().password === 'wrong2026!') { status = 401; body = { error: 'Correo o contraseña incorrectos.' }; }
+        else if (p === '/auth/login' || p === '/auth/refresh') body = { usuario: user, accessToken: 'fictional-access', refreshToken: 'fictional-refresh' };
+        else if (p === '/auth/me/eliminacion') body = { grupos: 2, gruposConSaldo: [{ id: gid, nombre: 'Cena QA' }], debes: 2000, teDeben: 2000, porMoneda: [{ moneda: 'PEN', debes: 2000, teDeben: 2000 }, { moneda: 'USD', debes: 1000, teDeben: 0 }], pagosPorConfirmar: 1, cuentasPuntuales: 1, tienePassword: user.tienePassword };
+        else if (p === '/auth/me/foto' && method === 'PUT') { photoStarted(); await photoGate; user = { ...user, fotoUrl: null }; body = { fotoUrl: null }; }
+        else if (p === '/auth/me') { if (method === 'PATCH') user = { ...user, ...req.postDataJSON() }; body = user; }
+        else if (p === '/grupos') body = [group];
+        else if (p === `/grupos/${gid}`) body = group;
+        else if (p === '/auth/forgot-password' || p === '/auth/reset-password') body = { message: 'Solicitud registrada' };
+        return route.fulfill({ status, headers: { 'Access-Control-Allow-Origin': '*' }, contentType: 'application/json', body: JSON.stringify(body) });
+      });
+      const page = await context.newPage(), errors = [];
+      page.on('pageerror', e => errors.push(e.message));
+      const fit = async label => {
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${label}: overflow ${width}`);
+        await page.screenshot({ path: path.join(artifacts, `${label}-${width}.png`), fullPage: true });
+      };
+      await page.goto(`${origin}/app/login`);
+      await page.getByRole('button', { name: 'Iniciar sesión →', exact: true }).click();
+      assert.equal(requests.filter(r => r.width === width && r.p === '/auth/login').length, 0);
+      await page.getByRole('textbox', { name: 'Correo electrónico', exact: true }).fill(' ANA@EXAMPLE.INVALID ');
+      await page.getByLabel('Contraseña', { exact: true }).fill('wrong2026!');
+      await page.getByRole('button', { name: 'Iniciar sesión →', exact: true }).click();
+      await page.getByText('Correo o contraseña incorrectos.', { exact: true }).waitFor();
+      await page.getByLabel('Contraseña', { exact: true }).fill('Fictional2026!');
+      await page.getByRole('button', { name: 'Iniciar sesión →', exact: true }).click();
+      await page.getByRole('heading', { name: 'Hola, Ana' }).waitFor();
+      assert.equal(requests.filter(r => r.width === width && r.p === '/auth/login').length, 2);
+      assert.ok(requests.filter(r => r.width === width && r.p === '/auth/login').every(r => r.body.email === 'ana@example.invalid'));
+      assert.equal(await page.getByRole('button', { name: 'Lo veré después', exact: true }).count(), 0, 'old tour must not open automatically');
+      await page.getByRole('button', { name: /Guía rápida/ }).click();
+      await page.getByText('PRIMEROS PASOS · 1 DE 4', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Cerrar guía', exact: true }).click();
+      await page.goto(`${origin}/app/perfil`);
+      await page.getByRole('button', { name: /^Notificaciones\./ }).click();
+      await page.getByText('Notificaciones en la web', { exact: true }).waitFor();
+      assert.equal(await page.getByRole('button', { name: 'Abrir ajustes', exact: true }).count(), 0);
+      await page.getByRole('button', { name: 'Entendido', exact: true }).click();
+      await page.getByRole('button', { name: /^Seguridad\./ }).click();
+      await page.getByText('Protege tu cuenta', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Entendido', exact: true }).click();
+      await fit('perfil');
+      await page.getByRole('button', { name: /Editar perfil/ }).click();
+      await page.getByLabel('Nombre completo', { exact: true }).fill('A');
+      await page.getByRole('button', { name: 'Guardar cambios', exact: true }).click();
+      await page.getByText(/Escribe al menos 2 caracteres/).waitFor();
+      assert.equal(requests.filter(r => r.width === width && r.p === '/auth/me' && r.method === 'PATCH').length, 0);
+      await page.getByLabel('Nombre completo', { exact: true }).fill('Ana Renombrada');
+      await page.getByRole('button', { name: 'Cambiar foto de perfil', exact: true }).click();
+      const chooser = page.waitForEvent('filechooser');
+      await page.getByRole('button', { name: 'Elegir foto', exact: true }).click();
+      await (await chooser).setFiles(path.resolve(__dirname, 'qa-voucher.png'));
+      await photoSeen;
+      assert.ok(await page.getByRole('button', { name: 'Guardar cambios', exact: true }).isDisabled());
+      photoRelease();
+      await page.getByRole('button', { name: 'Guardar cambios', exact: true }).waitFor();
+      await sleep(100);
+      await page.getByRole('button', { name: 'Guardar cambios', exact: true }).click();
+      await page.getByText('Ana Renombrada', { exact: true }).last().waitFor();
+      assert.equal(user.nombre, 'Ana Renombrada');
+      await page.getByRole('button', { name: /^Eliminar mi cuenta\./ }).click();
+      await page.getByText('Antes de irte', { exact: true }).waitFor();
+      await page.getByText(/Debes S\/\s*20[.,]00/).waitFor();
+      await page.getByText(/Te deben S\/\s*20[.,]00/).waitFor();
+      await page.getByText(/Debes US\$\s*10[.,]00/).waitFor();
+      assert.ok(await page.getByRole('button', { name: 'Eliminar mi cuenta', exact: true }).isDisabled());
+      await fit('eliminar');
+      assert.equal(requests.filter(r => r.width === width && r.p === '/auth/me' && r.method === 'DELETE').length, 0);
+      await page.goto(`${origin}/app/ejemplo`);
+      await page.getByText(/Ana.*Caleb/).first().waitFor();
+      await fit('ejemplo');
+      user.tienePassword = false;
+      await page.goto(`${origin}/app/perfil/eliminar`);
+      await page.getByLabel('Escribe ELIMINAR para confirmar', { exact: true }).fill('NO');
+      assert.ok(await page.getByRole('button', { name: 'Eliminar mi cuenta', exact: true }).isDisabled());
+      await page.getByLabel('Escribe ELIMINAR para confirmar', { exact: true }).fill('ELIMINAR');
+      await page.getByRole('button', { name: 'Eliminar mi cuenta', exact: true }).click();
+      await page.getByText('¿Eliminar tu cuenta para siempre?', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+      assert.equal(requests.filter(r => r.width === width && r.p === '/auth/me' && r.method === 'DELETE').length, 0);
+      await page.goto(`${origin}/app/cuentas/${gid}`);
+      await page.getByText('Pagar y cobrar', { exact: true }).waitFor();
+      await fit('cuentas');
+      assert.deepEqual(errors, []);
+      console.log(`PASS ${width}px profile, help, manual guide only, photo/save race, validation, separate deletion currencies; no runtime errors`);
+      await context.close();
+      // New anonymous context: genuine password recovery UI with fully mocked transport.
+      const anon = await browser.newContext({ viewport: { width, height: 950 } });
+      await anon.route('**/*', async route => {
+        const u = new URL(route.request().url());
+        if (u.pathname.startsWith('/api/')) {
+          requests.push({ width, p: u.pathname.slice(4), method: route.request().method(), body: route.request().postDataJSON() });
+          return route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*' }, contentType: 'application/json', body: '{}' });
+        }
+        return u.origin === origin ? route.continue() : route.abort();
+      });
+      const recovery = await anon.newPage();
+      await recovery.goto(`${origin}/app/forgot-password`);
+      await recovery.getByRole('button', { name: 'Solicitar código', exact: true }).click();
+      await recovery.getByText('Escribe tu correo electrónico.', { exact: true }).waitFor();
+      await recovery.getByLabel('Correo para recuperar cuenta', { exact: true }).fill('ana@example.invalid');
+      await recovery.getByRole('button', { name: 'Solicitar código', exact: true }).click();
+      await recovery.getByLabel('Código de recuperación', { exact: true }).fill('123456');
+      await recovery.getByLabel('Nueva contraseña', { exact: true }).fill('Fictional2026!');
+      await recovery.getByLabel('Confirmar nueva contraseña', { exact: true }).fill('different2026!');
+      await recovery.getByRole('button', { name: 'Actualizar contraseña', exact: true }).click();
+      await recovery.getByText(/Las contraseñas no coinciden/).waitFor();
+      assert.equal(requests.filter(r => r.width === width && r.p === '/auth/reset-password').length, 0);
+      await recovery.getByLabel('Confirmar nueva contraseña', { exact: true }).fill('Fictional2026!');
+      const longPassword = '🔐'.repeat(18) + '1';
+      await recovery.getByLabel('Nueva contraseña', { exact: true }).fill(longPassword);
+      await recovery.getByLabel('Confirmar nueva contraseña', { exact: true }).fill(longPassword);
+      await recovery.getByRole('button', { name: 'Actualizar contraseña', exact: true }).click();
+      await recovery.getByText(/Usa hasta 72 bytes/).waitFor();
+      assert.equal(requests.filter(r => r.width === width && r.p === '/auth/reset-password').length, 0);
+      await recovery.getByLabel('Nueva contraseña', { exact: true }).fill('Fictional2026!');
+      await recovery.getByLabel('Confirmar nueva contraseña', { exact: true }).fill('Fictional2026!');
+      await recovery.getByRole('button', { name: 'Actualizar contraseña', exact: true }).click();
+      await recovery.getByText('Contraseña actualizada', { exact: true }).waitFor();
+      assert.equal(requests.filter(r => r.width === width && r.p === '/auth/reset-password' && r.method === 'POST').length, 1);
+      assert.ok(await recovery.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await recovery.screenshot({ path: path.join(artifacts, `recuperar-${width}.png`) });
+      await anon.close();
+      console.log(`PASS ${width}px recovery: invalid email, mismatched passwords blocked, successful reset once; no real email/account`);
+    }
+  } finally { await browser.close(); await new Promise(r => server.close(r)); }
+})().catch(e => { console.error(e); server.close(); process.exitCode = 1; });

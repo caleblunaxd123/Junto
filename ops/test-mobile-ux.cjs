@@ -11,6 +11,18 @@ const {
 } = require("../apps/mobile/src/lib/expensePreview.ts");
 const { allocateShares } = require("../apps/api/src/domain/money.ts");
 const { accountSummary } = require("../apps/mobile/src/lib/accountSummary.ts");
+const { outstanding } = require('../apps/mobile/src/lib/accountSummary.ts');
+
+test('zero net with direct debts still requires paying and collecting', () => {
+  const account = { usuarioId: 'ana', neto: 0 };
+  assert.deepEqual(outstanding(account, [
+    { deudorId: 'ana', acreedorId: 'caleb', monto: 2000 },
+    { deudorId: 'luis', acreedorId: 'ana', monto: 2000 },
+  ]), { owes: 2000, owed: 2000 });
+  assert.deepEqual(outstanding(account, []), { owes: 0, owed: 0 });
+  assert.deepEqual(outstanding({ usuarioId: 'legacy', neto: -100 }), { owes: 100, owed: 0 });
+  assert.equal(accountSummary([{ id: 'direct', moneda: 'PEN', balanceUsuario: { debes: 2000, teDeben: 2000, neto: 0 } }]).current, 0);
+});
 const {
   validInvitationCode,
   authenticatedDestination,

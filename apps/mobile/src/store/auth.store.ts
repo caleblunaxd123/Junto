@@ -8,6 +8,17 @@ import { api, onSessionExpired } from "../lib/api";
 import { queryClient } from "../lib/queryClient";
 import { forgetSessionData } from "../lib/localData";
 import type { Usuario, AuthResponse } from "../types";
+import { beginSession, requireSession } from '../lib/sessionGeneration';
+
+async function storeSession(data: AuthResponse, generation: number) {
+  requireSession(generation);
+  await SecureStore.setItemAsync('accessToken', data.accessToken);
+  requireSession(generation);
+  await SecureStore.setItemAsync('refreshToken', data.refreshToken);
+  requireSession(generation);
+  await SecureStore.setItemAsync('cachedUsuario', JSON.stringify(data.usuario));
+  requireSession(generation);
+}
 
 interface AuthState {
   usuario: Usuario | null;
@@ -94,25 +105,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   login: async (email, password) => {
+    const generation = beginSession();
     const { data } = await api.post<AuthResponse>("/auth/login", {
       email,
       password,
     });
-    await SecureStore.setItemAsync("accessToken", data.accessToken);
-    await SecureStore.setItemAsync("refreshToken", data.refreshToken);
-    await SecureStore.setItemAsync(
-      "cachedUsuario",
-      JSON.stringify(data.usuario),
-    );
+    await storeSession(data, generation);
     queryClient.clear();
     set({ usuario: data.usuario, isAuthenticated: true, sessionExpired: false });
   },
 
   loginWithGoogle: async (idToken, nonce) => {
+    const generation = beginSession();
     const { data } = await api.post<AuthResponse & { nuevo: boolean }>("/auth/google", { idToken, nonce });
-    await SecureStore.setItemAsync("accessToken", data.accessToken);
-    await SecureStore.setItemAsync("refreshToken", data.refreshToken);
-    await SecureStore.setItemAsync("cachedUsuario", JSON.stringify(data.usuario));
+    await storeSession(data, generation);
     queryClient.clear();
     set({ usuario: data.usuario, isAuthenticated: true, sessionExpired: false });
     return { nuevo: data.nuevo };
@@ -127,22 +133,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   completeVerification: async (email, otp) => {
+    const generation = beginSession();
     const { data } = await api.post<AuthResponse>("/auth/verify-email", {
       email,
       otp,
     });
-    await SecureStore.setItemAsync("accessToken", data.accessToken);
-    await SecureStore.setItemAsync("refreshToken", data.refreshToken);
-    await SecureStore.setItemAsync(
-      "cachedUsuario",
-      JSON.stringify(data.usuario),
-    );
+    await storeSession(data, generation);
     queryClient.clear();
     set({ usuario: data.usuario, isAuthenticated: true, sessionExpired: false });
   },
 
   logout: async () => {
     if (get().signingOut) return;
+    beginSession();
     set({ signingOut: true });
     try {
       const userId = get().usuario?.id;
@@ -175,6 +178,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 }));
 onSessionExpired(() => {
+  beginSession();
   queryClient.clear();
   useAuthStore.setState({
     usuario: null,

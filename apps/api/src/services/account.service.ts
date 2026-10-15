@@ -5,28 +5,31 @@ import { UserError } from "../domain/errors";
 import { resumenCuentasGrupo } from "./balance.service";
 import { hasPassword } from "./auth.service";
 import { transactionLock } from "../lib/transactionLock";
+import { currencyTotals } from '../domain/currencyTotals';
+import type { CurrencyCode } from '@junto/shared/currency';
 
 /** What the person should know before deleting: open balances stay recorded for the others. */
 export async function deletionSummary(userId: string) {
   const memberships = await prisma.grupoMiembro.findMany({
     where: { usuarioId: userId, activo: true, grupo: { activo: true } },
-    include: { grupo: { select: { id: true, nombre: true } } },
+    include: { grupo: { select: { id: true, nombre: true, moneda: true } } },
   });
-  let debes = 0;
-  let teDeben = 0;
+  const balances: Array<{ moneda: CurrencyCode; debes: number; teDeben: number }> = [];
   const gruposConSaldo: { id: string; nombre: string }[] = [];
   for (const { grupo } of memberships) {
     const { saldos } = await resumenCuentasGrupo(grupo.id);
     const owes = saldos.filter((s) => s.deudorId === userId).reduce((sum, s) => sum + s.monto, 0);
     const owed = saldos.filter((s) => s.acreedorId === userId).reduce((sum, s) => sum + s.monto, 0);
-    debes += owes;
-    teDeben += owed;
+    balances.push({ moneda: grupo.moneda as CurrencyCode, debes: owes, teDeben: owed });
     if (owes || owed) gruposConSaldo.push(grupo);
   }
   const pagosPorConfirmar = await prisma.pago.count({ where: { receptorId: userId, estado: "reportado" } });
   const cuentasPuntuales = await prisma.cuentaRapida.count({ where: { creadoPor: userId } });
   const { passwordHash } = await prisma.usuario.findUniqueOrThrow({ where: { id: userId }, select: { passwordHash: true } });
-  return { grupos: memberships.length, gruposConSaldo, debes, teDeben, pagosPorConfirmar, cuentasPuntuales, tienePassword: hasPassword(passwordHash) };
+  const porMoneda = currencyTotals(balances);
+  // Legacy clients only understand PEN. Never return a sum of unrelated currencies.
+  const soles = porMoneda.find(total => total.moneda === 'PEN');
+  return { grupos: memberships.length, gruposConSaldo, porMoneda, debes: soles?.debes ?? 0, teDeben: soles?.teDeben ?? 0, pagosPorConfirmar, cuentasPuntuales, tienePassword: hasPassword(passwordHash) };
 }
 
 /**

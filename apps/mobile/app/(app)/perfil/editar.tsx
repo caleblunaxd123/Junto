@@ -27,36 +27,42 @@ export default function EditProfile() {
   const [touched, setTouched] = useState(false);
   const invalidName = nameError(name), invalidPhone = phoneError(phone);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const photoPending = React.useRef(false);
   // Your photo appears next to your messages in the group chat, like WhatsApp.
   async function choosePhoto(camera: boolean) {
-    setError("");
-    const picked = await pickProfilePhoto(camera);
-    if (!picked) return;
-    if ("error" in picked) { setError(picked.error); return; }
+    if (photoPending.current || busy) return;
+    photoPending.current = true;
+    setPhotoBusy(true); setError("");
     try {
-      setPhotoBusy(true);
+      const picked = await pickProfilePhoto(camera);
+      if (!picked) return;
+      if ("error" in picked) { setError(picked.error); return; }
       const { data } = await api.put<{ fotoUrl: string }>("/auth/me/foto", { imagen: picked.base64 });
-      if (usuario) updateUsuario({ ...usuario, fotoUrl: data.fotoUrl });
+      if (useAuthStore.getState().usuario?.id === usuario?.id) updateUsuario({ fotoUrl: data.fotoUrl });
     } catch (err) {
       setError(errorMessage(err, "No pudimos subir tu foto. Revisa tu conexión y reintenta."));
     } finally {
       setPhotoBusy(false);
+      photoPending.current = false;
     }
   }
   async function removePhoto() {
+    if (photoPending.current || busy) return;
+    photoPending.current = true;
     try {
       setPhotoBusy(true);
       setError("");
       await api.delete("/auth/me/foto");
-      if (usuario) updateUsuario({ ...usuario, fotoUrl: null });
+      if (useAuthStore.getState().usuario?.id === usuario?.id) updateUsuario({ fotoUrl: null });
     } catch (err) {
       setError(errorMessage(err, "No pudimos quitar tu foto. Reintenta."));
     } finally {
       setPhotoBusy(false);
+      photoPending.current = false;
     }
   }
   function changePhoto() {
-    if (photoBusy) return;
+    if (photoPending.current || busy) return;
     const web = Platform.OS === "web";
     Alert.alert(usuario?.fotoUrl ? "Cambiar tu foto" : "Pon tu foto", "Saldrá junto a tus mensajes y en tus grupos, como en WhatsApp.", [
       ...(web ? [] : [{ text: "Tomar foto", onPress: () => { void choosePhoto(true); } }]),
@@ -67,7 +73,7 @@ export default function EditProfile() {
   }
 
   async function save() {
-    if (busy) return;
+    if (busy || photoPending.current) return;
     setTouched(true);
     if (invalidName || invalidPhone) return;
     try {
@@ -92,14 +98,14 @@ export default function EditProfile() {
       back
     >
       <View style={{ alignItems: "center", gap: 8 }}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Cambiar foto de perfil" onPress={changePhoto} disabled={photoBusy}
+        <Pressable accessibilityRole="button" accessibilityLabel="Cambiar foto de perfil" onPress={changePhoto} disabled={photoBusy || busy}
           style={{ opacity: photoBusy ? 0.5 : 1 }}>
           <Avatar name={usuario?.nombre || name || "Tú"} photo={usuario?.fotoUrl} seed={usuario?.id} size={96} />
           <View style={{ position: "absolute", right: 0, bottom: 0, width: 32, height: 32, borderRadius: 16, backgroundColor: palette.purple, borderWidth: 3, borderColor: "white", alignItems: "center", justifyContent: "center" }}>
             <Label size={15} color="white" weight="bold">{photoBusy ? "…" : "✎"}</Label>
           </View>
         </Pressable>
-        <Pressable accessibilityRole="button" onPress={changePhoto} disabled={photoBusy} hitSlop={8}>
+        <Pressable accessibilityRole="button" onPress={changePhoto} disabled={photoBusy || busy} hitSlop={8} style={{ minHeight: 44, justifyContent: 'center' }}>
           <Label weight="bold" color={palette.purple}>{photoBusy ? "Subiendo foto…" : usuario?.fotoUrl ? "Cambiar foto" : "Poner foto"}</Label>
         </Pressable>
       </View>
@@ -112,9 +118,6 @@ export default function EditProfile() {
         editable={!busy}
         maxLength={100}
       />
-      <Label size={12} color={palette.muted}>
-        Solo lo ven las personas de tus grupos cuando van a pagarte, y sirve para que te agreguen a un grupo.
-      </Label>
       <FormField label="Celular para Yape o Plin (opcional)" icon="call-outline"
         hint="Es un dato de contacto, no un celular verificado. Por ahora no enviamos códigos por SMS."
         accessibilityLabel="Celular peruano"
@@ -127,6 +130,7 @@ export default function EditProfile() {
         maxLength={9}
         placeholder="9XXXXXXXX"
       />
+      <Label size={12} color={palette.muted}>El celular se muestra a las personas de tus grupos cuando van a pagarte, y sirve para que te inviten a un grupo.</Label>
       <Card>
         <Label weight="bold">Correo verificado</Label>
         <Label color={palette.muted}>{usuario?.email}</Label>
@@ -147,6 +151,7 @@ export default function EditProfile() {
         title="Guardar cambios"
         onPress={save}
         loading={busy}
+        disabled={photoBusy}
       />
     </Screen>
   );

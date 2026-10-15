@@ -20,6 +20,7 @@ import { formatMoney } from "@junto/shared/currency";
 import { ShareMessageSheet } from "../../../src/components/ui/ShareMessage";
 import { groupShareMessage, type ShareMessage } from "../../../src/lib/shareMessage";
 import { GroupInsights, SimplifyExplained } from "../../../src/components/GroupInsights";
+import { outstanding } from '../../../src/lib/accountSummary';
 function Step({
   number,
   title,
@@ -108,6 +109,8 @@ export default function Accounts() {
   );
   const user = useAuthStore((s) => s.usuario);
   const me = group?.resumen.cuentas.find((a) => a.usuarioId === user?.id);
+  const obligations = me ? outstanding(me, group?.saldos) : { owed: 0, owes: 0 };
+  const both = obligations.owed > 0 && obligations.owes > 0;
   const labels = memberLabels(
     group?.resumen.cuentas.map((a) => ({ id: a.usuarioId, nombre: a.nombre, email: group.miembros.find((m) => m.usuarioId === a.usuarioId)?.usuario.email })) ?? [],
     user?.id,
@@ -237,15 +240,20 @@ export default function Accounts() {
             number={4}
             title="Tu resultado"
             copy={
-              me.neto === 0
+              both ? 'Tienes importes por pagar y por cobrar.' : !obligations.owes && !obligations.owed
                 ? "No tienes deudas pendientes."
-                : me.neto > 0
+                : obligations.owed > 0
                   ? "Te corresponde cobrar:"
                   : "Te corresponde pagar:"
             }
-            value={me.neto === 0 ? "¡Estás al día!" : money(Math.abs(me.neto))}
+            value={both ? 'Pagar y cobrar' : !obligations.owes && !obligations.owed ? "¡Estás al día!" : money(obligations.owed || obligations.owes)}
             image={art.result}
           >
+            {both && <View style={{ gap: 4 }}>
+              <Label weight="bold" color={palette.negative}>Debes {money(obligations.owes)}</Label>
+              <Label weight="bold" color={palette.positive}>Te deben {money(obligations.owed)}</Label>
+              <Label size={12} color={palette.muted}>El balance neto no cancela estos pagos. Abajo puedes ver quién paga a quién.</Label>
+            </View>}
             <Label size={13}>
               Tu parte era {money(me.tuParte)} y pagaste {money(me.pagaste)}.
             </Label>
@@ -314,7 +322,7 @@ export default function Accounts() {
             </Card>
           )}
           {group.resumen.cuentas
-            .filter((a) => a.neto === 0)
+            .filter((a) => { const balance = outstanding(a, group.saldos); return balance.owes === 0 && balance.owed === 0; })
             .map((a) => (
               <View
                 key={a.usuarioId}
