@@ -13,6 +13,7 @@
 | [09 Roadmap](09_IMPLEMENTATION_ROADMAP.md) | Hecho, siguientes etapas y criterios |
 | [10 QA](10_QA_RESULTS.md) | Pruebas ejecutadas, resultados y límites |
 | [11 Splitwise vs JUNTO](11_SPLITWISE_VS_JUNTO_PRUEBA.md) | Prueba lado a lado en el emulador y simplificación aplicada |
+| [16 REA Yape y Splitwise](16_REA_YAPE_SPLITWISE_SIMPLICIDAD.md) | Evidencia actual, simplificación diaria, pagos y criterios de validación Android |
 
 Capturas: [`screens/before`](screens/before) y [`screens/after`](screens/after) (render web del mismo código
 React Native, API local, datos ficticios) y [`screens/native`](screens/native) (app nativa en el emulador Android). Regenerarlas: `ops/ux-export-web.sh <dir>`, servir con
