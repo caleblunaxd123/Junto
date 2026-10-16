@@ -141,7 +141,7 @@ export function Button({
       onPressOut={() => setPressed(false)}
       style={[
         design.button,
-        compact && { minHeight: 44, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 14 },
+        compact && { minHeight: 48, borderRadius: 14, paddingVertical: 8, paddingHorizontal: 14 },
         {
           backgroundColor: secondary ? palette.lilac : palette.primary,
           opacity: disabled || loading ? 0.55 : pressed ? 0.82 : 1,
@@ -157,18 +157,17 @@ export function Button({
           style={[StyleSheet.absoluteFill, { borderRadius: compact ? 14 : 20 }]}
         />
       )}
-      {loading ? (
-        <ActivityIndicator color={secondary ? palette.purple : "white"} />
-      ) : (
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, maxWidth: "100%" }}>
+        {loading && <ActivityIndicator color={secondary ? palette.purple : "white"} />}
         <Label
           weight="bold"
-          size={compact ? 14 : 16}
+          size={16}
           color={secondary ? palette.purple : "white"}
-          style={{ textAlign: "center" }}
+          style={{ textAlign: "center", flexShrink: 1 }}
         >
           {title}
         </Label>
-      )}
+      </View>
     </Pressable>
   );
 }
@@ -364,7 +363,7 @@ export function FeedbackBox({ message, title, tone = "info" }: { message: string
       style={{ backgroundColor: colors.bg, padding: 14, borderRadius: 18, borderWidth: 1, borderColor: colors.border, flexDirection: "row", alignItems: "flex-start", gap: 10 }}
     >
       <Ionicons name={colors.icon} size={24} color={colors.color} style={{ marginTop: 2 }} />
-      <View style={{ flex: 1, gap: 4 }}><Label size={13} weight="bold" color={colors.color}>{title}</Label><Label size={12} color={palette.ink}>{message}</Label></View>
+      <View style={{ flex: 1, gap: 4 }}><Label size={16} weight="bold" color={colors.color}>{title}</Label><Label size={15} color={palette.ink}>{message}</Label></View>
     </View>
   );
 }

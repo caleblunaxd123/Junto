@@ -17,7 +17,7 @@ const { calculateAccounts } = require('../apps/api/src/domain/accounts.ts');
 const members = [{ id: uid, nombre: 'Ana Visual' }, { id: 'caleb', nombre: 'Caleb QA' }, { id: 'luis', nombre: 'Luis QA' }];
 const expenses = [{ montoTotal: 12000, pagadoPor: 'caleb', participantes: members.map(m => ({ usuarioId: m.id, montoAsignado: 4000 })) }, { montoTotal: 6000, pagadoPor: uid, participantes: members.map(m => ({ usuarioId: m.id, montoAsignado: 2000 })) }];
 const summary = calculateAccounts(members, expenses, [], false);
-const group = { id: gid, nombre: 'Cena QA', moneda: 'PEN', estado: 'abierto', tipo: 'salida', rolUsuario: 'admin', miembros: members.map(m => ({ usuarioId: m.id, usuario: m, rol: 'miembro' })), resumen: summary, saldos: summary.saldos, balanceUsuario: { debes: 2000, teDeben: 2000, neto: 0 }, pagosPorConfirmar: 0 };
+const group = { id: gid, nombre: 'Cena QA', moneda: 'PEN', estado: 'abierto', tipo: 'amigos', rolUsuario: 'admin', miembros: members.map(m => ({ usuarioId: m.id, usuario: m, rol: 'miembro' })), resumen: summary, saldos: summary.saldos, balanceUsuario: { debes: 2000, teDeben: 2000, neto: 0 }, pagosPorConfirmar: 0 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
   await new Promise(r => server.listen(0, '127.0.0.1', r));

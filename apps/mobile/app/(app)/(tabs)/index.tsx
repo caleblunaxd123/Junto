@@ -38,12 +38,11 @@ import { pendingActions } from "../../../src/lib/pending";
 import { PendingActions } from "../../../src/components/PendingActions";
 import { Invitations } from "../../../src/components/Invitations";
 import { GroupNotices } from "../../../src/components/GroupNotices";
-import { AddButton, CreateSheet } from "../../../src/components/CreateSheet";
 import { clearTryBill, loadTryBill, type SavedTryBill } from "../../../src/lib/tryBillHandoff";
 import { useResponsiveLayout } from "../../../src/components/ui/responsive";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { expenseDraftPrefix } from "../../../src/lib/draftStorage";
-import { canAddExpenses, groupStateLabel } from '../../../src/lib/groupLifecycle';
+import { groupStateLabel } from '../../../src/lib/groupLifecycle';
 
 import { formatMoney as money } from "@junto/shared/currency";
 
@@ -66,7 +65,6 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const [splitPressed, setSplitPressed] = useState(false);
-  const [sheet, setSheet] = useState(false);
   const [allPending, setAllPending] = useState(false);
   const bills = useQuickBills();
   const refreshBills = bills.refetch;
@@ -106,7 +104,7 @@ export default function Home() {
   const filtered = groups.filter((g) =>
     !!g.archivado === showArchived && g.nombre.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
   );
-  const { empty, unavailable, canShowAllClear, canShowGroupsClear } = homeState(
+  const { empty, unavailable } = homeState(
     { loading: isLoading, error: isError, hasData: groupData !== undefined },
     { loading: payments.isLoading, error: payments.isError, hasData: payments.data !== undefined },
     { loading: bills.isLoading, error: bills.isError, hasData: bills.data !== undefined },
@@ -141,8 +139,7 @@ export default function Home() {
               </Label>
               <Label size={14} color={brand.onBrandMuted}>Las cuentas claras. Los buenos momentos, juntos.</Label>
             </View>
-            {usuario && <FirstSteps userId={usuario.id} onBrand />}
-            {desktop && <View style={{ flexDirection: "row", justifyContent: "flex-end" }}><Button compact secondary title="Agregar" onPress={() => setSheet(true)} /></View>}
+            {usuario && <FirstSteps userId={usuario.id} onBrand compact />}
           </View>
         </BrandBackdrop>
         <View style={{ width: "100%", maxWidth: web ? 1160 : undefined, alignSelf: "center", paddingHorizontal: desktop ? 32 : 16, marginTop: desktop ? -48 : -44, gap: desktop ? 24 : 16 }}>
@@ -234,22 +231,14 @@ export default function Home() {
                   </Pressable>
                 )}
               </>
-            ) : canShowGroupsClear ? (
-              <Card style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: 14, backgroundColor: palette.mint, borderColor: "#BDEBD9" }}>
-                <Ionicons name="checkmark-circle" size={28} color="#007B60" />
-                <View style={{ flex: 1 }}>
-                  <Label weight="bold">{canShowAllClear ? "Todo al día" : "Tus grupos están al día"}</Label>
-                  <Label size={12} color={palette.muted}>{canShowAllClear ? "Sin pendientes en tus grupos ni en tus cuentas de un día." : "Sin deudas en grupos. Las cuentas de un día se revisan aparte."}</Label>
-                </View>
-              </Card>
             ) : null}
 
             <View style={{ flexDirection: desktop ? "row" : "column", gap: desktop ? 24 : 16, alignItems: "stretch" }}>
             <View style={{ flex: desktop ? 1.25 : undefined, minWidth: 0, gap: 16 }}>
             <SectionTitle
               title="Tus grupos"
-              action={groups.length ? "Ver cuentas" : undefined}
-              onPress={() => router.push("/(app)/cuentas/resumen")}
+              action={groups.length ? "Crear grupo" : undefined}
+              onPress={() => router.push("/(app)/grupos/crear")}
             />
             {isLoading ? (
               <View accessibilityLabel="Cargando tus grupos" style={{ gap: 12 }}><SkeletonRow /><SkeletonRow /></View>
@@ -376,10 +365,9 @@ export default function Home() {
             </View>
           </>
         )}
+        {!empty && <Button secondary title="Unirme a un grupo" onPress={() => router.push("/(app)/unirme")} />}
         </View>
       </ScrollView>
-      {!empty && !desktop && <AddButton onPress={() => setSheet(true)} />}
-      <CreateSheet visible={sheet} onClose={() => setSheet(false)} groups={groups.filter(canAddExpenses)} />
     </SafeAreaView>
   );
 }

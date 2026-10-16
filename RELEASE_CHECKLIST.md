@@ -1,5 +1,9 @@
 # JUNTO — controles previos a publicación
 
+## Beta 1.6.0 publicada el 15 de octubre de 2026
+
+UX diaria simplificada y [APK 1.6.0/código 11](https://junto.lunalav.pe/app/descargas/JUNTO-beta-1.6.0.apk). Guardado completo comprobado en Android con un fixture independiente: una solicitud de S/120, dos partes exactas de S/60. Formulario breve, footer de guardado con respuesta visible, detalles avanzados plegados, grupos sin carrusel de acciones, inicio sin botón flotante y acceso Android a Yape sin confirmar pagos automáticamente. Web desplegada y saludable; API y datos conservados. Evidencia y rollback: `ops/web/DEPLOY-20261015-BETA160.md`. Distribución directa para pruebas; no publicación en tienda.
+
 ## Beta 1.5.0 publicada el 15 de octubre de 2026
 
 API, web y [APK 1.5.0/código 10](https://junto.lunalav.pe/app/descargas/JUNTO-beta-1.5.0.apk) actualizadas desde `252bf7a`, con CI verde, respaldo restaurado/copia externa cifrada y 27 migraciones en producción. Resend activo con dominio exclusivo verificado, TLS obligatorio y recepción real en Gmail comprobada con SPF/DKIM correctos. Actualización en el emulador sin desinstalar, sesión conservada y diseño nuevo visible. Evidencia, recuperación y límites: `ops/web/DEPLOY-20261015-BETA150.md`. Distribución directa para pruebas; no publicación en tienda.

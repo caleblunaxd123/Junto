@@ -25,6 +25,7 @@ export function Brand({ compact = false, inverse = false }: { compact?: boolean;
         />
       </Svg>
       <Label
+        maxFontSizeMultiplier={1.3}
         size={compact ? 29 : 36}
         weight="extra"
         color={inverse ? "#FFFFFF" : palette.ink}
@@ -193,8 +194,8 @@ export function SectionTitle({
         {title}
       </Label>
       {action && (
-        <Pressable accessibilityRole="button" onPress={onPress} hitSlop={10} style={{ minHeight: 44, justifyContent: "center" }}>
-          <Label size={13} color={palette.primary} weight="bold">
+        <Pressable accessibilityRole="button" onPress={onPress} hitSlop={10} style={{ minHeight: 48, justifyContent: "center", flexShrink: 1 }}>
+          <Label size={16} color={palette.positive} weight="bold">
             {action} ›
           </Label>
         </Pressable>

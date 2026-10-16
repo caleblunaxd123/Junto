@@ -9,8 +9,16 @@ function addWhatsAppQuery(manifest) {
   return manifest;
 }
 
+function addYapeQuery(manifest) {
+  const queries = manifest.manifest.queries ||= [{}];
+  const packages = queries[0].package ||= [];
+  const name = "com.bcp.innovacxion.yapeapp";
+  if (!packages.some(entry => entry.$?.["android:name"] === name)) packages.push({ $: { "android:name": name } });
+  return manifest;
+}
+
 function withShareTargets(config) {
-  config = withAndroidManifest(config, mod => { addWhatsAppQuery(mod.modResults); return mod; });
+  config = withAndroidManifest(config, mod => { addWhatsAppQuery(mod.modResults); addYapeQuery(mod.modResults); return mod; });
   return withInfoPlist(config, mod => {
     mod.modResults.LSApplicationQueriesSchemes = [...new Set([...(mod.modResults.LSApplicationQueriesSchemes || []), "whatsapp"])];
     return mod;
@@ -19,3 +27,4 @@ function withShareTargets(config) {
 
 module.exports = withShareTargets;
 module.exports.addWhatsAppQuery = addWhatsAppQuery;
+module.exports.addYapeQuery = addYapeQuery;

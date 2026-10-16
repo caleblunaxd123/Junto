@@ -23,7 +23,7 @@ module.exports = ({ config }) => {
     microphonePermission: "Permite a JUNTO usar el micrófono solo para dictar un gasto cuando tú lo elijas.",
     speechRecognitionPermission: "Permite convertir tu voz en texto para preparar un gasto. Siempre revisas antes de guardar.",
   }]);
-  plugins.push("./plugins/withShareTargets", "./plugins/withQaSigning", "./plugins/withDictationPermission");
+  plugins.push("./plugins/withShareTargets", "./plugins/withQaSigning", "./plugins/withDictationPermission", "./plugins/withReleaseTransport");
   if (process.env.GOOGLE_IOS_URL_SCHEME)
     plugins.push(["@react-native-google-signin/google-signin", { iosUrlScheme: process.env.GOOGLE_IOS_URL_SCHEME }]);
   const extra = { ...config.extra };

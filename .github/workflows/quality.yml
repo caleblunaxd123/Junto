@@ -60,6 +60,8 @@ jobs:
           npx --no-install expo export --platform web --output-dir dist-ci
       - name: Profile, authentication and recovery in the compiled app
         run: node ops/test-profile-web.cjs apps/mobile/dist-ci
+      - name: Simple expense and payment flows, uncertain retries and responsive layouts
+        run: node ops/test-simple-flows-web.cjs apps/mobile/dist-ci
 
   database:
     runs-on: ubuntu-latest

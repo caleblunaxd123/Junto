@@ -3,6 +3,13 @@ const { test } = require("node:test");
 require("ts-node").register({ transpileOnly: true, compilerOptions: { module: "CommonJS", moduleResolution: "node" } });
 const { validShareEmail, emailDraftUrl, whatsappDraftUrl, expenseShareMessage, groupShareMessage } = require("../apps/mobile/src/lib/shareMessage.ts");
 const { calculateQuickBill, quickBillBrief } = require("../packages/shared/quickBill.js");
+const { addYapeQuery } = require('../apps/mobile/plugins/withShareTargets');
+
+test('Yape discovery is limited to its official package and remains idempotent', () => {
+  const manifest = { manifest: { queries: [{ package: [{ $: { 'android:name': 'existing.app' } }] }] } };
+  addYapeQuery(manifest); addYapeQuery(manifest);
+  assert.deepEqual(manifest.manifest.queries[0].package.map(p => p.$['android:name']), ['existing.app', 'com.bcp.innovacxion.yapeapp']);
+});
 const expense = {
   descripcion: "Cena & taxi", montoTotal: 12000, pagador: { nombre: "Caleb" },
   participantes: [

@@ -46,6 +46,10 @@ export default function Payment() {
   const fx = resolveExchange(exchange, moneda);
   const [method, setMethod] = useState<MetodoPago | null>(null);
   const [note, setNote] = useState("");
+  const [details, setDetails] = useState(false);
+  const [copiedPhone, setCopiedPhone] = useState(false);
+  const [openingYape, setOpeningYape] = useState(false);
+  const [walletMessage, setWalletMessage] = useState("");
   const [image, setImage] = useState<{ uri: string; base64: string } | null>(null);
   const [lectura, setLectura] = useState<LecturaComprobante | null>(null);
   const [reading, setReading] = useState(false);
@@ -70,7 +74,7 @@ export default function Payment() {
   useEffect(() => {
     setCreditorId(params.acreedorId || null);
     setTyped(null); setExchange(null); setDate(todayLocal()); setMethod(null); setNote(""); setImage(null); setLectura(null);
-    setVoucherError(""); setError(""); setReported(null);
+    setVoucherError(""); setError(""); setReported(null); setDetails(false); setCopiedPhone(false);
   }, [grupoId, params.acreedorId]);
 
   const people = group?.miembros.map((m) => ({ ...m.usuario, id: m.usuarioId })) ?? [];
@@ -110,6 +114,23 @@ export default function Payment() {
   const effectiveMethod: MetodoPago = method ?? lectura?.app ?? (paymentCurrency === "PEN" ? "yape" : "transferencia");
   const creditorMember = group?.miembros.find((m) => m.usuarioId === selected);
   const phone = creditorMember?.usuario.celular && /^9\d{8}$/.test(creditorMember.usuario.celular) ? creditorMember.usuario.celular : null;
+  useEffect(() => { setCopiedPhone(false); setWalletMessage(""); }, [selected]);
+  async function openYape() {
+    if (openingYape || busy || reading) return;
+    const version = selectionVersion.current;
+    setOpeningYape(true); setWalletMessage("");
+    try {
+      if (phone) {
+        try { const clipboard = await import("expo-clipboard"); await clipboard.setStringAsync(phone); setCopiedPhone(true); }
+        catch { setWalletMessage("No pudimos copiar el número. Puedes verlo aquí y escribirlo en Yape."); }
+      }
+      const launcher = await import("expo-intent-launcher");
+      if (version !== selectionVersion.current) return;
+      launcher.openApplication("com.bcp.innovacxion.yapeapp");
+    } catch {
+      setWalletMessage("No pudimos abrir Yape. Ábrelo desde tu celular y vuelve aquí después de pagar.");
+    } finally { setOpeningYape(false); }
+  }
   const admins = (group?.aprobacionPagos === "administrador" || !!creditorMember?.usuario.sinCuenta)
     ? (group?.miembros ?? []).filter((m) => m.rol === "admin" && m.usuarioId !== user?.id && m.usuarioId !== selected).map((m) => nombre(m.usuarioId))
     : [];
@@ -277,15 +298,15 @@ export default function Payment() {
         <>
           {!!error && <ErrorBox message={error} />}
           <Button title={"Avisar que ya pagué"} loading={busy} disabled={!canSend} onPress={submit} />
-          {!!selected && <Label size={11} color={palette.muted}>{approvalSentence(nombre(selected), admins)} Tu deuda baja cuando lo aprueban.</Label>}
+          {!!selected && <Label size={14} color={palette.muted}>{approvalSentence(nombre(selected), admins)} Tu deuda baja cuando lo aprueban.</Label>}
         </>
       }
     >
-      <Label size={13} color={palette.muted}>Primero paga por fuera, por Yape, Plin, efectivo o transferencia. Después registra aquí lo que ya pagaste: avisaremos a quien recibe para que lo confirme. JUNTO no mueve dinero.</Label>
+      <Label size={16} color={palette.muted}>Paga en tu app o en efectivo. Luego toca «Avisar que ya pagué».</Label>
       {!!params.subir && <Card style={{ backgroundColor: palette.mint, gap: 6 }}><Label weight="bold">Tu comprobante aparecerá en el chat</Label><Label size={13}>Selecciona la captura abajo y revisa el resultado. Al tocar «Avisar que ya pagué» se envía para confirmación; no se aprueba automáticamente.</Label></Card>}
 
       {/* 1. Who */}
-      <Label accessibilityRole="header" weight="extra" size={18}>{creditors.length > 1 ? "1. ¿A quién le pagaste?" : "1. Le pagaste a"}</Label>
+      <Label accessibilityRole="header" weight="extra" size={18}>{creditors.length > 1 ? "¿A quién le pagaste?" : "Le pagaste a"}</Label>
       <View style={{ gap: 8 }}>
         {creditors.map((c) => {
           const active = c.acreedorId === selected;
@@ -295,6 +316,7 @@ export default function Payment() {
               accessibilityRole="radio"
               aria-checked={active}
               accessibilityLabel={`${nombre(c.acreedorId)}. Le debes ${money(c.monto)}`}
+              disabled={busy || reading || openingYape}
               onPress={() => { setCreditorId(c.acreedorId); setTyped(null); setExchange(null); }}
               style={[design.card, { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, borderWidth: 1.5, borderColor: active ? palette.primary : palette.line, backgroundColor: active ? palette.mint : "white" }]}
             >
@@ -308,42 +330,71 @@ export default function Payment() {
           );
         })}
       </View>
+      {/* 3. Amount and method */}
+      <Label accessibilityRole="header" weight="extra" size={18}>¿Cuánto pagaste?</Label>
+      <Card style={{ padding: 12, gap: 10 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: value > limit ? palette.coral : palette.line, borderRadius: 16, paddingHorizontal: 12, backgroundColor: "white" }}>
+          <Label color="#00997D" size={24} weight="extra">{currencyInfo(moneda).symbol}</Label>
+          <TextInput
+            accessibilityLabel={`Monto del pago en ${moneda}`}
+            value={amountText}
+            editable={!exchange && !busy}
+            onChangeText={setTyped}
+            keyboardType="decimal-pad"
+            style={{ flex: 1, minHeight: 56, fontFamily: "JakartaExtra", color: "#00997D", fontSize: 32, marginLeft: 6, minWidth: 0 }}
+          />
+        </View>
+        <Label size={11} color={value > limit ? palette.coral : palette.muted}>
+          {value > limit ? `No puede superar lo que debes (${money(limit)}).` : lectura?.monto != null && typed === null && lectura.monto <= limit ? "Monto tomado del comprobante. Corrígelo si no coincide." : "Puede ser un pago parcial. Registra solo dinero que ya pagaste."}
+        </Label>
+        <View accessibilityRole="radiogroup" style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {methods.filter((m) => paymentCurrency === "PEN" || m.id === "transferencia" || m.id === "efectivo").map((m) => {
+            const active = effectiveMethod === m.id;
+            return (
+              <Pressable
+                key={m.id}
+                accessibilityRole="radio"
+                accessibilityLabel={m.id === "transferencia" ? "Transferencia" : m.name}
+                aria-checked={active}
+                disabled={busy || reading || openingYape}
+                onPress={() => setMethod(m.id)}
+                style={{ flexGrow: 1, flexBasis: "45%", minHeight: 52, borderRadius: 14, borderWidth: 1, borderColor: active ? palette.purple : palette.line, backgroundColor: active ? palette.lilac : "white", alignItems: "center", justifyContent: "center", gap: 4 }}
+              >
+                <Ionicons name={m.icon} size={24} color={m.color} />
+                <Label size={16} weight="bold">{m.id === "transferencia" ? "Transferencia" : m.name}</Label>
+              </Pressable>
+            );
+          })}
+        </View>
+
+      </Card>
       {paymentCurrency === "PEN" && !!selected && (phone ? (
         <Card style={{ padding: 12, gap: 2 }}>
           <Label size={12} color={palette.muted}>Yape o Plin de {nombre(selected)}</Label>
           <Label selectable accessibilityLabel={`Número de ${nombre(selected)}: ${phone.split("").join(" ")}`} size={22} weight="extra" style={{ letterSpacing: 1 }}>
             {phone.replace(/(\d{3})(\d{3})(\d{3})/, "$1 $2 $3")}
           </Label>
-          <Label size={11} color={palette.muted}>Mantén presionado para copiar. Paga en tu app y vuelve con la captura.</Label>
+          <Button compact secondary title={copiedPhone ? "Número copiado" : "Copiar número"} onPress={async () => {
+            try { const clipboard = await import("expo-clipboard"); await clipboard.setStringAsync(phone); setCopiedPhone(true); }
+            catch { setError("No pudimos copiar. Mantén presionado el número para copiarlo."); }
+          }} />
+          <Label size={14} color={palette.muted}>Comprueba el nombre en tu billetera antes de pagar.</Label>
         </Card>
       ) : (
         <Label size={12} color={palette.muted}>{nombre(selected)} no registró su celular en JUNTO. Pídele su número de Yape o Plin, o paga en efectivo.</Label>
       ))}
 
-      <PaymentDate value={date} onChange={(next) => { setDate(next); if (exchange) setExchange({ ...exchange, cotizacionId: undefined }); }} disabled={busy || reading} />
-      <PaymentExchange grupoId={grupoId} fecha={date} value={exchange} onChange={(draft) => { setExchange(draft); setMethod((draft?.monedaOrigen ?? moneda) === "PEN" ? null : "transferencia"); }} target={moneda} disabled={busy || reading} />
+      {Platform.OS === "android" && paymentCurrency === "PEN" && effectiveMethod === "yape" && !!selected && <>
+        <Button secondary title={phone ? "Copiar número y abrir Yape" : "Abrir Yape"} loading={openingYape} onPress={openYape} />
+        <Label size={14} color={palette.muted}>En Yape, revisa el destinatario y escribe el monto. Al terminar, vuelve a JUNTO.</Label>
+      </>}
+      {!!walletMessage && <Label accessibilityLiveRegion="polite" size={15} color={palette.muted}>{walletMessage}</Label>}
+
       {/* The reader proposes the original currency; conversion remains an explicit reviewed choice. */}
       <>
       {/* 2. Voucher */}
-      <Label accessibilityRole="header" weight="extra" size={18}>2. Comprobante</Label>
       {!image ? (
-        <>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Subir comprobante del pago"
-            accessibilityHint="Abre tu galería. JUNTO lee el monto y el número de operación."
-            onPress={() => pick(false)}
-            style={{ borderWidth: 1.5, borderStyle: "dashed", borderColor: palette.purple, borderRadius: 20, padding: 18, alignItems: "center", gap: 6, backgroundColor: palette.lilac }}
-          >
-            <Ionicons name="cloud-upload-outline" size={34} color={palette.purple} />
-            <Label weight="extra" size={16} color={palette.purple}>Subir comprobante del pago</Label>
-            <Label size={12} color={palette.muted} style={{ textAlign: "center" }}>Leemos el monto, la fecha y el número de operación. Tú revisas antes de enviar.</Label>
-          </Pressable>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            <View style={{ flex: 1 }}><Button compact secondary title="Tomar foto" onPress={() => pick(true)} /></View>
-          </View>
-          <Label size={11} color={palette.muted}>Sube tu comprobante JPG/PNG de transferencia o billetera. La lectura es una propuesta, no una verificación bancaria. ¿Pagaste en efectivo? Puedes registrarlo sin captura.</Label>
-        </>
+        <Button secondary title="Adjuntar comprobante (opcional)" accessibilityHint="Elige una captura de Yape, Plin o transferencia. Revisas sus datos antes de enviar." onPress={() => pick(false)} />
       ) : (
         <Card style={{ flexDirection: "row", gap: 12, padding: 12 }}>
           <Image source={{ uri: image.uri }} accessibilityLabel="Tu comprobante" style={{ width: 76, height: 130, borderRadius: 10, backgroundColor: "#F2F3F5" }} resizeMode="cover" />
@@ -392,41 +443,13 @@ export default function Payment() {
       ))}
 
       </>
-      {/* 3. Amount and method */}
-      <Label accessibilityRole="header" weight="extra" size={18}>3. Monto y método</Label>
-      <Card style={{ padding: 12, gap: 10 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: value > limit ? palette.coral : palette.line, borderRadius: 16, paddingHorizontal: 12, backgroundColor: "white" }}>
-          <Label color="#00997D" size={24} weight="extra">{currencyInfo(moneda).symbol}</Label>
-          <TextInput
-            accessibilityLabel={`Monto del pago en ${moneda}`}
-            value={amountText}
-            editable={!exchange && !busy}
-            onChangeText={setTyped}
-            keyboardType="decimal-pad"
-            style={{ flex: 1, minHeight: 56, fontFamily: "JakartaExtra", color: "#00997D", fontSize: 26, marginLeft: 6, minWidth: 0 }}
-          />
-        </View>
-        <Label size={11} color={value > limit ? palette.coral : palette.muted}>
-          {value > limit ? `No puede superar lo que debes (${money(limit)}).` : lectura?.monto != null && typed === null && lectura.monto <= limit ? "Monto tomado del comprobante. Corrígelo si no coincide." : "Puede ser un pago parcial. Registra solo dinero que ya pagaste."}
-        </Label>
-        <View accessibilityRole="radiogroup" style={{ flexDirection: "row", gap: 6 }}>
-          {methods.filter((m) => paymentCurrency === "PEN" || m.id === "transferencia" || m.id === "efectivo").map((m) => {
-            const active = effectiveMethod === m.id;
-            return (
-              <Pressable
-                key={m.id}
-                accessibilityRole="radio"
-                accessibilityLabel={m.id === "transferencia" ? "Transferencia" : m.name}
-                aria-checked={active}
-                onPress={() => setMethod(m.id)}
-                style={{ flex: 1, minHeight: 72, borderRadius: 14, borderWidth: 1, borderColor: active ? palette.purple : palette.line, backgroundColor: active ? palette.lilac : "white", alignItems: "center", justifyContent: "center", gap: 4 }}
-              >
-                <Ionicons name={m.icon} size={24} color={m.color} />
-                <Label size={11} weight="bold">{m.name}</Label>
-              </Pressable>
-            );
-          })}
-        </View>
+      <Pressable accessibilityRole="button" accessibilityLabel="Más detalles del pago" aria-expanded={details} onPress={() => setDetails((open) => !open)} style={{ minHeight: 48, justifyContent: "center" }}>
+        <Label size={16} weight="bold" color={palette.positive}>{details ? "Menos detalles" : "Más detalles"}</Label>
+        <Label size={14} color={palette.muted}>Fecha: {date === todayLocal() ? "hoy" : date.split("-").reverse().join("/")}</Label>
+      </Pressable>
+      {details && <Card>
+      <PaymentDate value={date} onChange={(next) => { setDate(next); if (exchange) setExchange({ ...exchange, cotizacionId: undefined }); }} disabled={busy || reading} />
+      <PaymentExchange grupoId={grupoId} fecha={date} value={exchange} onChange={(draft) => { setExchange(draft); setMethod((draft?.monedaOrigen ?? moneda) === "PEN" ? null : "transferencia"); }} target={moneda} disabled={busy || reading} />
         <TextInput
           accessibilityLabel="Nota del pago (opcional)"
           value={note}
@@ -436,14 +459,15 @@ export default function Payment() {
           placeholderTextColor={palette.muted}
           style={design.input}
         />
-      </Card>
+        <Button secondary title="Fotografiar comprobante" onPress={() => pick(true)} />
+      </Card>}
       {history.isError && (
         <>
           <ErrorBox message="No pudimos comprobar si ya registraste este pago. Reintenta para evitar duplicarlo." />
           <Button title="Reintentar" secondary onPress={() => history.refetch()} />
         </>
       )}
-      <Label size={11} color={palette.muted}>Nunca escribas claves, códigos de verificación ni datos de tarjeta. Una captura puede editarse: por eso alguien debe aprobar el pago.</Label>
+      <Label size={14} color={palette.muted}>JUNTO registra el pago; no transfiere dinero. La captura no reemplaza la confirmación de quien recibe.</Label>
     </Screen>
   );
 }

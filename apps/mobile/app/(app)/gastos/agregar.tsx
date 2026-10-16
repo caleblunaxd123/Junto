@@ -5,6 +5,7 @@ import {
   Pressable,
   ActivityIndicator,
   Image,
+  Keyboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
@@ -42,6 +43,7 @@ import { groupCover, expenseIcons } from "../../../src/components/ui/Artwork";
 import { memberLabels, meFirst } from "../../../src/lib/people";
 import { guessCategory } from "../../../src/lib/category";
 const newRequestId = () => `gasto_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+class ExpenseInputError extends Error {}
 
 function Field({
   label,
@@ -52,7 +54,7 @@ function Field({
 }) {
   return (
     <View style={{ gap: 6 }}>
-      <Label weight="bold" size={14}>
+      <Label weight="bold" size={16}>
         {label}
       </Label>
       {children}
@@ -129,13 +131,14 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   const [date, setDate] = useState(new Date());
   const [datePicker, setDatePicker] = useState(false);
   const [notes, setNotes] = useState("");
-  const [detail, setDetail] = useState(false);
+  const [detail, setDetail] = useState(!!params.texto);
   // Splitwise-style: the default split is a sentence; the full editor opens on request.
   const [customSplit, setCustomSplit] = useState(false);
   // "¿Se repite?": rent, internet… The first one is added now and then on schedule.
   const [repeat, setRepeat] = useState<"no" | "semanal" | "quincenal" | "mensual">("no");
   const [picker, setPicker] = useState<"grupo" | "pagador" | null>(null);
   const saving = useRef(false);
+  const [savingExpense, setSavingExpense] = useState(false);
   const requestId = useRef(newRequestId());
   const [dictating, setDictating] = useState(false);
   useEffect(() => { setDictating(false); }, [groupId, focused]);
@@ -160,7 +163,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     setMode(value.mode); setValues(value.values); setCategory(value.category); setCategoryPicked(value.categoryPicked);
     setText(value.text); setNotes(value.notes); setDate(new Date(value.date)); requestId.current = value.requestId;
     setPending(value.pending); setHydratedKey(groupId);
-    if (draft.restored) initializedGroup.current = groupId;
+    // An interrupted first visit can leave a blank draft before members were initialized.
+    if (draft.restored && value.ids.length && value.payer) initializedGroup.current = groupId;
   }, [draft.ready, draft.data, draft.restored, groupId, hydratedKey, params.gastoId]);
   const captureDraft = useCallback((payload?: ExpenseDraft["pending"]): ExpenseDraft => ({
     amount, description, payer, ids, mode, values, category: category as ExpenseDraft["category"], categoryPicked,
@@ -218,7 +222,6 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     );
   }, [original.data, group, focused]);
   const total = parseMoney(amount) || 0;
-  const sameDay = (a: Date, b: Date) => a.toDateString() === b.toDateString();
   const parsedPct = ids.map((id) => parsePercentage(values[id] || ""));
   const pct = parsedPct.map((value) => value ?? 0);
   const pctSum = pct.reduce((a, b) => a + b, 0);
@@ -297,9 +300,23 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     }
   }
   async function save() {
-    if (!group || !canAddExpenses(group) || !formReady || (!pending && (!valid || !description.trim() || description.trim().length > 200 || !payer || !group?.miembros.some((m) => m.usuarioId === payer) || ids.some((id) => !group?.miembros.some((m) => m.usuarioId === id)) )) || create.isPending || saving.current) return;
+    if (create.isPending || saving.current) return;
+    Keyboard.dismiss();
+    const problem = !group ? "No pudimos cargar el grupo. Vuelve a intentarlo."
+      : !canAddExpenses(group) ? "Este grupo está cerrado para nuevos gastos. Un administrador puede reabrirlo."
+      : !formReady ? "Estamos recuperando tu borrador. Espera un momento y vuelve a guardar."
+      : !pending && total <= 0 ? "Escribe un monto mayor que cero, con máximo dos decimales."
+      : !pending && !description.trim() ? "Escribe en qué gastaste. Por ejemplo: almuerzo."
+      : !pending && description.trim().length > 200 ? "Acorta el concepto a 200 caracteres."
+      : !pending && !ids.length ? "Elige al menos una persona para repartir el gasto."
+      : !pending && (!payer || !group.miembros.some((m) => m.usuarioId === payer) || ids.some((id) => !group.miembros.some((m) => m.usuarioId === id))) ? "Los integrantes cambiaron. Revisa quién pagó y entre quiénes se divide."
+      : !pending && !valid ? "Revisa el reparto: la suma debe coincidir con el monto del gasto."
+      : "";
+    if (problem) { setError(problem); return; }
     // State updates are async: a ref stops a second tap before isPending flips.
     saving.current = true;
+    setSavingExpense(true);
+    let submitted = false;
     try {
       cancelProposal();
       setError("");
@@ -325,28 +342,33 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       };
       if (!params.gastoId) {
         // Reconnect does not send anything. This explicit tap first refreshes group membership/currency.
-        const refreshed = await api.get(`/grupos/${groupId}`).catch(() => null);
-        if (!refreshed?.data) throw new Error("Sin conexión: el borrador sigue aquí. Vuelve a intentarlo cuando tengas internet.");
-        if (refreshed.data.moneda !== (group?.moneda || "PEN")) throw new Error("La moneda del grupo cambió. Revisa el gasto antes de enviarlo.");
-        if (!refreshed.data.miembros.some((m: { usuarioId: string }) => m.usuarioId === payload.pagadoPor) || payload.participantes.some((p) => !refreshed.data.miembros.some((m: { usuarioId: string }) => m.usuarioId === p.usuarioId))) throw new Error("Los integrantes del grupo cambiaron. Revisa las personas antes de guardar.");
+        const refreshed = await api.get(`/grupos/${groupId}`);
+        if (!refreshed?.data) throw new ExpenseInputError("Sin conexión: el borrador sigue aquí. Vuelve a intentarlo cuando tengas internet.");
+        if (!canAddExpenses(refreshed.data)) throw new ExpenseInputError("El grupo se cerró. Conservamos tu borrador; un administrador puede reabrirlo.");
+        if (refreshed.data.moneda !== (group?.moneda || "PEN")) throw new ExpenseInputError("La moneda del grupo cambió. Revisa el gasto antes de enviarlo.");
+        if (!refreshed.data.miembros.some((m: { usuarioId: string }) => m.usuarioId === payload.pagadoPor) || payload.participantes.some((p) => !refreshed.data.miembros.some((m: { usuarioId: string }) => m.usuarioId === p.usuarioId))) throw new ExpenseInputError("Los integrantes del grupo cambiaron. Revisa las personas antes de guardar.");
         if (repeat !== "no") {
           // The first time is the chosen day; it must be today (earlier ones are normal expenses).
           const day = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
           const now = new Date();
           const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-          if (day !== today) throw new Error("Para que se repita, la primera vez es hoy. Cambia la fecha a hoy o guárdalo como gasto normal.");
+          if (day !== today) throw new ExpenseInputError("Para que se repita, la primera vez es hoy. Cambia la fecha a hoy o guárdalo como gasto normal.");
           const { fecha: _fecha, solicitudId: _old, ...rule } = payload;
+          submitted = true;
           await api.post(`/grupos/${groupId}/recurrentes`, { ...rule, frecuencia: repeat, primeraFecha: day, solicitudId: requestId.current });
           await draft.clear();
           await Promise.all(["chat", "grupos", "recurrentes"].map((key) => qc.invalidateQueries({ queryKey: [key] })));
         } else {
           const frozen = { ...payload, solicitudId: requestId.current };
           const snapshot = captureDraft(frozen);
-          await draft.persist(snapshot); setPending(frozen);
+          try { await draft.persist(snapshot); }
+          catch { throw new ExpenseInputError("No pudimos guardar el borrador en este celular. Revisa el espacio disponible y vuelve a tocar Guardar gasto. Todavía no se envió."); }
+          setPending(frozen);
+          submitted = true;
           await create.mutateAsync(frozen);
           await draft.clear();
         }
-      } else await create.mutateAsync(payload);
+      } else { submitted = true; await create.mutateAsync(payload); }
       setPending(undefined);
       setAmount("");
       setDescription("");
@@ -367,7 +389,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       router.dismissTo(
         params.gastoId
           ? `/(app)/gastos/${params.gastoId}`
-          : `/(app)/grupos/${groupId}`,
+          : `/(app)/grupos/${groupId}?gastoGuardado=1`,
       );
     } catch (err) {
       const e = err as { response?: { status?: number; data?: { error?: string } } };
@@ -376,16 +398,17 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       // so): the next attempt is a new request. With no answer (timeout, no signal) we keep the key,
       // so retrying cannot create a second copy.
       if (status && status >= 400 && status < 500 && status !== 401 && status !== 409) { requestId.current = newRequestId(); setPending(undefined); }
-      setError(errorMessage(err, "No sabemos si se guardó: revisa tu conexión y vuelve a tocar Guardar. Se comprobará la misma solicitud para evitar un gasto repetido."));
+      setError(err instanceof ExpenseInputError ? err.message : errorMessage(err, submitted ? "No sabemos si se guardó. Reintenta: comprobaremos la misma solicitud para evitar duplicados." : "No pudimos guardar. Revisa tu conexión y vuelve a intentarlo; conservamos tu borrador."));
     } finally {
       saving.current = false;
+      setSavingExpense(false);
     }
   }
-  if (pending && !params.gastoId && formReady) return <Screen title="Guardado por comprobar" subtitle={group?.nombre} back>
+  if (pending && !params.gastoId && formReady) return <Screen title={savingExpense ? "Guardando gasto…" : "Revisar guardado"} subtitle={group?.nombre} back>
     <Card style={{ backgroundColor: palette.yellow }}><Label weight="bold">{pending.descripcion}</Label><Label size={26} weight="extra">{money(pending.montoTotal)}</Label><Label size={13}>Esta solicitud pudo llegar al servidor. La conservamos sin cambios para que reintentar no duplique el gasto.</Label></Card>
     {!!error && <ErrorBox message={error} />}
     {draft.storageError && <ErrorBox message="No pudimos actualizar el borrador del dispositivo. Mantén la app abierta." />}
-    <Button title="Comprobar y reintentar la misma solicitud" loading={create.isPending} onPress={save} />
+    <Button title="Comprobar y reintentar" loading={savingExpense || create.isPending} onPress={save} />
     <Button secondary title="Ver gastos del grupo" onPress={() => router.push(`/(app)/grupos/${groupId}`)} />
     <Label size={12} color={palette.muted}>No enviamos nada automáticamente al recuperar conexión. Si cambió el grupo, revisa sus gastos antes de continuar.</Label>
   </Screen>;
@@ -402,8 +425,16 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
             : undefined
       }
       back
+      footer={group && canAddExpenses(group) && (!params.gastoId || !!original.data) ? <>
+        {!!error && <ErrorBox message={error} />}
+        <Button
+          title={savingExpense ? "Guardando gasto…" : params.gastoId ? "Guardar corrección" : repeat !== "no" ? "Guardar y repetir" : "Guardar gasto"}
+          onPress={save}
+          loading={savingExpense || create.isPending}
+        />
+      </> : undefined}
     >
-      {!params.gastoId && (draft.storageError || draft.restored) && <Card style={{ backgroundColor: draft.storageError ? palette.yellow : palette.mint, padding: 12, gap: 6 }}><Label size={13} weight="bold">{draft.storageError ? "No pudimos proteger el borrador" : draft.restored ? "Retomamos tu borrador" : "Borrador en este dispositivo"}</Label><Label size={12}>{draft.storageError ? "No cierres la app. Revisa el espacio del dispositivo antes de continuar." : "Puedes completar los datos sin conexión. Nada se envía solo; al guardar comprobamos el grupo otra vez."}</Label>{!groupQuery.data && draft.data?.group && <Label size={12} color={palette.muted}>Últimos integrantes consultados. No son saldos actualizados.</Label>}</Card>}
+      {!params.gastoId && (draft.storageError || draft.restored) && <Card style={{ backgroundColor: draft.storageError ? palette.yellow : palette.mint, padding: 12, gap: 6 }}><Label size={15} weight="bold">{draft.storageError ? "No pudimos recuperar el borrador" : "Retomamos tu borrador"}</Label>{draft.storageError ? <><Label>No cierres la app. Revisa el espacio del celular y reintenta.</Label><Button secondary title="Reintentar borrador" onPress={draft.retry} /></> : <Label size={14}>Completa lo que falta y guarda.</Label>}{!groupQuery.data && draft.data?.group && <Label size={14} color={palette.muted}>Estás viendo los últimos integrantes consultados.</Label>}</Card>}
       {params.cuenta === "1" && !params.gastoId && <Card style={{ backgroundColor: palette.mint, gap: 8 }}>
         <Label weight="bold">Registra la cuenta una sola vez</Label>
         <Label size={13}>Escribe el total ya pagado, elige quién lo adelantó y reparte entre quienes participaron. Ejemplo: {money(50000)} entre 5 son {money(10000)} por persona.</Label>
@@ -434,7 +465,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
             />
           )}
         </>
-      ) : (!formReady || (isLoading && !group)) ? (
+      ) : draft.storageError && !formReady ? null : (!formReady || (isLoading && !group)) ? (
         <ActivityIndicator />
       ) : !group ? (
         <ErrorBox message="No pudimos cargar este grupo. Vuelve y reintenta." />
@@ -443,50 +474,6 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       ) : (
         <>
           {moneda !== "PEN" && <Label size={13} color={palette.muted}>Gastos y pagos en {moneda}. Usa el formulario; el asistente de texto interpreta soles por ahora. No convertimos monedas.</Label>}
-          {!params.gastoId && moneda === "PEN" && (
-            <Pressable
-              accessibilityRole="button"
-              aria-expanded={writeIt}
-              onPress={() => setWriteIt((v) => !v)}
-              style={[design.row, { minHeight: 44, gap: 8 }]}
-            >
-              <Ionicons name="sparkles-outline" size={18} color={palette.purple} />
-              <Label size={13} weight="bold" color={palette.purple} style={{ flex: 1 }}>
-                {writeIt ? "Ocultar" : "Escribir o dictar un gasto"}
-              </Label>
-            </Pressable>
-          )}
-          {writeIt && !params.gastoId && moneda === "PEN" && (
-            <Card style={{ backgroundColor: palette.lilac, padding: 12, gap: 8 }}>
-              <Button compact secondary title="Dictar gasto con voz" onPress={() => { cancelProposal(); setDictating(true); }} disabled={preparing} />
-              <Label size={12} color={palette.muted}>Escribe o dicta una frase. Solo se preparará una propuesta; tú revisas y guardas.</Label>
-              <TextInput
-                accessibilityLabel="Describe el gasto en una frase"
-                value={text}
-                onChangeText={(value) => {
-                  cancelProposal();
-                  setText(value);
-                }}
-                placeholder="Pagué 120 por la cena con Ana y Luis"
-                placeholderTextColor={palette.muted}
-                multiline
-                maxLength={500}
-                style={[design.input, { fontSize: 14, minHeight: 56, borderColor: "white" }]}
-              />
-              <Button
-                compact
-                secondary
-                title={preparing ? "Preparando…" : "Completar el formulario"}
-                disabled={preparing || text.trim().length < 3}
-                onPress={prepare}
-              />
-              {preparing && (
-                <Pressable accessibilityRole="button" onPress={cancelProposal} style={{ minHeight: 44, justifyContent: "center" }}>
-                  <Label size={13} weight="bold" color={palette.muted}>Cancelar y llenarlo a mano</Label>
-                </Pressable>
-              )}
-            </Card>
-          )}
           {!!proposal && (
             <Card style={{ backgroundColor: palette.mint, padding: 12, gap: 4 }}>
               <Label weight="bold" size={13} color="#078B70">Revisa antes de guardar</Label>
@@ -494,7 +481,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
             </Card>
           )}
           <Card style={{ gap: 12, padding: 12 }}>
-            <Field label="Monto">
+            <Field label="¿Cuánto pagaste?">
               <View
                 style={[
                   design.input,
@@ -516,6 +503,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                   value={amount}
                   onChangeText={(value) => {
                     cancelProposal();
+                    setError("");
                     setAmount(value);
                   }}
                   keyboardType="decimal-pad"
@@ -536,7 +524,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                 </Label>
               </View>
             </Field>
-            <Field label="Descripción">
+            <Field label="¿En qué gastaste?">
               <View
                 style={[
                   design.input,
@@ -555,6 +543,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                   value={description}
                   onChangeText={(value) => {
                     cancelProposal();
+                    setError("");
                     setDescription(value);
                     if (!categoryPicked) setCategory(guessCategory(value) ?? "otro");
                   }}
@@ -595,22 +584,16 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
             </Field>
             )}
             {simpleSplit ? (
-              // The usual case in one sentence (you paid, everyone, equal parts); details only on request.
-              <View style={{ gap: 10, padding: 12, borderRadius: 16, backgroundColor: palette.lilac }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                  <View style={{ flexDirection: "row" }}>
-                    {orderedMembers.slice(0, 4).map((m, i) => (
-                      <View key={m.usuarioId} style={{ marginLeft: i ? -8 : 0, borderWidth: 2, borderColor: palette.lilac, borderRadius: 16 }}>
-                        <Avatar name={m.usuario.nombre} seed={m.usuarioId} size={28} />
-                      </View>
-                    ))}
+              <View style={{ gap: 6, padding: 12, borderRadius: 16, backgroundColor: palette.mint }}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Cambiar quién pagó o cómo se divide" onPress={() => { cancelProposal(); setCustomSplit(true); }}
+                  style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Label size={16} weight="bold">Pagaste tú</Label>
+                    <Label size={15} color={palette.muted}>Entre {ids.length} · en partes iguales</Label>
                   </View>
-                  <Label size={14} style={{ flex: 1 }}>
-                    <Label size={14} weight="bold">Pagaste tú</Label> y se divide <Label size={14} weight="bold">en partes iguales</Label> entre {ids.length === 1 ? "1 persona" : `${ids.length} personas`}
-                  </Label>
-                </View>
-                {total > 0 && <Label size={15} weight="extra" color={palette.positive}>{shares.every((v) => v === shares[0]) ? `${money(shares[0] ?? 0)} cada uno` : `Desde ${money(Math.min(...shares))} cada uno`} · te deben {money(total - (shares[ids.indexOf(user?.id ?? "")] ?? 0))}</Label>}
-                <Button compact secondary title="Cambiar quién pagó o cómo se divide" onPress={() => { cancelProposal(); setCustomSplit(true); }} />
+                  <Label size={16} weight="bold" color={palette.positive}>Cambiar</Label>
+                </Pressable>
+                {total > 0 && <Label size={16} weight="bold" color={palette.positive}>{shares.every((v) => v === shares[0]) ? `${money(shares[0] ?? 0)} por persona` : `Desde ${money(Math.min(...shares))} por persona`}</Label>}
               </View>
             ) : (
               <>
@@ -821,11 +804,11 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
           </Card>
           {mode === "porcentaje" && parsedPct.some((value) => value === null) && <ErrorBox message="Completa cada porcentaje: entre 0 y 100, con máximo 2 decimales. Usa 0 explícitamente si no participa en el costo." />}
           <Pressable accessibilityRole="button" aria-expanded={detail} onPress={() => setDetail((v) => !v)} style={{ minHeight: 44, justifyContent: "center" }}>
-            <Label color={palette.muted} size={13}>
-              {detail ? "Ocultar detalles" : `＋ ${sameDay(date, new Date()) ? "Hoy" : date.toLocaleDateString("es-PE", { day: "numeric", month: "short" })} · Categoría (${({ comida: "Comida", transporte: "Transporte", alojamiento: "Alojamiento", entretenimiento: "Diversión", compras: "Compras", otro: "Otro" } as Record<string, string>)[category] ?? "Otro"}) y nota`}
+            <Label color={palette.positive} weight="bold" size={16}>
+              {detail ? "Menos opciones" : "Más opciones"}
             </Label>
           </Pressable>
-          {!params.gastoId && params.cuenta !== "1" && (detail || group.tipo === "roomies" || group.tipo === "pareja") && (
+          {!params.gastoId && params.cuenta !== "1" && detail && (
             <View accessibilityRole="radiogroup" accessibilityLabel="¿Se repite?" style={{ gap: 8 }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                 <Ionicons name="repeat" size={18} color={palette.purple} />
@@ -849,6 +832,50 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
           )}
           {detail && (
             <Card>
+          {!params.gastoId && moneda === "PEN" && (
+            <Pressable
+              accessibilityRole="button"
+              aria-expanded={writeIt}
+              onPress={() => setWriteIt((v) => !v)}
+              style={[design.row, { minHeight: 44, gap: 8 }]}
+            >
+              <Ionicons name="sparkles-outline" size={18} color={palette.purple} />
+              <Label size={13} weight="bold" color={palette.purple} style={{ flex: 1 }}>
+                {writeIt ? "Ocultar" : "Escribir o dictar un gasto"}
+              </Label>
+            </Pressable>
+          )}
+          {writeIt && !params.gastoId && moneda === "PEN" && (
+            <Card style={{ backgroundColor: palette.lilac, padding: 12, gap: 8 }}>
+              <Button compact secondary title="Dictar gasto con voz" onPress={() => { cancelProposal(); setDictating(true); }} disabled={preparing} />
+              <Label size={12} color={palette.muted}>Escribe o dicta una frase. Solo se preparará una propuesta; tú revisas y guardas.</Label>
+              <TextInput
+                accessibilityLabel="Describe el gasto en una frase"
+                value={text}
+                onChangeText={(value) => {
+                  cancelProposal();
+                  setText(value);
+                }}
+                placeholder="Pagué 120 por la cena con Ana y Luis"
+                placeholderTextColor={palette.muted}
+                multiline
+                maxLength={500}
+                style={[design.input, { fontSize: 14, minHeight: 56, borderColor: "white" }]}
+              />
+              <Button
+                compact
+                secondary
+                title={preparing ? "Preparando…" : "Completar el formulario"}
+                disabled={preparing || text.trim().length < 3}
+                onPress={prepare}
+              />
+              {preparing && (
+                <Pressable accessibilityRole="button" onPress={cancelProposal} style={{ minHeight: 44, justifyContent: "center" }}>
+                  <Label size={13} weight="bold" color={palette.muted}>Cancelar y llenarlo a mano</Label>
+                </Pressable>
+              )}
+            </Card>
+          )}
             <Field label="Fecha">
               <Pressable
                 accessibilityRole="button"
@@ -917,13 +944,6 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
               />
             </Card>
           )}
-          {!!error && <ErrorBox message={error} />}
-          <Button
-            title={params.gastoId ? "Guardar corrección" : params.cuenta === "1" ? "Guardar total y reparto" : repeat !== "no" ? "Guardar y repetir" : "Guardar gasto"}
-            onPress={save}
-            loading={create.isPending}
-            disabled={!formReady || draft.storageError || !valid || !description.trim() || !payer}
-          />
           <ExpenseDictation visible={dictating && focused && moneda === "PEN" && !params.gastoId} replacing={!!text.trim()} onClose={() => setDictating(false)} onUse={(value) => { cancelProposal(); setText(value); }} />
       <Sheet visible={picker !== null} onClose={() => setPicker(null)} title={picker === "grupo" ? "Elige el grupo" : "¿Quién pagó?"} width={560}>
                   {picker === "grupo"
