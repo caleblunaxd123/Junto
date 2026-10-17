@@ -16,6 +16,7 @@ import { ShareChannels, ShareMessageSheet, ShareSummary } from "../../../src/com
 import type { ShareMessage } from "../../../src/lib/shareMessage";
 import { quickBillShareMessage } from "@junto/shared/share";
 import { nextContribution, type ContributionMode } from "../../../src/lib/contribution";
+import { MoneyText } from "../../../src/components/ui/MoneyText";
 const money = (cents: number) => `S/ ${centavosASoles(cents)}`;
 export default function QuickBillDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -81,15 +82,15 @@ export default function QuickBillDetail() {
   return <Screen compact title="Tu reparto" subtitle="Partes claras, aportes bajo tu control." back refreshing={query.isRefetching} onRefresh={() => refetch()}>
     {query.isLoading ? <ActivityIndicator color={palette.primary} /> : !bill ? <><ErrorBox message="No pudimos abrir esta cuenta." /><Button title="Reintentar" onPress={() => refetch()} /></> : <>
       {query.isError && <><ErrorBox message="No pudimos actualizar. Este es el último desglose consultado; actualiza antes de confirmar o compartir." /><Button title="Actualizar cuenta" secondary onPress={() => refetch()} /></>}
-      <Card style={{ backgroundColor: palette.mint }}><Label weight="extra" size={22}>{bill.datos.nombre}</Label><Label weight="extra" size={32}>{money(bill.resultado.montoTotal)}</Label><Label size={13}>{bill.resultado.partes.length} personas · {bill.resultado.cantidadPagadores} aportan · {bill.archivada ? "Archivada" : bill.estado === "completada" ? "Completada" : bill.estado === "parcial" ? "Aportes parciales" : "Abierta"}</Label></Card>
-      <View style={design.row}><Card style={{ flex: 1 }}><Label size={12}>Ya cobrado</Label><Label weight="extra" size={20}>{money(bill.cobrado)}</Label></Card><Card style={{ flex: 1, backgroundColor: palette.lilac }}><Label size={12}>Falta cobrar</Label><Label weight="extra" size={20}>{money(bill.pendiente)}</Label></Card></View>
+      <Card style={{ backgroundColor: palette.mint }}><Label weight="extra" size={22}>{bill.datos.nombre}</Label><MoneyText weight="extra" size={32}>{money(bill.resultado.montoTotal)}</MoneyText><Label size={13}>{bill.resultado.partes.length} personas · {bill.resultado.cantidadPagadores} aportan · {bill.archivada ? "Archivada" : bill.estado === "completada" ? "Completada" : bill.estado === "parcial" ? "Aportes parciales" : "Abierta"}</Label></Card>
+      <View style={design.row}><Card style={{ flex: 1 }}><Label size={12}>Ya cobrado</Label><MoneyText weight="extra" size={20}>{money(bill.cobrado)}</MoneyText></Card><Card style={{ flex: 1, backgroundColor: palette.lilac }}><Label size={12}>Falta cobrar</Label><MoneyText weight="extra" size={20}>{money(bill.pendiente)}</MoneyText></Card></View>
       <Card style={{ backgroundColor: palette.lilac }}><Label weight="extra">{bill.grupoId ? "Conservada como referencia" : "Continúa con tu grupo"}</Label><Label size={13}>{bill.grupoId ? "Este es el reparto anterior. Los saldos actuales y nuevos pagos están en el grupo; aquí conservamos el historial sin cambios." : "Conserva los nombres, las partes y los aportes confirmados. Revisa quién adelantó el dinero antes de crear el grupo."}</Label><Button title={bill.grupoId ? "Abrir grupo" : "Pasar a grupo"} disabled={query.isError} onPress={() => bill.grupoId ? router.push({ pathname: "/(app)/grupos/[id]", params: { id: bill.grupoId } }) : router.push({ pathname: "/(app)/cuentas/pasar-a-grupo", params: { id } })} /></Card>
       <Button title="Revisar y compartir reparto" disabled={query.isError} onPress={() => { setPage(0); setImageReady(false); setPreview(true); }} />
       <Label size={12} color={palette.muted}>No es saldo bancario ni una deuda de tus grupos. Solo tú confirmas los aportes después de comprobarlos.</Label>
       {bill.resultado.partes.map((p) => {
         const confirmed = bill.aportes[p.id] || 0;
         return <Card key={p.id} style={{ padding: 14, backgroundColor: p.invitado ? palette.lilac : confirmed === p.total ? palette.mint : "white" }}>
-          <View style={[design.row, { justifyContent: "space-between" }]}><Label weight="bold" style={{ flex: 1 }}>{p.nombre}</Label><Label weight="extra" size={21}>{money(p.total)}</Label></View>
+          <View style={[design.row, { justifyContent: "space-between" }]}><Label weight="bold" style={{ flex: 1 }}>{p.nombre}</Label><MoneyText weight="extra" size={21}>{money(p.total)}</MoneyText></View>
           <Label size={12} color={palette.muted}>{p.invitado ? "Invitado: no paga." : bill.datos.division === "igual" ? (p.extras ? `Parte ${money(p.consumo)} + extras ${money(p.extras)}` : "Parte igual") : `Consumo ${money(p.consumo)} + invitados ${money(p.invitados)} + extras ${money(p.extras)}`}</Label>
           {!p.invitado && p.total > 0 && <><Label size={12}>Confirmado {money(confirmed)} · falta {money(p.total - confirmed)}</Label><Button title={confirmed === p.total ? "Ver o corregir aporte" : confirmed ? "Registrar otro pago" : "Registrar aporte recibido"} secondary disabled={disabled} onPress={() => { const complete = confirmed === p.total; setMode(complete ? "corregir" : "ahora"); setAmount(centavosASoles(complete ? confirmed : p.total - confirmed)); setSelected(p.id); }} /></>}
         </Card>;

@@ -11,6 +11,7 @@ import { useAuthStore } from "../../../src/store/auth.store";
 import { Button, Card, ErrorBox, Label, Screen, palette } from "../../../src/components/ui/Design";
 import { FormField } from "../../../src/components/ui/Reference";
 import { centavosASoles } from "../../../src/types";
+import { MoneyText } from "../../../src/components/ui/MoneyText";
 
 const money = (cents: number) => `S/ ${centavosASoles(cents)}`;
 export default function ConvertBill() {
@@ -60,7 +61,7 @@ export default function ConvertBill() {
   const choice = (key: string, label: string, selected: boolean, action: () => void) => <Pressable key={key} accessibilityRole="radio" accessibilityLabel={label} aria-checked={selected} aria-disabled={busy} disabled={busy} onPress={action} style={{ minHeight: 48, borderRadius: 14, padding: 12, borderWidth: 1.5, borderColor: selected ? palette.primary : palette.line, backgroundColor: selected ? palette.mint : "white" }}><Label weight={selected ? "bold" : "regular"}>{selected ? "✓ " : ""}{label}</Label></Pressable>;
   return <Screen title={prueba ? "Tu cálculo, en un grupo" : "Pasar a grupo"} subtitle="Mismas partes, ahora con gastos y pagos juntos." back>
     {loading ? <ActivityIndicator /> : !datos || !result || dataError || bill.isError ? <><ErrorBox message={dataError || "No pudimos abrir el reparto. Vuelve al inicio y reintenta; no se modificó nada."} />{!prueba && <Button title="Reintentar" onPress={() => bill.refetch()} />}</> : bill.data?.grupoId ? <Button title="Abrir grupo creado" onPress={() => router.replace({ pathname: "/(app)/grupos/[id]", params: { id: bill.data!.grupoId! } })} /> : <>
-      <Card style={{ backgroundColor: palette.mint }}><Label size={12}>TOTAL DEL GASTO</Label><Label size={32} weight="extra">{money(result.montoTotal)}</Label><Label size={13}>{result.partes.length} personas · los invitados no pagan</Label></Card>
+      <Card style={{ backgroundColor: palette.mint }}><Label size={12}>TOTAL DEL GASTO</Label><MoneyText size={32} weight="extra">{money(result.montoTotal)}</MoneyText><Label size={13}>{result.partes.length} personas · los invitados no pagan</Label></Card>
       {prueba && <FormField label="Nombre del grupo" value={name} maxLength={100} editable={!busy} onChangeText={setName} placeholder="Ej. Cumpleaños de Jaime" />}
       <Label weight="extra" size={18}>¿Cuál de estos nombres eres tú?</Label>
       <Label size={13} color={palette.muted}>No agregaremos otra persona para tu mismo lugar.</Label>

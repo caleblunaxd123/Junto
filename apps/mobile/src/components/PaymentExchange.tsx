@@ -7,6 +7,7 @@ import { FormField } from "./ui/Reference";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { validDate } from "./PaymentDate";
+import { MoneyText } from "./ui/MoneyText";
 
 export type ExchangeDraft = { monedaOrigen: CurrencyCode; amount: string; rate: string; cotizacionId?: string };
 type Quote = { id: string; origen: CurrencyCode; destino: CurrencyCode; tasa: string; fecha: string; fuente: string; consultada: string };
@@ -50,7 +51,7 @@ export function PaymentExchange({ value, onChange, target, disabled, grupoId, fe
         onChangeText={(rate) => onChange({ ...value, rate })} editable={!disabled} maxLength={13} placeholder="Tasa acordada, hasta 6 decimales" />
       {result.conversion ? <View accessibilityLiveRegion="polite" style={{ gap: 4 }}>
         <Label size={12} color="#6543C4">Equivalente que cubre de la deuda</Label>
-        <Label size={25} weight="extra">{formatMoney(result.conversion.monto, target)}</Label>
+        <MoneyText size={25} weight="extra">{formatMoney(result.conversion.monto, target)}</MoneyText>
         <Label size={12}>{formatMoney(result.conversion.montoOrigen, result.conversion.monedaOrigen)} × {result.conversion.tipoCambio}. Redondeado a 2 decimales.</Label>
       </View> : <Label size={12} color={palette.coral} accessibilityLiveRegion="polite">{result.error}</Label>}
       <Label size={12} color={palette.muted}>Acuerden el equivalente recibido, incluidas las comisiones si las hubo. {received ? "Al guardar confirmas que el dinero llegó y se descuenta de la deuda." : "La deuda no cambia hasta que quien recibe confirme el pago."} JUNTO no cambia ni transfiere dinero.</Label>

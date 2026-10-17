@@ -88,6 +88,7 @@ export interface Gasto {
   descripcion: string;
   montoTotal: number; // en centavos
   pagadoPor: string;
+  pagadores?: { usuarioId: string; monto: number; usuario: Pick<Usuario, 'id' | 'nombre' | 'fotoUrl'> }[];
   categoria: GastoCategoria;
   fecha: string;
   creadoPor: string;

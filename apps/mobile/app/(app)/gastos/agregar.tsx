@@ -36,14 +36,17 @@ import {
 import { formatMoney, currencyInfo } from "@junto/shared/currency";
 import { centavosASoles, TipoDivision, Gasto } from "../../../src/types";
 import { parseMoney, parsePercentage, parseShares, allocatePreview } from "../../../src/lib/expensePreview";
+import { ExpensePayers } from "../../../src/components/ExpensePayers";
 import { ExpenseDictation } from "../../../src/components/ExpenseDictation";
 import * as ImagePicker from "expo-image-picker";
+import { pickReceiptPhoto } from "../../../src/lib/media";
 import { useReadReceipt, type ReceiptProposal } from "../../../src/hooks/useQuickBills";
 import { useExpenseDraft } from "../../../src/hooks/useExpenseDraft";
 import type { ExpenseDraft } from "../../../src/lib/draftStorage";
 import { groupCover, expenseIcons } from "../../../src/components/ui/Artwork";
 import { memberLabels, meFirst } from "../../../src/lib/people";
 import { guessCategory } from "../../../src/lib/category";
+import { MoneyText } from "../../../src/components/ui/MoneyText";
 const newRequestId = () => `gasto_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 class ExpenseInputError extends Error {}
 
@@ -126,6 +129,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [payer, setPayer] = useState(user?.id || "");
+  const [multiplePayers, setMultiplePayers] = useState(false);
+  const [payerAmounts, setPayerAmounts] = useState<Record<string, string>>({});
   const [ids, setIds] = useState<string[]>([]);
   const [mode, setMode] = useState<TipoDivision>("igual");
   const [values, setValues] = useState<Record<string, string>>({});
@@ -170,6 +175,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     const value = draft.data;
     cachedGroup.current = value.group;
     setAmount(value.amount); setDescription(value.description); setPayer(value.payer); setIds(value.ids);
+    setMultiplePayers(value.multiplePayers ?? false); setPayerAmounts(value.payerAmounts ?? {});
     setMode(value.mode); setValues(value.values); setCategory(value.category); setCategoryPicked(value.categoryPicked);
     setText(value.text); setNotes(value.notes); setDate(new Date(value.date)); requestId.current = value.requestId;
     setPending(value.pending); setHydratedKey(groupId);
@@ -177,10 +183,10 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     if (draft.restored && value.ids.length && value.payer) initializedGroup.current = groupId;
   }, [draft.ready, draft.data, draft.restored, groupId, hydratedKey, params.gastoId]);
   const captureDraft = useCallback((payload?: ExpenseDraft["pending"]): ExpenseDraft => ({
-    amount, description, payer, ids, mode, values, category: category as ExpenseDraft["category"], categoryPicked,
+    amount, description, payer, multiplePayers, payerAmounts, ids, mode, values, category: category as ExpenseDraft["category"], categoryPicked,
     text, notes, date: date.toISOString(), requestId: requestId.current, savedAt: new Date().toISOString(), pending: payload ?? pending,
     ...(group ? { group: { id: group.id, nombre: group.nombre, tipo: group.tipo, moneda: group.moneda || "PEN", estado: group.estado, miembros: group.miembros.map((m) => ({ usuarioId: m.usuarioId, usuario: { id: m.usuarioId, nombre: m.usuario.nombre } })) } } : {}),
-  }), [amount, description, payer, ids, mode, values, category, categoryPicked, text, notes, date, pending, group]);
+  }), [amount, description, payer, multiplePayers, payerAmounts, ids, mode, values, category, categoryPicked, text, notes, date, pending, group]);
   const updateDraft = draft.update;
   useEffect(() => { if (!params.gastoId && formReady && group && focused && !saving.current) updateDraft(captureDraft()); }, [params.gastoId, formReady, group, focused, captureDraft, updateDraft]);
   const labels = memberLabels(group?.miembros.map((m) => ({ ...m.usuario, id: m.usuarioId })) ?? [], user?.id);
@@ -213,9 +219,15 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     setAmount(centavosASoles(expense.montoTotal));
     setDescription(expense.descripcion);
     setPayer(expense.pagadoPor);
+    setMultiplePayers((expense.pagadores?.length ?? 0) > 1);
+    setPayerAmounts(Object.fromEntries((expense.pagadores ?? []).map(p => [p.usuarioId, centavosASoles(p.monto)])));
     setIds(expense.participantes.map((p) => p.usuarioId));
-    setMode("exacto");
-    setValues(
+    // An equal split stays equal: changing the total re-divides it without retyping every share.
+    const shares = expense.participantes.map((p) => p.montoAsignado);
+    const equal = expense.tipoDivision === "igual" || (shares.length > 0 && Math.max(...shares) - Math.min(...shares) <= 1);
+    setMode(equal ? "igual" : "exacto");
+    if (equal) setValues({});
+    else setValues(
       Object.fromEntries(
         expense.participantes.map((p) => [
           p.usuarioId,
@@ -227,11 +239,13 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     setCategoryPicked(true);
     setNotes(expense.notas || "");
     setDate(new Date(expense.fecha));
-    setProposal(
-      "Conservamos las partes originales por montos. Puedes revisarlas y cambiar la división antes de guardar.",
-    );
+    setProposal(equal
+      ? "Se sigue dividiendo en partes iguales. Si cambias el total, cada parte se recalcula sola."
+      : "Conservamos las partes originales por montos. Puedes revisarlas y cambiar la división antes de guardar.");
   }, [original.data, group, focused]);
   const total = parseMoney(amount) || 0;
+  const advances = Object.entries(payerAmounts).map(([usuarioId, value]) => ({ usuarioId, monto: parseMoney(value) ?? 0 }));
+  const advancesValid = !multiplePayers || (advances.length > 0 && advances.every(p => p.monto > 0 && group?.miembros.some(m => m.usuarioId === p.usuarioId)) && advances.reduce((sum, p) => sum + p.monto, 0) === total);
   const parsedPct = ids.map((id) => parsePercentage(values[id] || ""));
   const pct = parsedPct.map((value) => value ?? 0);
   const pctSum = pct.reduce((a, b) => a + b, 0);
@@ -321,14 +335,10 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
         setError("Puedes elegir una foto o escribir el monto sin dar permiso a la cámara.");
         return;
       }
-      const options: ImagePicker.ImagePickerOptions = { mediaTypes: ["images"], base64: true, quality: 0.8, allowsEditing: false };
-      const picked = camera ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
-      if (picked.canceled || controller.signal.aborted || receiptRequest.current !== controller) return;
-      const imagen = picked.assets[0]?.base64;
-      if (!imagen || imagen.length > 5_600_000) {
-        setError("Usa una foto JPG/PNG de hasta 4 MB.");
-        return;
-      }
+      const picked = await pickReceiptPhoto(camera);
+      if (!picked || controller.signal.aborted || receiptRequest.current !== controller) return;
+      if ("error" in picked) { setError(picked.error); return; }
+      const imagen = picked.base64;
       setReceiptProposal(undefined);
       const scanned = await readReceipt.mutateAsync({ imagen, signal: controller.signal });
       if (controller.signal.aborted || receiptRequest.current !== controller) return;
@@ -363,6 +373,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       : !pending && description.trim().length > 200 ? "Acorta el concepto a 200 caracteres."
       : !pending && !ids.length ? "Elige al menos una persona para repartir el gasto."
       : !pending && (!payer || !group.miembros.some((m) => m.usuarioId === payer) || ids.some((id) => !group.miembros.some((m) => m.usuarioId === id))) ? "Los integrantes cambiaron. Revisa quién pagó y entre quiénes se divide."
+      : !pending && !advancesValid ? "Revisa cuánto adelantó cada pagador: debe sumar exactamente el total del gasto."
+      : !pending && multiplePayers && repeat !== "no" ? "Guarda este gasto sin repetición automática: tiene varios pagadores."
       : !pending && !valid ? "Revisa el reparto: la suma debe coincidir con el monto del gasto."
       : "";
     if (problem) { setError(problem); return; }
@@ -377,7 +389,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
         ...(params.gastoId ? {} : { solicitudId: requestId.current }),
         descripcion: description.trim(),
         montoTotal: total,
-        pagadoPor: payer,
+        pagadoPor: multiplePayers ? advances[0]?.usuarioId ?? payer : payer,
+        ...(multiplePayers ? { pagadores: advances } : {}),
         categoria: category,
         tipoDivision: mode,
         fecha: date.toISOString(),
@@ -400,6 +413,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
         if (!canAddExpenses(refreshed.data)) throw new ExpenseInputError("El grupo se cerró. Conservamos tu borrador; un administrador puede reabrirlo.");
         if (refreshed.data.moneda !== (group?.moneda || "PEN")) throw new ExpenseInputError("La moneda del grupo cambió. Revisa el gasto antes de enviarlo.");
         if (!refreshed.data.miembros.some((m: { usuarioId: string }) => m.usuarioId === payload.pagadoPor) || payload.participantes.some((p) => !refreshed.data.miembros.some((m: { usuarioId: string }) => m.usuarioId === p.usuarioId))) throw new ExpenseInputError("Los integrantes del grupo cambiaron. Revisa las personas antes de guardar.");
+        if (payload.pagadores && !refreshed.data.funciones?.variosPagadores) throw new ExpenseInputError("El servidor aún no admite varios pagadores. Conservamos el borrador; no se ha enviado.");
+        if (payload.pagadores?.some(p => !refreshed.data.miembros.some((m: { usuarioId: string }) => m.usuarioId === p.usuarioId))) throw new ExpenseInputError("Cambió uno de los pagadores. Revisa los integrantes antes de guardar.");
         if (repeat !== "no") {
           // The first time is the chosen day; it must be today (earlier ones are normal expenses).
           const day = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -421,7 +436,14 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
           await create.mutateAsync(frozen);
           await draft.clear();
         }
-      } else { submitted = true; await create.mutateAsync(payload); }
+      } else {
+        submitted = true;
+        await create.mutateAsync(payload);
+        // A correction just goes back to the expense. Clearing ~20 fields of a screen that is being
+        // dismissed re-rendered the whole form mid-transition and crashed Android (Fabric addViewAt).
+        router.dismissTo(`/(app)/gastos/${params.gastoId}`);
+        return;
+      }
       setPending(undefined);
       setAmount("");
       setDescription("");
@@ -437,13 +459,10 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       setDate(new Date());
       setIds(group?.miembros.map((member) => member.usuarioId) || []);
       setPayer(user?.id || "");
+      setMultiplePayers(false); setPayerAmounts({});
       requestId.current = newRequestId();
       // Back to the screen this came from (the group or the expense), never a second copy of it.
-      router.dismissTo(
-        params.gastoId
-          ? `/(app)/gastos/${params.gastoId}`
-          : `/(app)/grupos/${groupId}?gastoGuardado=1`,
-      );
+      router.dismissTo(`/(app)/grupos/${groupId}?gastoGuardado=1`);
     } catch (err) {
       const e = err as { response?: { status?: number; data?: { error?: string } } };
       const status = e.response?.status;
@@ -458,7 +477,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     }
   }
   if (pending && !params.gastoId && formReady) return <Screen title={savingExpense ? "Guardando gasto…" : "Revisar guardado"} subtitle={group?.nombre} back>
-    <Card style={{ backgroundColor: palette.yellow }}><Label weight="bold">{pending.descripcion}</Label><Label size={26} weight="extra">{money(pending.montoTotal)}</Label><Label size={13}>Esta solicitud pudo llegar al servidor. La conservamos sin cambios para que reintentar no duplique el gasto.</Label></Card>
+    <Card style={{ backgroundColor: palette.yellow }}><Label weight="bold">{pending.descripcion}</Label><MoneyText size={26} weight="extra">{money(pending.montoTotal)}</MoneyText><Label size={13}>Esta solicitud pudo llegar al servidor. La conservamos sin cambios para que reintentar no duplique el gasto.</Label></Card>
     {!!error && <ErrorBox message={error} />}
     {draft.storageError && <ErrorBox message="No pudimos actualizar el borrador del dispositivo. Mantén la app abierta." />}
     <Button title="Comprobar y reintentar" loading={savingExpense || create.isPending} onPress={save} />
@@ -631,6 +650,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
             </Field>
             )}
             <Field label={params.cuenta === "1" ? "3. ¿Quién adelantó el total?" : "3. ¿Quién pagó?"}>
+              {!multiplePayers && <>
               {orderedMembers.length <= 6 ? <View accessibilityRole="radiogroup" accessibilityLabel="Quién pagó" style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {orderedMembers.map((member) => <Pressable key={member.usuarioId} accessibilityRole="radio" aria-checked={payer === member.usuarioId}
                   accessibilityLabel={member.usuario.nombre} onPress={() => { cancelProposal(); setError(""); setPayer(member.usuarioId); }}
@@ -657,6 +677,16 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                 <Ionicons name="chevron-down" size={17} color={palette.muted} />
               </Pressable>
               </>}
+              </>}
+              {(groupQuery.data?.funciones?.variosPagadores || multiplePayers) && <Pressable accessibilityRole="switch" accessibilityState={{ checked: multiplePayers }} accessibilityLabel="Pagaron varias personas" onPress={() => {
+                cancelProposal(); setError("");
+                if (!multiplePayers && !Object.keys(payerAmounts).length) setPayerAmounts({ [payer]: amount });
+                setMultiplePayers(!multiplePayers);
+              }} style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Ionicons name={multiplePayers ? "checkbox" : "square-outline"} size={24} color={palette.positive} />
+                <Label size={15} weight="bold" style={{ flex: 1 }}>Pagaron varias personas</Label>
+              </Pressable>}
+              {multiplePayers && <ExpensePayers members={orderedMembers} values={payerAmounts} onChange={setPayerAmounts} total={total} currency={moneda} />}
             </Field>
             <Field label="4. ¿Entre quiénes se divide?">
               {/* Everyone visible at once (wrapping rows): nobody hides past the edge of the screen. */}

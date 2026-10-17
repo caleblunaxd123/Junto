@@ -12,7 +12,7 @@ export async function groupStatement(userId: string, grupoId: string) {
     // One snapshot, like the ledger: rows and totals describe the same moment.
     const [members, expenses, payments] = await Promise.all([
       tx.grupoMiembro.findMany({ where: { grupoId }, select: { activo: true, usuario: { select: { id: true, nombre: true } } } }),
-      tx.gasto.findMany({ where: { grupoId, activo: true }, select: { id: true, descripcion: true, categoria: true, fecha: true, fechaRegistro: true, montoTotal: true, pagadoPor: true, pagador: { select: { nombre: true } }, participantes: { select: { usuarioId: true, montoAsignado: true } } } }),
+      tx.gasto.findMany({ where: { grupoId, activo: true }, select: { id: true, descripcion: true, categoria: true, fecha: true, fechaRegistro: true, montoTotal: true, pagadoPor: true, pagadores: { include: { usuario: { select: { nombre: true } } } }, pagador: { select: { nombre: true } }, participantes: { select: { usuarioId: true, montoAsignado: true } } } }),
       tx.pago.findMany({ where: { grupoId }, select: { id: true, pagadorId: true, receptorId: true, monto: true, estado: true, metodo: true, fechaPago: true, fechaEfectiva: true, pagador: { select: { nombre: true } }, receptor: { select: { nombre: true } }, comprobante: { select: { id: true } } } }),
     ]);
     const accounts = calculateAccounts(members.map((m) => ({ ...m.usuario, activo: m.activo })), expenses, payments, member.grupo.simplificarDeudas);
@@ -21,7 +21,7 @@ export async function groupStatement(userId: string, grupoId: string) {
       titular: { id: userId, nombre: member.usuario.nombre },
       grupo: { nombre: member.grupo.nombre, moneda: member.grupo.moneda, estado: member.grupo.estado, cerradoEn: member.grupo.cerradoEn?.toISOString() ?? null },
       ...buildStatement(userId,
-        expenses.map((e) => ({ ...e, pagadorNombre: e.pagador.nombre })),
+        expenses.map((e) => ({ ...e, pagadorNombre: e.pagadores.length ? e.pagadores.map(p => p.usuario.nombre).join(', ') : e.pagador.nombre })),
         payments.map((p) => ({ ...p, pagadorNombre: p.pagador.nombre, receptorNombre: p.receptor.nombre, conComprobante: !!p.comprobante }))),
       saldos,
       balance: {

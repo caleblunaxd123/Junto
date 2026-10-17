@@ -38,6 +38,7 @@ model Usuario {
   gastosRegistrados   Gasto[]           @relation("GastoCreador")
   gastosPagados       Gasto[]           @relation("GastoPagador")
   gastoParticipantes  GastoParticipante[]
+  aportesGastos       GastoAporte[]
   pagosPagador        Pago[]            @relation("PagoPagador")
   pagosReceptor       Pago[]            @relation("PagoReceptor")
   recordatoriosEnviados Recordatorio[]  @relation("RecordatorioEnviador")
@@ -241,11 +242,26 @@ model Gasto {
   pagador      Usuario             @relation("GastoPagador", fields: [pagadoPor], references: [id])
   creador      Usuario             @relation("GastoCreador", fields: [creadoPor], references: [id])
   participantes GastoParticipante[]
+  pagadores     GastoAporte[]
   comentarios  Comentario[]
 
   @@index([grupoId])
   @@unique([creadoPor, solicitudId])
   @@map("gastos")
+}
+
+// Empty for legacy single-payer expenses; otherwise these contributions sum to montoTotal.
+model GastoAporte {
+  id        String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gastoId   String @map("gasto_id") @db.Uuid
+  usuarioId String @map("usuario_id") @db.Uuid
+  monto     Int
+  gasto     Gasto @relation(fields: [gastoId], references: [id], onDelete: Cascade)
+  usuario   Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@unique([gastoId, usuarioId])
+  @@index([usuarioId])
+  @@map("gasto_aportes")
 }
 
 model GastoParticipante {

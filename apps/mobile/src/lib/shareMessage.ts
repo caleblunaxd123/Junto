@@ -28,7 +28,7 @@ export function whatsappDraftUrl(message: ShareMessage, web = false, recipient =
 }
 
 /** Same text, preview and e-mail as the API builds; `resource` lets the API send it from server data. */
-export function expenseShareMessage(expense: Pick<Gasto, "descripcion" | "montoTotal" | "pagador" | "participantes"> & { id?: string }, groupName: string, moneda?: CurrencyCode): ShareMessage {
+export function expenseShareMessage(expense: Pick<Gasto, "descripcion" | "montoTotal" | "pagador" | "pagadores" | "participantes"> & { id?: string }, groupName: string, moneda?: CurrencyCode): ShareMessage {
   return { ...sharedExpense(expense, groupName, moneda), ...(expense.id ? { resource: { tipo: "gasto" as const, id: expense.id } } : {}) };
 }
 

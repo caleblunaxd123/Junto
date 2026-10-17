@@ -37,12 +37,17 @@ export function decodeImage(base64: string, messages: { tooHeavy: string; format
   return { buffer, mime: (jpeg ? "image/jpeg" : "image/png") as ImageMime };
 }
 
-/** Runs one OCR pass per mode, in order, and returns each text. Throws UserError on busy/timeout/failure. */
-export function recognizeText(buffer: Buffer, modes: PSM[], messages: { busy: string; timeout: string; failed: string }) {
-  return queue(() => recognizeNow(buffer, modes, messages), () => new UserError(messages.busy, 429));
+type ReadOptions = { photo?: boolean };
+/**
+ * Runs one OCR pass per mode, in order, and returns each text. Throws UserError on busy/timeout/failure.
+ * `photo`: a paper receipt photographed with a phone (faded thermal ink, shadows, tilt). It is read
+ * with local adaptive binarization and straightened first; a flat screenshot keeps the global one.
+ */
+export function recognizeText(buffer: Buffer, modes: PSM[], messages: { busy: string; timeout: string; failed: string }, options: ReadOptions = {}) {
+  return queue(() => recognizeNow(buffer, modes, messages, options), () => new UserError(messages.busy, 429));
 }
 
-async function recognizeNow(buffer: Buffer, modes: PSM[], messages: { busy: string; timeout: string; failed: string }) {
+async function recognizeNow(buffer: Buffer, modes: PSM[], messages: { busy: string; timeout: string; failed: string }, options: ReadOptions) {
   let expired = false;
   const task = (async () => {
     if (!worker) {
@@ -57,10 +62,30 @@ async function recognizeNow(buffer: Buffer, modes: PSM[], messages: { busy: stri
     for (const mode of modes) {
       if (expired) throw new UserError(messages.timeout, 504);
       const current = worker!;
-      await current.setParameters({ tessedit_pageseg_mode: mode });
-      const result = await current.recognize(buffer);
+      // Tesseract 5: 0 = global Otsu, 1 = Leptonica adaptive Otsu (per tile, survives shadows and faded ink).
+      await current.setParameters({ tessedit_pageseg_mode: mode, thresholding_method: options.photo ? '1' : '0' } as Parameters<Worker['setParameters']>[0]);
+      const result = await current.recognize(buffer, { rotateAuto: !!options.photo }, { blocks: true, text: true });
       texts.push(result.data.text);
       confidence = Math.min(confidence, result.data.confidence);
+      // Large voucher numerals can be dropped by page segmentation while "S/" survives.
+      // Re-read that actual line's neighborhood, not a fixed bank-specific screen position.
+      if (mode === modes[0]) {
+        const dimensions = imageSize(buffer);
+        const lines = result.data.blocks?.flatMap(block => block.paragraphs.flatMap(paragraph => paragraph.lines)) ?? [];
+        for (const line of lines.filter(line => /^[sS5]\s*\/\s*\.?\s*$/.test(line.text.trim())).slice(0, 2)) {
+          if (expired) throw new UserError(messages.timeout, 504);
+          const height = line.bbox.y1 - line.bbox.y0;
+          const left = Math.max(0, line.bbox.x0 - Math.ceil(height * 0.25));
+          const top = Math.max(0, line.bbox.y0 - Math.ceil(height * 0.15));
+          const bottom = Math.min(dimensions.height!, line.bbox.y1 + Math.ceil(height * 0.15));
+          const right = Math.min(dimensions.width!, line.bbox.x1 + Math.ceil(height * 2));
+          await current.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE });
+          const focused = await current.recognize(buffer, { rectangle: { left, top, width: right - left, height: bottom - top } });
+          // Keep only a complete, explicit currency+amount line, never arbitrary cropped numbers.
+          const value = focused.data.text.trim();
+          if (/^[sS5]\s*\/\s*\.?\s*\d+(?:[.,]\d{1,3})*\s*$/.test(value)) texts[0] += `\n${value}`;
+        }
+      }
     }
     return { texts, confidence: Math.round(confidence) };
   })();

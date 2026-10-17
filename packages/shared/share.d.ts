@@ -26,6 +26,7 @@ export type ShareExpense = {
   descripcion: string;
   montoTotal: number;
   pagador: { nombre: string };
+  pagadores?: { monto: number; usuario: { nombre: string } }[];
   participantes: { usuario: { nombre: string }; montoAsignado: number }[];
 };
 export type ShareGroup = {

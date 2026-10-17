@@ -10,6 +10,7 @@ import {
   allocatePercentages,
   allocateShares,
 } from "../domain/money";
+import { validatePayers } from '../domain/expensePayers';
 import { allocateParts } from "../domain/billParts";
 import type { Prisma } from "@prisma/client";
 import { requireOpenGroup, groupEvent } from './groupLifecycle.service';
@@ -22,6 +23,8 @@ export async function crearGasto(
   origen?: { recurrenteId: string; occurrence: string; next: string },
 ) {
   const participanteData = calcularParticipantes(input);
+  const pagadores = validatePayers(input);
+  if (input.partes !== undefined && input.pagadores) throw new Error('Las cuentas antiguas por partes admiten un solo pagador. Usa un gasto con integrantes definidos.');
   let result;
   try {
     result = await prisma.$transaction(async (tx) => {
@@ -40,7 +43,7 @@ export async function crearGasto(
         return { gasto: previo, repetido: true };
       }
       await requireOpenGroup(tx, grupoId);
-      await validarMiembros(grupoId, input.pagadoPor, input.participantes.map((p) => p.usuarioId), tx);
+      await validarMiembros(grupoId, input.pagadoPor, [...input.participantes.map((p) => p.usuarioId), ...pagadores.map(p => p.usuarioId)], tx);
       const gasto = await tx.gasto.create({
         data: {
           solicitudId: input.solicitudId,
@@ -55,12 +58,14 @@ export async function crearGasto(
           fecha: input.fecha ? new Date(input.fecha) : new Date(),
           recurrenteId: origen?.recurrenteId,
           participantes: { create: participanteData },
+          ...(input.pagadores ? { pagadores: { create: pagadores } } : {}),
         },
         include: {
           participantes: {
             include: { usuario: { select: { id: true, nombre: true, fotoUrl: true } } },
           },
           pagador: { select: { id: true, nombre: true, fotoUrl: true } },
+      pagadores: { include: { usuario: { select: { id: true, nombre: true, fotoUrl: true } } }, orderBy: { usuarioId: 'asc' } },
           creador: { select: { id: true, nombre: true } },
         },
       });
@@ -89,17 +94,21 @@ async function gastoPorSolicitud(grupoId: string, input: CrearGastoInput, creado
     include: {
       participantes: { include: { usuario: { select: { id: true, nombre: true, fotoUrl: true } } } },
       pagador: { select: { id: true, nombre: true, fotoUrl: true } },
+      pagadores: { include: { usuario: { select: { id: true, nombre: true, fotoUrl: true } } }, orderBy: { usuarioId: 'asc' } },
       creador: { select: { id: true, nombre: true } },
     },
   });
   if (!previo) return null;
   const allocation = calcularParticipantes(input);
+  const requestedPayers = validatePayers(input);
+  const savedPayers = previo.pagadores.length ? previo.pagadores : [{ usuarioId: previo.pagadoPor, monto: previo.montoTotal }];
+  const samePayers = savedPayers.length === requestedPayers.length && requestedPayers.every(p => savedPayers.some(saved => saved.usuarioId === p.usuarioId && saved.monto === p.monto));
   const sameParts = previo.participantes.length === allocation.length && allocation.every((part) =>
     previo.participantes.some((saved) => saved.usuarioId === part.usuarioId && saved.montoAsignado === part.montoAsignado),
   );
   if (!previo.activo || previo.grupoId !== grupoId || previo.montoTotal !== input.montoTotal || previo.descripcion !== input.descripcion || previo.pagadoPor !== input.pagadoPor ||
     previo.categoria !== input.categoria || previo.partes !== (input.partes ?? null) || (previo.notas ?? "") !== (input.notas ?? "") ||
-    (input.fecha !== undefined && previo.fecha.getTime() !== new Date(input.fecha).getTime()) || !sameParts)
+    (input.fecha !== undefined && previo.fecha.getTime() !== new Date(input.fecha).getTime()) || !sameParts || !samePayers)
     throw new Error("Este envío ya guardó un gasto distinto. Revisa los gastos del grupo antes de volver a guardar.", 409);
   return previo;
 }
@@ -184,10 +193,11 @@ async function notificarParticipantes(
       montoAsignado: number;
     }>;
     pagador: { id: string; nombre: string };
+    pagadores?: Array<{ usuario: { nombre: string } }>;
   },
   creadoPor: string,
 ) {
-  const pagadorNombre = gasto.pagador.nombre;
+  const pagadorNombre = gasto.pagadores?.length ? gasto.pagadores.map(p => p.usuario.nombre).join(', ') : gasto.pagador.nombre;
   const { moneda } = await prisma.grupo.findUniqueOrThrow({ where: { id: gasto.grupoId }, select: { moneda: true } });
 
   for (const participante of gasto.participantes) {
@@ -233,6 +243,7 @@ export async function getGastosGrupo(
           },
         },
         pagador: { select: { id: true, nombre: true, fotoUrl: true } },
+      pagadores: { include: { usuario: { select: { id: true, nombre: true, fotoUrl: true } } }, orderBy: { usuarioId: 'asc' } },
         creador: { select: { id: true, nombre: true } },
         _count: { select: { comentarios: { where: { eliminado: false } } } },
       },
@@ -265,6 +276,7 @@ export async function getGastoDetalle(gastoId: string, usuarioId: string, db: Pr
         },
       },
       pagador: { select: { id: true, nombre: true, fotoUrl: true } },
+      pagadores: { include: { usuario: { select: { id: true, nombre: true, fotoUrl: true } } }, orderBy: { usuarioId: 'asc' } },
       creador: { select: { id: true, nombre: true } },
     },
   });
@@ -285,7 +297,8 @@ export async function getGastoDetalle(gastoId: string, usuarioId: string, db: Pr
  */
 async function involvesFormerMembers(gasto: { id: string; grupoId: string; pagadoPor: string }, tx: Prisma.TransactionClient) {
   const participantes = await tx.gastoParticipante.findMany({ where: { gastoId: gasto.id }, select: { usuarioId: true } });
-  const ids = [...new Set([gasto.pagadoPor, ...participantes.map((p) => p.usuarioId)])];
+  const pagadores = await tx.gastoAporte.findMany({ where: { gastoId: gasto.id }, select: { usuarioId: true } });
+  const ids = [...new Set([gasto.pagadoPor, ...pagadores.map(p => p.usuarioId), ...participantes.map((p) => p.usuarioId)])];
   const activos = await tx.grupoMiembro.count({ where: { grupoId: gasto.grupoId, usuarioId: { in: ids }, activo: true, usuario: { activo: true } } });
   return activos !== ids.length;
 }
@@ -305,11 +318,9 @@ export async function editarGasto(
     const miembro = await tx.grupoMiembro.findFirst({
       where: { grupoId: gasto.grupoId, usuarioId, activo: true, grupo: { activo: true } },
     });
-    const esCreador = gasto.creadoPor === usuarioId;
-    const esAdmin = miembro?.rol === "admin";
-
-    if (!miembro || (!esCreador && !esAdmin))
-      throw new Error("No tienes permisos para editar este gasto");
+    // Like a shared notebook, anyone in the group can correct an expense (someone paid more, or
+    // dropped out). Every change is kept with its before/after in the group's history.
+    if (!miembro) throw new Error("No tienes permisos para editar este gasto");
     await requireOpenGroup(tx, gasto.grupoId);
     const antes = await expenseSnapshot(tx, gastoId);
 
@@ -327,14 +338,23 @@ export async function editarGasto(
       );
     }
 
-    if ((cambiaDivision || (input.pagadoPor && input.pagadoPor !== gasto.pagadoPor)) && (await involvesFormerMembers(gasto, tx)))
+    const savedPayers = await tx.gastoAporte.findMany({ where: { gastoId } });
+    const changesMoney = cambiaDivision || input.pagadoPor !== undefined || input.pagadores !== undefined;
+    // Old APKs must not silently replace a multi-payer expense with their single payer field.
+    if (savedPayers.length > 1 && changesMoney && input.pagadores === undefined)
+      throw new Error('Este gasto tiene varios pagadores. Actualiza JUNTO para cambiar sus importes o participantes.', 409);
+    const nextPayers = validatePayers({ montoTotal: input.montoTotal ?? gasto.montoTotal, pagadoPor: input.pagadoPor ?? gasto.pagadoPor,
+      pagadores: input.pagadores ?? (!changesMoney && savedPayers.length ? savedPayers : undefined) });
+    if (input.pagadores && (input.partes ?? gasto.partes) !== null && (input.partes ?? gasto.partes) !== undefined)
+      throw new Error('Cambia primero la cuenta por partes a un gasto con integrantes definidos.');
+    if ((input.pagadores !== undefined || cambiaDivision || (input.pagadoPor && input.pagadoPor !== gasto.pagadoPor)) && (await involvesFormerMembers(gasto, tx)))
       throw new Error(FORMER_MEMBER, 409);
 
-    if (input.pagadoPor || input.participantes) {
+    if (changesMoney) {
       await validarMiembros(
         gasto.grupoId,
         input.pagadoPor ?? gasto.pagadoPor,
-        input.participantes?.map((participante) => participante.usuarioId) ?? [],
+        [...(input.participantes?.map((participante) => participante.usuarioId) ?? []), ...nextPayers.map(p => p.usuarioId)],
         tx,
       );
     }
@@ -355,6 +375,10 @@ export async function editarGasto(
         fecha: input.fecha ? new Date(input.fecha) : undefined,
       },
     });
+    if (changesMoney) {
+      await tx.gastoAporte.deleteMany({ where: { gastoId } });
+      if (input.pagadores) await tx.gastoAporte.createMany({ data: nextPayers.map(p => ({ ...p, gastoId })) });
+    }
     if (participanteData) {
       await tx.gastoParticipante.deleteMany({ where: { gastoId } });
       await tx.gastoParticipante.createMany({
@@ -402,6 +426,6 @@ export async function eliminarGasto(gastoId: string, usuarioId: string) {
 }
 
 async function expenseSnapshot(tx: Prisma.TransactionClient, id: string) {
-  const expense = await tx.gasto.findUniqueOrThrow({ where: { id }, select: { descripcion: true, montoTotal: true, pagadoPor: true, categoria: true, fecha: true, notas: true, partes: true, participantes: { select: { usuarioId: true, montoAsignado: true }, orderBy: { usuarioId: 'asc' } } } });
+  const expense = await tx.gasto.findUniqueOrThrow({ where: { id }, select: { descripcion: true, montoTotal: true, pagadoPor: true, categoria: true, fecha: true, notas: true, partes: true, pagadores: { select: { usuarioId: true, monto: true }, orderBy: { usuarioId: 'asc' } }, participantes: { select: { usuarioId: true, montoAsignado: true }, orderBy: { usuarioId: 'asc' } } } });
   return { ...expense, fecha: expense.fecha.toISOString() };
 }

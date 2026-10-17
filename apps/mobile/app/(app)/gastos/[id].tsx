@@ -22,6 +22,7 @@ import {
 } from "../../../src/components/ui/Design";
 import { formatMoney } from "@junto/shared/currency";
 import { canAddExpenses } from '../../../src/lib/groupLifecycle';
+import { MoneyText } from '../../../src/components/ui/MoneyText';
 export default function ExpenseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const user = useAuthStore((s) => s.usuario);
@@ -75,15 +76,23 @@ export default function ExpenseDetail() {
             <Label size={24} weight="extra">
               {expense.descripcion}
             </Label>
-            <Label size={34} weight="extra">
+            <MoneyText size={28}>
               {money(expense.montoTotal)}
-            </Label>
-            <Label>{expense.pagadoPor === user?.id ? "Tú adelantaste este dinero." : `${expense.pagador.nombre} adelantó este dinero.`}</Label>
+            </MoneyText>
+            {(expense.pagadores?.length ?? 0) > 1 ? <>
+              <Label weight="bold" size={15}>Quiénes adelantaron el dinero</Label>
+              {expense.pagadores!.map(p => <View key={p.usuarioId} style={{ gap: 4 }}><Label size={14}>{p.usuario.nombre}{p.usuarioId === user?.id ? ' (tú)' : ''}</Label><MoneyText size={19}>{money(p.monto)}</MoneyText></View>)}
+            </> : <Label>{expense.pagadoPor === user?.id ? "Tú adelantaste este dinero." : `${expense.pagador.nombre} adelantó este dinero.`}</Label>}
             <Label size={13} color={palette.muted}>
               {new Date(expense.fecha).toLocaleDateString("es-PE")} ·{" "}
               {expense.categoria}
             </Label>
           </Card>
+          {!!group && canAddExpenses(group) && <>
+            <Button title="Editar gasto" onPress={() => router.push({ pathname: "/(app)/gastos/editar", params: { grupoId: expense.grupoId, gastoId: expense.id } })} />
+            <Label size={13} color={palette.muted}>Cambia el monto, quién pagó, quién participa y cuánto le toca. El grupo verá el cambio en su historial; los pagos registrados no se borran.</Label>
+          </>}
+          {!!group && !canAddExpenses(group) && <Label size={13} color={palette.muted}>El grupo está cerrado. Un administrador debe reabrirlo para editar gastos.</Label>}
           <Card>
             <Label weight="extra" size={20}>
               Parte de cada persona
@@ -125,18 +134,6 @@ export default function ExpenseDetail() {
             }
           />
           <Button title="Ver cambios del grupo" secondary onPress={() => router.push(`/(app)/grupos/movimientos?grupoId=${expense.grupoId}`)} />
-          {!!group && canAddExpenses(group) && (expense.creadoPor === user?.id ||
-            group?.rolUsuario === "admin") && (
-            <Button
-              title="Corregir este gasto"
-              onPress={() =>
-                router.push({
-                  pathname: "/(app)/gastos/editar",
-                  params: { grupoId: expense.grupoId, gastoId: expense.id },
-                })
-              }
-            />
-          )}
           {!!group && canAddExpenses(group) && (expense.creadoPor === user?.id ||
             group?.rolUsuario === "admin") && (
             <Button

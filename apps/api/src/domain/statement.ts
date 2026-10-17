@@ -3,9 +3,11 @@
  * received, oldest first, with a running balance. Only confirmed payments move the balance; reported
  * or rejected ones are listed with zero effect. The last balance equals the ledger's net exactly.
  */
+import { expensePayers, type ExpensePayer } from './expensePayers';
 export interface StatementExpense {
   id: string; descripcion: string; categoria: string; fecha: Date; fechaRegistro: Date;
   montoTotal: number; pagadoPor: string; pagadorNombre: string;
+  pagadores?: ExpensePayer[];
   participantes: Array<{ usuarioId: string; montoAsignado: number }>;
 }
 export interface StatementPayment {
@@ -24,7 +26,7 @@ export function buildStatement(userId: string, expenses: StatementExpense[], pay
   const rows: Row[] = [];
   for (const e of expenses) {
     const tuParte = e.participantes.filter((p) => p.usuarioId === userId).reduce((sum, p) => sum + p.montoAsignado, 0);
-    const pagaste = e.pagadoPor === userId ? e.montoTotal : 0;
+    const pagaste = expensePayers(e).filter(p => p.usuarioId === userId).reduce((sum, p) => sum + p.monto, 0);
     if (!tuParte && !pagaste) continue; // Not yours: it does not change your balance.
     const efecto = pagaste - tuParte;
     rows.push({ at: e.fechaRegistro.getTime(), key: `gasto-${e.id}`, efecto, make: (saldo) => ({

@@ -68,7 +68,7 @@ export async function quitarIntegrante(grupoId: string, userId: string, integran
     const member = await sinCuentaActivo(tx, grupoId, integranteId);
     const [parte, pagado, pagos] = await Promise.all([
       tx.gastoParticipante.count({ where: { usuarioId: integranteId, gasto: { grupoId, activo: true } } }),
-      tx.gasto.count({ where: { grupoId, activo: true, pagadoPor: integranteId } }),
+      tx.gasto.count({ where: { grupoId, activo: true, OR: [{ pagadoPor: integranteId }, { pagadores: { some: { usuarioId: integranteId } } }] } }),
       tx.pago.count({ where: { grupoId, OR: [{ pagadorId: integranteId }, { receptorId: integranteId }] } }),
     ]);
     if (parte || pagado || pagos) throw new Error("Esta persona ya está en gastos o pagos del grupo. Corrige esos gastos antes de quitarla.", 409);
@@ -80,7 +80,7 @@ export async function quitarIntegrante(grupoId: string, userId: string, integran
 /** Paid an expense or received a payment: taking their place means collecting money. */
 export async function tieneDineroPorRecibir(tx: Tx, grupoId: string, integranteId: string) {
   const [pagado, recibido] = await Promise.all([
-    tx.gasto.count({ where: { grupoId, activo: true, pagadoPor: integranteId } }),
+    tx.gasto.count({ where: { grupoId, activo: true, OR: [{ pagadoPor: integranteId }, { pagadores: { some: { usuarioId: integranteId } } }] } }),
     tx.pago.count({ where: { grupoId, receptorId: integranteId, estado: { in: ["reportado", "exitoso"] } } }),
   ]);
   return pagado + recibido > 0;
@@ -112,6 +112,14 @@ export async function heredar(tx: Tx, grupoId: string, desdeId: string, haciaId:
     } else {
       await tx.gastoParticipante.update({ where: { id: part.id }, data: { usuarioId: haciaId } });
     }
+  }
+  const advances = await tx.gastoAporte.findMany({ where: { usuarioId: desdeId, gasto: { grupoId } } });
+  for (const advance of advances) {
+    const own = await tx.gastoAporte.findUnique({ where: { gastoId_usuarioId: { gastoId: advance.gastoId, usuarioId: haciaId } } });
+    if (own) {
+      await tx.gastoAporte.update({ where: { id: own.id }, data: { monto: { increment: advance.monto } } });
+      await tx.gastoAporte.delete({ where: { id: advance.id } });
+    } else await tx.gastoAporte.update({ where: { id: advance.id }, data: { usuarioId: haciaId } });
   }
   await tx.gasto.updateMany({ where: { grupoId, pagadoPor: desdeId }, data: { pagadoPor: haciaId } });
   await tx.gasto.updateMany({ where: { grupoId, creadoPor: desdeId }, data: { creadoPor: haciaId } });
