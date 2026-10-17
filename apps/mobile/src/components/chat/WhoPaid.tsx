@@ -128,7 +128,7 @@ export function WhoPaid({ group, payments = [], userId, visible, onClose, onPay,
                   </View>
                   {noApp && (!group.estado || group.estado === 'abierto') && (
                     <View style={{ flexDirection: "row", gap: 8 }}>
-                      <View style={{ flex: 1 }}><Button compact secondary title="Enviar su enlace" onPress={() => onShare(member)} /></View>
+                      <View style={{ flex: 1 }}><Button compact secondary title={member.usuario.celular ? "Avisar por WhatsApp" : "Enviar su enlace"} onPress={() => onShare(member)} /></View>
                       {admin && <View style={{ flex: 1 }}><Button compact secondary title="Ya se unió" onPress={() => onLink(member)} /></View>}
                     </View>
                   )}

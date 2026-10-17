@@ -177,7 +177,100 @@ async function run() {
     await call(`/grupos/${solo.id}/salir`, stranger, 'DELETE');
     assert.equal((await db.grupo.findUniqueOrThrow({ where: { id: solo.id } })).activo, false);
 
-    console.log('PASS: members by name at creation, S/ 300 split, birthday excluded, trip with several payers, no login/OTP/reminders for names, cash recorded by receiver (capped), shared link may only claim people who owe, personal link claims credit once, admin linking, removal rules, totals constant. No external sends.');
+    // 10. Agenda contact with celular: stores phone on placeholder, links invitation when matching 1 account,
+    // inherits debt on accept (unless placeholder has money to receive), and records durable expense notices.
+    async function personWithPhone(name, celular) {
+      const email = `qa-names-${name.toLowerCase()}-${suffix}@example.invalid`;
+      await call('/auth/register', null, 'POST', { nombre: name + ' QA', email, celular, password: `NamesQA${suffix}!` }, 201);
+      const user = await db.usuario.findUniqueOrThrow({ where: { email } });
+      return { email, ...await call('/auth/verify-email', null, 'POST', { email, otp: user.otpCode }) };
+    }
+    const phoneDebtor = `9${String((Date.now() + 11) % 100000000).padStart(8, '0')}`;
+    const phoneCreditor = `9${String((Date.now() + 22) % 100000000).padStart(8, '0')}`;
+    const phoneNoAccount = `9${String((Date.now() + 33) % 100000000).padStart(8, '0')}`;
+    const carlaPhone = `9${String((Date.now() + 44) % 100000000).padStart(8, '0')}`;
+    const [sofiaReal, diegoReal, carlaReal] = await Promise.all([
+      personWithPhone('SofiaAgenda', phoneDebtor),
+      personWithPhone('DiegoAgenda', phoneCreditor),
+      personWithPhone('CarlaAgenda', carlaPhone),
+    ]);
+
+    const agendaGroup = await call('/grupos', caleb, 'POST', {
+      nombre: `Agenda ${suffix}`,
+      integrantes: [
+        { nombre: 'Sofía Agenda', celular: `+51 ${phoneDebtor.slice(0, 3)} ${phoneDebtor.slice(3, 6)} ${phoneDebtor.slice(6)}` },
+        { nombre: 'Rosa WhatsApp', celular: phoneNoAccount },
+      ],
+    }, 201);
+    await call(`/grupos/${agendaGroup.id}/integrantes`, caleb, 'POST', {
+      integrantes: [{ nombre: 'Diego Agenda', celular: phoneCreditor }],
+    }, 201);
+
+    const agendaDetail = await detail(caleb, agendaGroup.id);
+    const sofiaPlaceholder = byName(agendaDetail, 'Sofía Agenda');
+    const rosaPlaceholder = byName(agendaDetail, 'Rosa WhatsApp');
+    const diegoPlaceholder = byName(agendaDetail, 'Diego Agenda');
+    assert.equal(sofiaPlaceholder.usuario.sinCuenta, true);
+    assert.equal(sofiaPlaceholder.usuario.celular, phoneDebtor);
+    assert.equal(rosaPlaceholder.usuario.celular, phoneNoAccount);
+    assert.equal(diegoPlaceholder.usuario.celular, phoneCreditor);
+
+    // Carla joins as a registered user so we can verify durable expense notices.
+    await call(`/grupos/${agendaGroup.id}/invitar`, caleb, 'POST', { identificador: carlaPhone });
+    const carlaInv = (await call('/invitaciones', carlaReal)).find((i) => i.grupo.id === agendaGroup.id);
+    await call(`/invitaciones/${carlaInv.id}/aceptar`, carlaReal, 'POST');
+
+    // Sofia owes S/ 40; Carla owes S/ 40.
+    const cenaReal = await call(`/grupos/${agendaGroup.id}/gastos`, caleb, 'POST', {
+      descripcion: 'Cena',
+      montoTotal: 12000,
+      pagadoPor: caleb.usuario.id,
+      participantes: [
+        { usuarioId: caleb.usuario.id },
+        { usuarioId: sofiaPlaceholder.usuarioId },
+        { usuarioId: carlaReal.usuario.id },
+      ],
+    }, 201);
+    assert.equal(cenaReal.montoTotal, 12000);
+
+    // Durable expense notice for registered participant Carla: "Caleb agregó «Cena»: tu parte S/ 40"
+    const carlaNotifs = await call('/notificaciones', carlaReal);
+    const expenseNotice = carlaNotifs.find((a) => a.grupo.id === agendaGroup.id && a.tipo === 'gasto_registrado');
+    assert.ok(expenseNotice, 'registered participant receives durable gasto_registrado notice');
+    assert.equal(expenseNotice.mensaje, 'Caleb agregó «Cena»: tu parte S/ 40');
+
+    // Diego placeholder pays S/ 60 so he has money to receive.
+    await call(`/grupos/${agendaGroup.id}/gastos`, caleb, 'POST', {
+      descripcion: 'Taxis',
+      montoTotal: 6000,
+      pagadoPor: diegoPlaceholder.usuarioId,
+      participantes: [
+        { usuarioId: caleb.usuario.id },
+        { usuarioId: diegoPlaceholder.usuarioId },
+      ],
+    }, 201);
+
+    // Sofía has a linked invitation and owes money (no money to receive) -> accepting auto-inherits her placeholder!
+    const sofiaInv = (await call('/invitaciones', sofiaReal)).find((i) => i.grupo.id === agendaGroup.id);
+    assert.ok(sofiaInv, 'Sofía received an invitation automatically when added from agenda with matching phone');
+    await call(`/invitaciones/${sofiaInv.id}/aceptar`, sofiaReal, 'POST');
+    const afterSofia = await detail(caleb, agendaGroup.id);
+    assert.ok(!byName(afterSofia, 'Sofía Agenda'), 'Sofía placeholder was inherited automatically');
+    assert.ok(afterSofia.miembros.some((m) => m.usuarioId === sofiaReal.usuario.id && !m.usuario.sinCuenta), 'Sofía real account is now in the group');
+    assert.equal(account(afterSofia, sofiaReal.usuario.id).neto, -4000, 'Sofía inherited her S/ 40 debt');
+
+    // Diego has a linked invitation AND has money to receive -> accepting only joins the group; admin must link via Ya se unió.
+    const diegoInv = (await call('/invitaciones', diegoReal)).find((i) => i.grupo.id === agendaGroup.id);
+    assert.ok(diegoInv, 'Diego received an invitation automatically when added via agregarIntegrantes with matching phone');
+    await call(`/invitaciones/${diegoInv.id}/aceptar`, diegoReal, 'POST');
+    let afterDiego = await detail(caleb, agendaGroup.id);
+    assert.ok(byName(afterDiego, 'Diego Agenda'), 'Diego placeholder remains active because he has money to receive');
+    assert.ok(afterDiego.miembros.some((m) => m.usuarioId === diegoReal.usuario.id && !m.usuario.sinCuenta), 'Diego real account joined the group');
+    await call(`/grupos/${agendaGroup.id}/integrantes/${diegoPlaceholder.usuarioId}/unir`, caleb, 'POST', { usuarioId: diegoReal.usuario.id });
+    afterDiego = await detail(caleb, agendaGroup.id);
+    assert.equal(account(afterDiego, diegoReal.usuario.id).neto, 3000, 'Admin linked Diego so he receives his S/ 30 credit');
+
+    console.log('PASS: members by name at creation, S/ 300 split, birthday excluded, trip with several payers, no login/OTP/reminders for names, cash recorded by receiver (capped), shared link may only claim people who owe, personal link claims credit once, admin linking, removal rules, agenda phones & linked invitations, expense notices, totals constant. No external sends.');
   } finally { server.child.kill(); smtp.close(); await db.$disconnect(); }
 }
 run().catch((error) => { console.error(error.message); process.exitCode = 1; });

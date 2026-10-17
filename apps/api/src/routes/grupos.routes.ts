@@ -50,11 +50,16 @@ router.get('/:id/movimientos', async (req, res, next) => {
     res.json(await groupHistory(req.user!.userId, z.string().uuid().parse(req.params.id), historyQuery.parse(req.query)));
   } catch (error) { next(error); }
 });
+import { integranteEntradaSchema } from "../schemas/grupos.schema";
+
 // People added by name before they have JUNTO.
 router.post("/:id/integrantes", async (req, res, next) => {
   try {
-    const { nombres } = z.object({ nombres: z.array(z.string().max(60)).min(1).max(30) }).strict().parse(req.body);
-    res.status(201).json(await agregarIntegrantes(z.string().uuid().parse(req.params.id), req.user!.userId, nombres));
+    const body = z.object({
+      nombres: z.array(integranteEntradaSchema).min(1).max(30).optional(),
+      integrantes: z.array(integranteEntradaSchema).min(1).max(30).optional(),
+    }).strict().refine((v) => (v.integrantes ?? v.nombres)?.length, "Indica al menos una persona.").parse(req.body);
+    res.status(201).json(await agregarIntegrantes(z.string().uuid().parse(req.params.id), req.user!.userId, (body.integrantes ?? body.nombres)!));
   } catch (error) { next(error); }
 });
 router.delete("/:id/integrantes/:integranteId", async (req, res, next) => {

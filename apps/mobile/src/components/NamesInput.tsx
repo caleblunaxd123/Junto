@@ -7,14 +7,21 @@ import { Avatar, Label, palette, design } from "./ui/Design";
 type PhoneContact = { id: string; name: string; phone?: string; key: string };
 const fold = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es");
 
+export function normalizeContactPhone(raw?: string | null) {
+  if (!raw) return undefined;
+  const digits = raw.replace(/\D/g, "");
+  const local = digits.length === 11 && digits.startsWith("519") ? digits.slice(2) : digits;
+  return /^9\d{8}$/.test(local) ? local : undefined;
+}
+
 /**
  * Type a name, press Agregar: people who will share expenses, even without JUNTO yet. With the
  * agenda allowed, the same field searches the phone's contacts as you type (like Yape) and one tap
  * adds each person. Contacts are read on the phone only: nothing is uploaded.
  */
-export function NamesInput({ names, onChange, taken = [], disabled = false, autoFocus = false, collapsible = false, onPendingChange }: {
-  names: string[]; onChange: (names: string[]) => void; taken?: string[]; disabled?: boolean; autoFocus?: boolean;
-  collapsible?: boolean; onPendingChange?: (value: string) => void;
+export function NamesInput({ names, onChange, phones, onPhones, taken = [], disabled = false, autoFocus = false, collapsible = false, onPendingChange }: {
+  names: string[]; onChange: (names: string[]) => void; phones?: Record<string, string>; onPhones?: (phones: Record<string, string>) => void;
+  taken?: string[]; disabled?: boolean; autoFocus?: boolean; collapsible?: boolean; onPendingChange?: (value: string) => void;
 }) {
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
@@ -24,12 +31,21 @@ export function NamesInput({ names, onChange, taken = [], disabled = false, auto
   const pickerLock = useRef(false);
   const input = useRef<TextInput>(null);
   useEffect(() => { if (expanded && collapsible) input.current?.focus(); }, [expanded, collapsible]);
-  function add(raw = value) {
+  function add(raw = value, rawPhone?: string) {
     const name = raw.replace(/\s+/g, " ").trim();
     if (!name) return;
     if (name.length > 60) return setError("Usa un nombre más corto (hasta 60 letras).");
     const key = name.toLocaleLowerCase("es");
     if ([...taken, ...names].some((n) => n.toLocaleLowerCase("es") === key)) return setError(`«${name}» ya está. Agrega su apellido para distinguirlos.`);
+    const cleanPhone = normalizeContactPhone(rawPhone);
+    if (onPhones) {
+      if (cleanPhone) onPhones({ ...phones, [name]: cleanPhone });
+      else if (phones?.[name]) {
+        const next = { ...phones };
+        delete next[name];
+        onPhones(next);
+      }
+    }
     onChange([...names, name]);
     setValue("");
     onPendingChange?.("");
@@ -49,7 +65,7 @@ export function NamesInput({ names, onChange, taken = [], disabled = false, auto
       const { data } = await api.getContactsAsync({ fields: [api.Fields.Name, api.Fields.FirstName, api.Fields.LastName, api.Fields.PhoneNumbers], sort: api.SortTypes.FirstName, pageSize: 3000 });
       const list = data.map((c: ExistingContact) => {
         const name = (c.name || [c.firstName, c.lastName].filter(Boolean).join(" ")).replace(/\s+/g, " ").trim();
-        const phone = c.phoneNumbers?.[0]?.number;
+        const phone = c.phoneNumbers?.map((p) => normalizeContactPhone(p.number)).find(Boolean) ?? c.phoneNumbers?.[0]?.number;
         return { id: c.id ?? name, name, phone, key: fold(`${name} ${phone ?? ""}`) };
       }).filter((c) => c.name);
       setContacts(list);
@@ -72,7 +88,14 @@ export function NamesInput({ names, onChange, taken = [], disabled = false, auto
             <View key={name} style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingLeft: 6, paddingRight: 2, minHeight: 48, borderRadius: 24, backgroundColor: palette.mint, borderWidth: 1, borderColor: palette.line }}>
               <Avatar name={name} size={30} />
               <Label size={14} weight="bold">{name}</Label>
-              <Pressable accessibilityRole="button" accessibilityLabel={`Quitar a ${name}`} disabled={disabled} onPress={() => onChange(names.filter((n) => n !== name))} style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Quitar a ${name}`} disabled={disabled} onPress={() => {
+                if (phones && onPhones && phones[name]) {
+                  const next = { ...phones };
+                  delete next[name];
+                  onPhones(next);
+                }
+                onChange(names.filter((n) => n !== name));
+              }} style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}>
                 <Ionicons name="close" size={18} color={palette.muted} />
               </Pressable>
             </View>
@@ -105,7 +128,7 @@ export function NamesInput({ names, onChange, taken = [], disabled = false, auto
         <Ionicons name="add-circle-outline" size={26} color={palette.positive} /><Label size={16} weight="bold" color={palette.positive}>Agregar persona</Label>
       </Pressable>}
       {matches.length > 0 && <View accessibilityLabel="Contactos que coinciden" style={{ borderRadius: 16, borderWidth: 1, borderColor: palette.line, backgroundColor: "white", overflow: "hidden" }}>
-        {matches.map((c, i) => <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`Agregar a ${c.name}`} disabled={disabled} onPress={() => add(c.name)}
+        {matches.map((c, i) => <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`Agregar a ${c.name}`} disabled={disabled} onPress={() => add(c.name, c.phone)}
           style={{ minHeight: 56, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 12, borderTopWidth: i ? 1 : 0, borderTopColor: palette.line }}>
           <Avatar name={c.name} size={34} />
           <View style={{ flex: 1, minWidth: 0 }}>

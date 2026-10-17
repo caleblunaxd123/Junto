@@ -22,6 +22,7 @@ export default function CreateGroup() {
   const [country, setCountry] = useState<CountryCode>("PE");
   const [currency, setCurrency] = useState<CurrencyCode>("PEN");
   const [people, setPeople] = useState<string[]>([]);
+  const [phones, setPhones] = useState<Record<string, string>>({});
   const [deadline, setDeadline] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -58,7 +59,7 @@ export default function CreateGroup() {
         tipo: guessGroupType(name) ?? "amigos",
         // Whoever created the group can confirm payments for people who don't have the app yet.
         aprobacionPagos: "administrador",
-        ...(people.length ? { integrantes: people } : {}),
+        ...(people.length ? { integrantes: people.map((nombre) => phones[nombre] ? { nombre, celular: phones[nombre] } : nombre) } : {}),
         ...(deadline ? { fechaLimite: deadline } : {}),
       }).then((r) => r.data);
       setCreatedId(group.id);
@@ -103,7 +104,7 @@ export default function CreateGroup() {
           <Avatar name={user?.nombre || "Tú"} photo={user?.fotoUrl} seed={user?.id} size={30} />
           <Label size={14} weight="bold" color="#007B60">{user?.nombre.split(" ")[0] || "Tú"} (tú)</Label>
         </View>
-        <NamesInput names={people} onChange={(next) => { setPeople(next); setError(""); }} taken={user?.nombre ? [user.nombre] : []} disabled={busy || !!createdId} collapsible onPendingChange={setPendingPerson} />
+        <NamesInput names={people} onChange={(next) => { setPeople(next); setError(""); }} phones={phones} onPhones={setPhones} taken={user?.nombre ? [user.nombre] : []} disabled={busy || !!createdId} collapsible onPendingChange={setPendingPerson} />
       </View>
 
       </Card>

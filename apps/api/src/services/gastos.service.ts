@@ -14,6 +14,7 @@ import { validatePayers } from '../domain/expensePayers';
 import { allocateParts } from "../domain/billParts";
 import type { Prisma } from "@prisma/client";
 import { requireOpenGroup, groupEvent } from './groupLifecycle.service';
+import { expenseNoticeText, saveExpenseNotices } from './groupNotices.service';
 
 export async function crearGasto(
   grupoId: string,
@@ -69,6 +70,7 @@ export async function crearGasto(
           creador: { select: { id: true, nombre: true } },
         },
       });
+      await saveExpenseNotices(tx, { id: gasto.id, grupoId, creadoPor, participantes: participanteData });
       // Expense and next date commit together: a crash cannot leave a half-advanced rule.
       if (origen) await tx.gastoRecurrente.update({ where: { id: origen.recurrenteId }, data: { proximaFecha: new Date(`${origen.next}T00:00:00Z`) } });
       return { gasto, repetido: false };
@@ -81,7 +83,7 @@ export async function crearGasto(
   }
 
   // Send notifications to participants (non-blocking)
-  if (!result.repetido) notificarParticipantes(result.gasto, creadoPor).catch((err) =>
+  if (!result.repetido) await notificarParticipantes(result.gasto, creadoPor).catch((err) =>
     console.error("[Notification] Failed to notify participants:", describeError(err)),
   );
   return result;
@@ -193,27 +195,27 @@ async function notificarParticipantes(
       montoAsignado: number;
     }>;
     pagador: { id: string; nombre: string };
+    creador?: { id: string; nombre: string };
     pagadores?: Array<{ usuario: { nombre: string } }>;
   },
   creadoPor: string,
 ) {
-  const pagadorNombre = gasto.pagadores?.length ? gasto.pagadores.map(p => p.usuario.nombre).join(', ') : gasto.pagador.nombre;
+  const actorNombre = gasto.creador?.nombre || gasto.pagador.nombre;
   const { moneda } = await prisma.grupo.findUniqueOrThrow({ where: { id: gasto.grupoId }, select: { moneda: true } });
 
   for (const participante of gasto.participantes) {
-    if (participante.usuario.id === creadoPor) continue;
+    if (participante.usuario.id === creadoPor || participante.montoAsignado <= 0) continue;
 
-    const usuario = await prisma.usuario.findUnique({
-      where: { id: participante.usuario.id },
+    const usuario = await prisma.usuario.findFirst({
+      where: { id: participante.usuario.id, activo: true, sinCuenta: false },
       select: { expoPushToken: true },
     });
 
     if (usuario?.expoPushToken) {
-      const montoParte = formatMoney(participante.montoAsignado, moneda);
       await sendPushNotification(
         usuario.expoPushToken,
         "Nuevo gasto registrado",
-        `${pagadorNombre} registró ${gasto.descripcion}: te tocan ${montoParte}`,
+        expenseNoticeText(actorNombre, gasto.descripcion, participante.montoAsignado, moneda),
         { grupoId: gasto.grupoId, gastoId: gasto.id, type: "nuevo_gasto" },
       );
     }

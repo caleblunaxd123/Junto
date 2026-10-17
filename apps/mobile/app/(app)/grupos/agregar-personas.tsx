@@ -14,7 +14,7 @@ import type { ShareMessage } from "../../../src/lib/shareMessage";
 import { openWhatsAppDraft, shareChannelError } from "../../../src/lib/shareChannel";
 import { invitationShareMessage, validShareEmail } from "@junto/shared/share";
 import { NamesInput } from "../../../src/components/NamesInput";
-import { personalInvite, sinCuenta } from "../../../src/lib/members";
+import { personalInvite, personalWhatsAppUrl, sinCuenta } from "../../../src/lib/members";
 import {
   Screen,
   Card,
@@ -34,6 +34,8 @@ export default function Invite() {
   const meName = useAuthStore((s) => s.usuario?.nombre ?? "");
   const labels = memberLabels(group?.miembros.map((m) => ({ ...m.usuario, id: m.usuarioId })) ?? [], meId);
   const [identifier, setIdentifier] = useState("");
+  const [phones, setPhones] = useState<Record<string, string>>({});
+  const phonesRef = React.useRef<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -119,7 +121,11 @@ export default function Invite() {
     if (!names.length || busy) return;
     try {
       setBusy(true); setError(""); setMessage("");
-      await api.post(`/grupos/${grupoId}/integrantes`, { nombres: names });
+      const currentPhones = phonesRef.current;
+      const payload = names.some((nombre) => currentPhones[nombre])
+        ? { integrantes: names.map((nombre) => currentPhones[nombre] ? { nombre, celular: currentPhones[nombre] } : { nombre }) }
+        : { nombres: names };
+      await api.post(`/grupos/${grupoId}/integrantes`, payload);
       await refetch();
       await qc.invalidateQueries({ queryKey: ["grupos"] });
       setMessage(`${names.join(", ")} ya ${names.length === 1 ? "está" : "están"} en el grupo. Envíale su enlace cuando quieras.`);
@@ -157,7 +163,7 @@ export default function Invite() {
       <Card style={{ gap: 10 }}>
         <Label size={19} weight="extra">Agrega a alguien por su nombre</Label>
         <Label size={13} color={palette.muted}>No necesita tener JUNTO: puedes anotar sus gastos desde ya y luego enviarle su enlace personal.</Label>
-        <NamesInput names={[]} onChange={(names) => { void addNames(names); }} taken={group?.miembros.map((m) => m.usuario.nombre) ?? []} disabled={busy} />
+        <NamesInput names={[]} onChange={(names) => { void addNames(names); }} phones={phones} onPhones={(next) => { phonesRef.current = next; setPhones(next); }} taken={group?.miembros.map((m) => m.usuario.nombre) ?? []} disabled={busy} />
       </Card>
       {!!error && <ErrorBox message={error} />}
       {!!message && <FeedbackBox title="Listo" tone="info" message={message} />}
@@ -178,7 +184,11 @@ export default function Invite() {
           </View>
           {sinCuenta(m) && (
             <View style={{ flexDirection: "row", gap: 8, paddingLeft: 52 }}>
-              <View style={{ flex: 2 }}><Button compact title="Enviar su enlace" disabled={busy} onPress={() => { setInitialChannel(undefined); setInitialRecipient(""); setShareNotice(""); setShareMessage(personalInvite(group, m, meName)); }} /></View>
+              <View style={{ flex: 2 }}><Button compact title={m.usuario.celular ? "Avisar por WhatsApp" : "Enviar su enlace"} disabled={busy} onPress={() => {
+                const wa = personalWhatsAppUrl(group, m, meName);
+                if (wa) void Linking.openURL(wa).catch(() => { setInitialChannel(undefined); setInitialRecipient(""); setShareNotice(""); setShareMessage(personalInvite(group, m, meName)); });
+                else { setInitialChannel(undefined); setInitialRecipient(""); setShareNotice(""); setShareMessage(personalInvite(group, m, meName)); }
+              }} /></View>
               <View style={{ flex: 1 }}><Button compact secondary title="Quitar" disabled={busy} onPress={() => { void removeName(m.usuarioId); }} /></View>
             </View>
           )}

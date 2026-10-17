@@ -49,6 +49,7 @@ model Usuario {
   correosCompartidos  CorreoCompartido[]
   invitacionesRecibidas Invitacion[]    @relation("InvitacionInvitado")
   invitacionesEnviadas  Invitacion[]    @relation("InvitacionAnfitrion")
+  invitacionesIntegrante Invitacion[]   @relation("InvitacionIntegrante")
   pagosResueltos      Pago[]            @relation("PagoResolutor")
   comprobantes        Comprobante[]
   comentarios         Comentario[]
@@ -205,13 +206,16 @@ model AvisoGrupo {
   parte        Int? // cents of the free part the newcomer took, if any
   tipo         String   @default("integrante_unido") @db.VarChar(24)
   pagoId       String?  @map("pago_id") @db.Uuid
+  gastoId      String?  @map("gasto_id") @db.Uuid
   pago         Pago?    @relation(fields: [pagoId], references: [id], onDelete: Cascade)
+  gasto        Gasto?   @relation(fields: [gastoId], references: [id], onDelete: Cascade)
   grupo        Grupo    @relation(fields: [grupoId], references: [id], onDelete: Cascade)
   usuario      Usuario  @relation("AvisoDestinatario", fields: [usuarioId], references: [id], onDelete: Cascade)
   integrante   Usuario  @relation("AvisoIntegrante", fields: [integranteId], references: [id], onDelete: Cascade)
 
   @@index([usuarioId, leido, fecha])
   @@unique([pagoId, usuarioId, tipo])
+  @@unique([gastoId, usuarioId, tipo])
   @@map("avisos_grupo")
 }
 
@@ -244,6 +248,7 @@ model Gasto {
   participantes GastoParticipante[]
   pagadores     GastoAporte[]
   comentarios  Comentario[]
+  avisos       AvisoGrupo[]
 
   @@index([grupoId])
   @@unique([creadoPor, solicitudId])
@@ -506,6 +511,7 @@ model Invitacion {
   grupoId        String    @map("grupo_id") @db.Uuid
   invitadoId     String    @map("invitado_id") @db.Uuid
   invitadoPor    String    @map("invitado_por") @db.Uuid
+  integranteId   String?   @map("integrante_id") @db.Uuid
   // pendiente | aceptada | rechazada
   estado         String    @default("pendiente") @db.VarChar(12)
   fechaCreacion  DateTime  @default(now()) @map("fecha_creacion")
@@ -514,6 +520,7 @@ model Invitacion {
   grupo          Grupo     @relation(fields: [grupoId], references: [id])
   invitado       Usuario   @relation("InvitacionInvitado", fields: [invitadoId], references: [id])
   anfitrion      Usuario   @relation("InvitacionAnfitrion", fields: [invitadoPor], references: [id])
+  integrante     Usuario?  @relation("InvitacionIntegrante", fields: [integranteId], references: [id], onDelete: SetNull)
 
   @@unique([grupoId, invitadoId])
   @@index([invitadoId, estado])

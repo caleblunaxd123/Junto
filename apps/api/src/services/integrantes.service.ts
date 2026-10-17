@@ -3,6 +3,8 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { UserError as Error } from "../domain/errors";
 import { requireOpenGroup } from './groupLifecycle.service';
+import type { IntegranteEntrada } from "../schemas/grupos.schema";
+import { linkAddedPersonInvitation, pushAddedPeople } from "./invitaciones.service";
 
 /**
  * Members added by name only ("Ana"), so whoever paid can split right away. They are ordinary
@@ -22,20 +24,35 @@ export function nombreIntegrante(value: string) {
   return nombre;
 }
 
+export function celularIntegrante(value?: string | null) {
+  if (!value) return null;
+  const clean = value.trim().replace(/^\+?51\s*/, "").replace(/[\s()-]/g, "");
+  if (!clean) return null;
+  if (!/^9\d{8}$/.test(clean)) throw new Error("El celular debe ser formato peruano: 9XXXXXXXX");
+  return clean;
+}
+
 /** Inside the group's lock. Unusable e-mail and password: this row can never sign in. */
-export async function crearSinCuenta(tx: Tx, grupoId: string, nombres: string[], historical = false) {
+export async function crearSinCuenta(tx: Tx, grupoId: string, entradas: IntegranteEntrada[], historical = false, inviterId?: string, pushTokens?: string[]) {
   const existentes = await tx.grupoMiembro.findMany({ where: { grupoId, activo: true }, select: { usuario: { select: { nombre: true, sinCuenta: true } } } });
-  if (existentes.filter((m) => m.usuario.sinCuenta).length + nombres.length > MAX_SIN_CUENTA)
+  if (existentes.filter((m) => m.usuario.sinCuenta).length + entradas.length > MAX_SIN_CUENTA)
     throw new Error(`Un grupo puede tener hasta ${MAX_SIN_CUENTA} personas agregadas por nombre.`);
   const usados = new Set(existentes.filter((m) => !historical || m.usuario.sinCuenta).map((m) => m.usuario.nombre.toLocaleLowerCase("es")));
   const creados = [];
-  for (const nombre of nombres.map((n) => historical ? n.trim().replace(/\s+/g, " ") : nombreIntegrante(n))) {
+  for (const entrada of entradas) {
+    const rawNombre = typeof entrada === "string" ? entrada : entrada.nombre;
+    const celular = typeof entrada === "string" ? null : celularIntegrante(entrada.celular);
+    const nombre = historical ? rawNombre.trim().replace(/\s+/g, " ") : nombreIntegrante(rawNombre);
     const clave = nombre.toLocaleLowerCase("es");
     if (usados.has(clave)) throw new Error(`Ya hay alguien llamado «${nombre}» en el grupo. Usa otro nombre, por ejemplo con su apellido.`, 409);
     usados.add(clave);
-    const usuario = await tx.usuario.create({ data: { nombre, email: `sin-cuenta.${randomUUID()}@junto.invalid`, passwordHash: "!", sinCuenta: true } });
+    const usuario = await tx.usuario.create({ data: { nombre, celular, email: `sin-cuenta.${randomUUID()}@junto.invalid`, passwordHash: "!", sinCuenta: true } });
     await tx.grupoMiembro.create({ data: { grupoId, usuarioId: usuario.id, rol: "miembro", codigoPersonal: codigoPersonal() } });
-    creados.push({ id: usuario.id, nombre });
+    if (celular && inviterId && !historical) {
+      const token = await linkAddedPersonInvitation(tx, grupoId, inviterId, usuario.id, celular);
+      if (token && pushTokens) pushTokens.push(token);
+    }
+    creados.push({ id: usuario.id, nombre, ...(celular ? { celular } : {}) });
   }
   return creados;
 }
@@ -48,11 +65,14 @@ async function lockActiveMember(tx: Tx, grupoId: string, userId: string) {
   return member;
 }
 
-export async function agregarIntegrantes(grupoId: string, userId: string, nombres: string[]) {
-  return prisma.$transaction(async (tx) => {
+export async function agregarIntegrantes(grupoId: string, userId: string, entradas: IntegranteEntrada[]) {
+  const pushTokens: string[] = [];
+  const creados = await prisma.$transaction(async (tx) => {
     await lockActiveMember(tx, grupoId, userId);
-    return crearSinCuenta(tx, grupoId, nombres);
+    return crearSinCuenta(tx, grupoId, entradas, false, userId, pushTokens);
   });
+  await pushAddedPeople(grupoId, userId, pushTokens);
+  return creados;
 }
 
 async function sinCuentaActivo(tx: Tx, grupoId: string, integranteId: string) {

@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { UserError } from "../domain/errors";
 import { sendPushNotification } from "../lib/firebase";
@@ -6,6 +7,7 @@ import { saveJoinNotices, pushJoinNotice } from "./groupNotices.service";
 import { takeFreeParts } from "./billParts.service";
 import { cuentaPorPartes, partesAlUnirse } from "./grupos.service";
 import { requireOpenGroup } from './groupLifecycle.service';
+import { heredar, tieneDineroPorRecibir } from "./integrantes.service";
 
 export const INVITE_LIMITS = { perDay: 40, quietDaysAfterRejection: 7 };
 // Same answer whether or not the e-mail/phone has an account: inviting must not reveal who uses JUNTO.
@@ -14,14 +16,56 @@ export const INVITE_SENT = "Si esa persona tiene cuenta en JUNTO, verá tu invit
 const first = (name: string) => name.trim().split(/\s+/)[0] || name;
 
 /** The registered person an e-mail or phone points to, only when it is unambiguous. */
-async function findPerson(identifier: string) {
+export async function findPerson(identifier: string, db: Prisma.TransactionClient = prisma) {
   const value = identifier.trim();
-  if (value.includes("@")) return prisma.usuario.findFirst({ where: { email: value.toLowerCase(), activo: true }, select: { id: true, expoPushToken: true } });
-  const phone = value.replace(/^\+?51\s*/, "").replace(/\s/g, "");
+  if (value.includes("@")) return db.usuario.findFirst({ where: { email: value.toLowerCase(), activo: true, sinCuenta: false }, select: { id: true, expoPushToken: true } });
+  const phone = value.replace(/^\+?51\s*/, "").replace(/[\s()-]/g, "");
   if (!/^9\d{8}$/.test(phone)) return null;
   // Phones are not verified: if two accounts claim the same number, invite nobody.
-  const matches = await prisma.usuario.findMany({ where: { celular: phone, activo: true }, select: { id: true, expoPushToken: true }, take: 2 });
+  const matches = await db.usuario.findMany({ where: { celular: phone, activo: true, sinCuenta: false }, select: { id: true, expoPushToken: true }, take: 2 });
   return matches.length === 1 ? matches[0] : null;
+}
+
+/**
+ * When someone is added from the phone's agenda with a Peruvian mobile number, link a private
+ * invitation to that placeholder member if the phone uniquely matches a registered JUNTO account.
+ */
+export async function linkAddedPersonInvitation(tx: Prisma.TransactionClient, grupoId: string, inviterId: string, integranteId: string, celular: string) {
+  const person = await findPerson(celular, tx);
+  if (!person || person.id === inviterId) return null;
+  const member = await tx.grupoMiembro.findUnique({ where: { grupoId_usuarioId: { grupoId, usuarioId: person.id } }, select: { activo: true } });
+  if (member?.activo) return null;
+  const today = await tx.invitacion.count({ where: { invitadoPor: inviterId, fechaCreacion: { gte: new Date(Date.now() - 86_400_000) } } });
+  if (today >= INVITE_LIMITS.perDay) return null;
+  await transactionLock(tx, `invite:${grupoId}:${person.id}`);
+  const previous = await tx.invitacion.findUnique({ where: { grupoId_invitadoId: { grupoId, invitadoId: person.id } } });
+  if (previous?.estado === "rechazada" && previous.fechaRespuesta && Date.now() - previous.fechaRespuesta.getTime() < INVITE_LIMITS.quietDaysAfterRejection * 86_400_000) return null;
+  if (previous?.estado === "pendiente") {
+    if (!previous.integranteId) await tx.invitacion.update({ where: { id: previous.id }, data: { integranteId } });
+    return null;
+  }
+  await tx.invitacion.upsert({
+    where: { grupoId_invitadoId: { grupoId, invitadoId: person.id } },
+    create: { grupoId, invitadoId: person.id, invitadoPor: inviterId, integranteId },
+    update: { estado: "pendiente", invitadoPor: inviterId, integranteId, fechaCreacion: new Date(), fechaRespuesta: null },
+  });
+  return person.expoPushToken ?? null;
+}
+
+export async function pushAddedPeople(grupoId: string, inviterId: string, tokens: string[]) {
+  const valid = [...new Set(tokens.filter(Boolean))];
+  if (!valid.length) return;
+  try {
+    const [group, inviter] = await Promise.all([
+      prisma.grupo.findUnique({ where: { id: grupoId }, select: { nombre: true, activo: true } }),
+      prisma.usuario.findUnique({ where: { id: inviterId }, select: { nombre: true, activo: true } }),
+    ]);
+    if (!group?.activo || !inviter?.activo) return;
+    const body = `${first(inviter.nombre)} te agregó a «${group.nombre}» en JUNTO`;
+    await Promise.all(valid.map((token) => sendPushNotification(token, "Te agregaron a un grupo", body, { type: "invitacion", grupoId })));
+  } catch {
+    console.error("[Notification] Added-member invitation saved; push delivery failed");
+  }
 }
 
 /**
@@ -108,8 +152,25 @@ export async function answerInvitation(userId: string, id: string, accept: boole
       // Rejoining never restores an old admin role; someone already in the group keeps theirs.
       if (!member) await tx.grupoMiembro.create({ data: { grupoId: invitation.grupoId, usuarioId: userId, rol: "miembro" } });
       else if (!member.activo) await tx.grupoMiembro.update({ where: { id: member.id }, data: { activo: true, rol: "miembro", fechaUnion: new Date() } });
+      let inherited = false;
+      if (current.integranteId && current.integranteId !== userId) {
+        const placeholder = await tx.grupoMiembro.findFirst({
+          where: { grupoId: invitation.grupoId, usuarioId: current.integranteId, activo: true, usuario: { sinCuenta: true, activo: true } },
+          select: { id: true },
+        });
+        // Auto-inherit only when they do not have money to receive; if they are owed money, they join and an admin links them via "Ya se unió".
+        if (placeholder && !(await tieneDineroPorRecibir(tx, invitation.grupoId, current.integranteId))) {
+          const between = await tx.pago.count({
+            where: { grupoId: invitation.grupoId, OR: [{ pagadorId: current.integranteId, receptorId: userId }, { pagadorId: userId, receptorId: current.integranteId }] },
+          });
+          if (!between) {
+            await heredar(tx, invitation.grupoId, current.integranteId, userId);
+            inherited = true;
+          }
+        }
+      }
       if (!member?.activo) {
-        parte = await takeFreeParts(tx, invitation.grupoId, userId);
+        parte = inherited ? 0 : await takeFreeParts(tx, invitation.grupoId, userId);
         recipients = await saveJoinNotices(tx, invitation.grupoId, userId, invitation.invitadoPor, parte);
       }
     }
