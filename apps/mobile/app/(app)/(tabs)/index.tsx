@@ -54,6 +54,7 @@ export default function Home() {
   const { usuario } = useAuthStore();
   const { desktop, web } = useResponsiveLayout();
   const insets = useSafeAreaInsets();
+  const [scrolled, setScrolled] = useState(false);
   // White status bar text on the emerald band (other screens set their own on focus).
   useFocusEffect(useCallback(() => { setStatusBarStyle("light"); }, []));
   const {
@@ -133,6 +134,8 @@ export default function Home() {
     <SafeAreaView edges={[]} style={{ flex: 1, backgroundColor: palette.background }}>
       <ScrollView
         style={{ backgroundColor: palette.background }}
+        onScroll={(event) => { const next = event.nativeEvent.contentOffset.y > insets.top + 40; if (next !== scrolled) setScrolled(next); }}
+        scrollEventThrottle={64}
         contentContainerStyle={{ paddingBottom: desktop ? 40 : 110 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor="#FFFFFF" colors={[palette.primary]} progressBackgroundColor="#FFFFFF" />}
       >
@@ -395,6 +398,8 @@ export default function Home() {
         {!empty && <Button secondary title="Unirme a un grupo" onPress={() => router.push("/(app)/unirme")} />}
         </View>
       </ScrollView>
+      {/* Once the emerald band scrolls away, the status bar keeps a band of its own (no text under the clock). */}
+      {scrolled && insets.top > 0 && <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, height: insets.top, backgroundColor: brand.deep }} />}
     </SafeAreaView>
   );
 }

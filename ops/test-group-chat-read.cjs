@@ -29,7 +29,16 @@ test('a resolution is unread for the payer, never for its own resolver; one paym
   const since = new Date(0);
   assert.equal(await unreadInGroup('group', 'payer', since), 1);
   assert.deepEqual(query.where.OR, [
-    { pagadorId: { not: 'payer' }, fechaPago: { gt: since } },
+    // A payment the receiver recorded themself ("Ya me pagó") is not news to them.
+    { pagadorId: { not: 'payer' }, fechaPago: { gt: since }, OR: [{ resueltoPor: null }, { resueltoPor: { not: 'payer' } }] },
     { resueltoPor: { not: 'payer' }, fechaResolucion: { gt: since } },
   ]);
+});
+
+test('names added without an account are not counted as someone joining', async () => {
+  let query;
+  for (const model of ['comentario', 'gasto', 'pago', 'eventoGrupo']) prisma[model].count = async () => 0;
+  prisma.grupoMiembro.count = async (args) => { query = args; return 0; };
+  await unreadInGroup('group', 'me', new Date(0));
+  assert.deepEqual(query.where.usuario, { sinCuenta: false });
 });

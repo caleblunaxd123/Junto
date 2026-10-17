@@ -76,11 +76,13 @@ export async function unreadInGroup(grupoId: string, userId: string, since: Date
   const [messages, payments, expenses, joins, events] = await Promise.all([
     prisma.comentario.count({ where: { grupoId, gastoId: null, pagoId: null, eliminado: false, autorId: { not: userId }, fechaCreacion: after } }),
     prisma.pago.count({ where: { grupoId, OR: [
-      { pagadorId: { not: userId }, fechaPago: after },
+      // A payment you recorded yourself ("Ya me pagó") is not news to you.
+      { pagadorId: { not: userId }, fechaPago: after, OR: [{ resueltoPor: null }, { resueltoPor: { not: userId } }] },
       { resueltoPor: { not: userId }, fechaResolucion: after },
     ] } }),
     prisma.gasto.count({ where: { grupoId, activo: true, creadoPor: { not: userId }, fechaRegistro: after } }),
-    prisma.grupoMiembro.count({ where: { grupoId, usuarioId: { not: userId }, fechaUnion: after } }),
+    // Names you add without an account are not someone joining; a real person joining is.
+    prisma.grupoMiembro.count({ where: { grupoId, usuarioId: { not: userId }, fechaUnion: after, usuario: { sinCuenta: false } } }),
     prisma.eventoGrupo.count({ where: { grupoId, autorId: { not: userId }, fecha: after } }),
   ]);
   return messages + payments + expenses + joins + events;

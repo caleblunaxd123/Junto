@@ -130,8 +130,8 @@ export default function Notebook() {
         <ScrollView ref={scroll} refreshControl={<RefreshControl refreshing={query.isRefetching} onRefresh={() => { void refetch(); }} />} contentContainerStyle={{ paddingBottom: 32 + insets.bottom, paddingVertical: 4, width: "100%", maxWidth: Platform.OS === "web" ? 760 : undefined, alignSelf: "center" }}>
           <View style={{ backgroundColor: paper.page, paddingBottom: 14 }}>
           <View style={{ marginHorizontal: 20, paddingVertical: 14, gap: 5 }}>
-            {s.grupo.estado && <>
-              <Label size={13} weight="bold" color={paper.ink}>{groupStateLabel(s.grupo)}{s.grupo.cerradoEn ? ` · ${dayLabel(s.grupo.cerradoEn)}` : ''}</Label>
+            {s.grupo.estado && s.grupo.estado !== 'abierto' && <>
+              <Label size={13} weight="bold" color={paper.ink}>Grupo {groupStateLabel(s.grupo).toLowerCase()}{s.grupo.cerradoEn ? ` · ${dayLabel(s.grupo.cerradoEn)}` : ''}</Label>
               {s.grupo.estado !== 'abierto' && <Label size={12} color={paper.pencil}>{groupStateDescription(s.grupo)}</Label>}
             </>}
             <Label size={13} weight="bold" color={paper.ink}>Lo que pusiste, lo que gastaste y lo que queda.</Label>
@@ -149,7 +149,7 @@ export default function Notebook() {
               const { title, detail } = describe(e, money);
               const counts = e.efecto !== 0;
               const color = !counts ? paper.pencil : e.tipo === "pago" ? paper.ink : e.efecto > 0 ? palette.positive : palette.negative;
-              const label = `${day}. ${title}. ${detail}. ${counts ? `${e.efecto > 0 ? "A tu favor" : "En contra"} ${money(Math.abs(e.efecto))}. Ahora ${standing(e.saldo, moneda)}` : "No cambia tu saldo"}${e.tipo === "pago" && e.conComprobante ? ". Con comprobante" : ""}`;
+              const label = `${day}. ${title}. ${detail}. ${counts ? `${e.tipo === "pago" ? (e.sentido === "recibido" ? "Recibiste" : "Pagaste") : e.efecto > 0 ? "A tu favor" : "En contra"} ${money(Math.abs(e.efecto))}. Ahora ${standing(e.saldo, moneda)}` : "No cambia tu saldo"}${e.tipo === "pago" && e.conComprobante ? ". Con comprobante" : ""}`;
               return (
                 <View key={`${e.tipo}-${e.id}`}>
                   <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={() => router.push(e.tipo === "gasto" ? `/(app)/gastos/${e.id}` : `/(app)/pagos/${e.id}`)}
@@ -164,8 +164,9 @@ export default function Notebook() {
                       {!!registeredLabel(e) && <Label size={11} color={paper.pencil}>{registeredLabel(e)}</Label>}
                     </View>
                     <View style={{ alignItems: narrow ? 'flex-start' : 'flex-end', flexShrink: 1, minWidth: narrow ? 0 : 100, justifyContent: 'center', gap: 5 }}>
-                      <Label size={16} weight="extra" color={color} style={{ fontVariant: ["tabular-nums"], backgroundColor: counts ? e.efecto > 0 ? paper.credit : paper.debit : paper.rule, paddingHorizontal: 7, paddingVertical: 4, borderRadius: 5 }}>{counts ? signed(e.efecto, moneda) : "—"}</Label>
-                      <Label size={9} weight="bold" color={paper.pencil} style={{ letterSpacing: 1 }}>SALDO NETO</Label>
+                      {/* A payment settles a debt: shown as money in or out, never as red "en contra". */}
+                      <Label size={e.tipo === "pago" ? 14 : 16} weight="extra" color={color} style={{ fontVariant: ["tabular-nums"], backgroundColor: !counts || e.tipo === "pago" ? paper.rule : e.efecto > 0 ? paper.credit : paper.debit, paddingHorizontal: 7, paddingVertical: 4, borderRadius: 5 }}>{!counts ? "—" : e.tipo === "pago" ? `${e.sentido === "recibido" ? "Recibiste" : "Pagaste"} ${formatMoney(Math.abs(e.efecto), moneda)}` : signed(e.efecto, moneda)}</Label>
+                      <Label size={9} weight="bold" color={paper.pencil} style={{ letterSpacing: 1 }}>QUEDA</Label>
                       <Label size={11} color={paper.ink} style={{ fontVariant: ["tabular-nums"] }}>{standing(e.saldo, moneda)}</Label>
                     </View>
                   </Pressable>

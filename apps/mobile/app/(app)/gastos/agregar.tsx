@@ -148,7 +148,6 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   const [detail, setDetail] = useState(!!params.texto);
   // Splitwise-style: the default split is a sentence; the full editor opens on request.
   const [customSplit, setCustomSplit] = useState(false);
-  const [assistanceOpen, setAssistanceOpen] = useState(false);
   // "¿Se repite?": rent, internet… The first one is added now and then on schedule.
   const [repeat, setRepeat] = useState<"no" | "semanal" | "quincenal" | "mensual">("no");
   const [picker, setPicker] = useState<"grupo" | "pagador" | null>(null);
@@ -546,6 +545,140 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       ) : (
         <>
           {moneda !== "PEN" && <Label size={13} color={palette.muted}>Gastos y pagos en {moneda}. Usa el formulario; el asistente de texto interpreta soles por ahora. No convertimos monedas.</Label>}
+          {!params.gastoId && moneda === "PEN" && (
+            <>
+            {/* Before the form, not after it: voice and receipt exist to save typing. */}
+            <View style={{ gap: 8, width: "100%" }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Ionicons name="sparkles-outline" size={17} color={palette.purple} />
+                <Label size={14} weight="bold">¿Más rápido? Díctalo o toma foto a la boleta</Label>
+              </View>
+              <View style={{ flexDirection: "row", gap: 8, width: "100%" }}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Dictar con voz"
+                  disabled={preparing || readingReceipt}
+                  onPress={() => { cancelProposal(); setDictating(true); }}
+                  style={{ flex: 1, minWidth: 0, minHeight: 48, paddingHorizontal: 6, paddingVertical: 8, borderRadius: 16, backgroundColor: palette.lilac, borderWidth: 1, borderColor: "#D8CEFF", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
+                >
+                  <Ionicons name="mic-outline" size={19} color={palette.purple} />
+                  <Label size={13} weight="bold" color={palette.purple} style={{ flexShrink: 1 }}>Dictar</Label>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Escanear boleta con cámara"
+                  disabled={preparing || readingReceipt}
+                  onPress={() => { void scanReceipt(true); }}
+                  style={{ flex: 1, minWidth: 0, minHeight: 48, paddingHorizontal: 6, paddingVertical: 8, borderRadius: 16, backgroundColor: palette.mint, borderWidth: 1, borderColor: "#A4EDD7", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
+                >
+                  <Ionicons name="camera-outline" size={19} color="#007B60" />
+                  <Label size={13} weight="bold" color="#007B60" style={{ flexShrink: 1 }}>Cámara</Label>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Subir foto de boleta"
+                  disabled={preparing || readingReceipt}
+                  onPress={() => { void scanReceipt(false); }}
+                  style={{ flex: 1, minWidth: 0, minHeight: 48, paddingHorizontal: 6, paddingVertical: 8, borderRadius: 16, backgroundColor: "white", borderWidth: 1, borderColor: palette.line, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
+                >
+                  <Ionicons name="image-outline" size={18} color={palette.ink} />
+                  <Label size={13} weight="bold" style={{ flexShrink: 1 }}>Galería</Label>
+                </Pressable>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                aria-expanded={writeIt}
+                onPress={() => setWriteIt((v) => !v)}
+                style={[design.row, { minHeight: 40, gap: 6, paddingHorizontal: 4 }]}
+              >
+                <Ionicons name="sparkles-outline" size={17} color={palette.purple} />
+                <Label size={13} weight="bold" color={palette.purple} style={{ flex: 1 }}>
+                  {writeIt ? "Ocultar" : "O escríbelo en una frase: «pagué 120 por la cena»"}
+                </Label>
+              </Pressable>
+              {writeIt && (
+                <Card style={{ backgroundColor: palette.lilac, padding: 12, gap: 8 }}>
+                  <Button compact secondary title="Dictar gasto con voz" onPress={() => { cancelProposal(); setDictating(true); }} disabled={preparing} />
+                  <Label size={12} color={palette.muted}>Escribe o dicta una frase. Solo se preparará una propuesta; tú revisas y guardas.</Label>
+                  <TextInput
+                    accessibilityLabel="Describe el gasto en una frase"
+                    value={text}
+                    onChangeText={(value) => {
+                      cancelProposal();
+                      setText(value);
+                    }}
+                    placeholder="Pagué 120 por la cena con Ana y Luis"
+                    placeholderTextColor={palette.muted}
+                    multiline
+                    maxLength={500}
+                    style={[design.input, { fontSize: 14, minHeight: 56, borderColor: "white" }]}
+                  />
+                  <Button
+                    compact
+                    secondary
+                    title={preparing ? "Preparando…" : "Completar el formulario"}
+                    disabled={preparing || text.trim().length < 3}
+                    onPress={() => { void prepare(); }}
+                  />
+                  {preparing && (
+                    <Pressable accessibilityRole="button" onPress={cancelProposal} style={{ minHeight: 44, justifyContent: "center" }}>
+                      <Label size={13} weight="bold" color={palette.muted}>Cancelar y llenarlo a mano</Label>
+                    </Pressable>
+                  )}
+                </Card>
+              )}
+            </View>
+            </>
+          )}
+          {readingReceipt && (
+            <Card style={{ gap: 8, backgroundColor: palette.mint }}>
+              <ActivityIndicator color={palette.primary} />
+              <Label size={13} weight="bold">Leyendo total y productos de la boleta…</Label>
+              <Button compact secondary title="Cancelar lectura" onPress={cancelProposal} />
+            </Card>
+          )}
+          {!!proposal && (
+            <Card style={{ backgroundColor: receiptProposal && !receiptProposal.totalPropuesto ? palette.yellow : palette.mint, padding: 12, gap: 6 }}>
+              <Label weight="bold" size={13} color={receiptProposal && !receiptProposal.totalPropuesto ? "#8A5B05" : "#078B70"}>Revisa antes de guardar</Label>
+              <Label size={12}>{proposal}</Label>
+              {receiptProposal && !receiptProposal.totalPropuesto && receiptProposal.candidatos.length > 0 && (
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                  {receiptProposal.candidatos.map((candidate) => (
+                    <Button
+                      key={candidate.monto}
+                      compact
+                      secondary
+                      title={`Usar S/ ${centavosASoles(candidate.monto)}`}
+                      onPress={() => setAmount(centavosASoles(candidate.monto))}
+                    />
+                  ))}
+                </View>
+              )}
+              {receiptProposal && receiptProposal.productos.length > 0 && (
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                  <Button
+                    compact
+                    secondary
+                    title={`Anotar ${receiptProposal.productos.length} ${receiptProposal.productos.length === 1 ? "producto" : "productos"} en la nota`}
+                    onPress={() => {
+                      const summaryText = receiptProposal.productos.map((p) => `${p.nombre} S/ ${centavosASoles(p.monto)}`).join(" · ").slice(0, 500);
+                      setNotes(summaryText);
+                      setDetail(true);
+                    }}
+                  />
+                  <Button
+                    compact
+                    secondary
+                    title="Repartir por consumo de cada uno"
+                    onPress={() => {
+                      setCustomSplit(true);
+                      changeMode("exacto");
+                    }}
+                  />
+                </View>
+              )}
+            </Card>
+          )}
           <Card style={{ gap: 12, padding: 12 }}>
             <Field label="1. ¿Cuánto pagaste?">
               <View
@@ -883,141 +1016,6 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
             </View>
           </Card>
           {mode === "porcentaje" && parsedPct.some((value) => value === null) && <ErrorBox message="Completa cada porcentaje: entre 0 y 100, con máximo 2 decimales. Usa 0 explícitamente si no participa en el costo." />}
-          {!params.gastoId && moneda === "PEN" && (
-            <>
-            <Pressable accessibilityRole="button" accessibilityLabel="Completar con voz o boleta" aria-expanded={assistanceOpen} onPress={() => setAssistanceOpen(!assistanceOpen)}
-              style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 52, padding: 12, borderRadius: 16, backgroundColor: "white", borderWidth: 1, borderColor: palette.line }}>
-              <Ionicons name="sparkles-outline" size={21} color={palette.purple} />
-              <Label size={15} weight="bold" style={{ flex: 1 }}>Completar con voz o boleta</Label>
-              <Ionicons name={assistanceOpen ? "chevron-up" : "chevron-down"} size={20} color={palette.muted} />
-            </Pressable>
-            {assistanceOpen && <View style={{ gap: 8 }}>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Dictar con voz"
-                  disabled={preparing || readingReceipt}
-                  onPress={() => { cancelProposal(); setDictating(true); }}
-                  style={{ flexGrow: 1, flexBasis: 132, minHeight: 46, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: palette.lilac, borderWidth: 1, borderColor: "#D8CEFF", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
-                >
-                  <Ionicons name="mic-outline" size={19} color={palette.purple} />
-                  <Label size={13} weight="bold" color={palette.purple} style={{ flexShrink: 1 }}>Dictar con voz</Label>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Escanear boleta con cámara"
-                  disabled={preparing || readingReceipt}
-                  onPress={() => { void scanReceipt(true); }}
-                  style={{ flexGrow: 1, flexBasis: 132, minHeight: 46, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: palette.mint, borderWidth: 1, borderColor: "#A4EDD7", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
-                >
-                  <Ionicons name="camera-outline" size={19} color="#007B60" />
-                  <Label size={13} weight="bold" color="#007B60" style={{ flexShrink: 1 }}>Foto a boleta</Label>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Subir foto de boleta"
-                  disabled={preparing || readingReceipt}
-                  onPress={() => { void scanReceipt(false); }}
-                  style={{ flexGrow: 1, flexBasis: 120, minHeight: 46, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: "white", borderWidth: 1, borderColor: palette.line, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
-                >
-                  <Ionicons name="image-outline" size={18} color={palette.ink} />
-                  <Label size={13} weight="bold" style={{ flexShrink: 1 }}>Subir boleta</Label>
-                </Pressable>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                aria-expanded={writeIt}
-                onPress={() => setWriteIt((v) => !v)}
-                style={[design.row, { minHeight: 40, gap: 6, paddingHorizontal: 4 }]}
-              >
-                <Ionicons name="sparkles-outline" size={17} color={palette.purple} />
-                <Label size={13} weight="bold" color={palette.purple} style={{ flex: 1 }}>
-                  {writeIt ? "Ocultar" : "Escribir o dictar un gasto"}
-                </Label>
-              </Pressable>
-              {writeIt && (
-                <Card style={{ backgroundColor: palette.lilac, padding: 12, gap: 8 }}>
-                  <Button compact secondary title="Dictar gasto con voz" onPress={() => { cancelProposal(); setDictating(true); }} disabled={preparing} />
-                  <Label size={12} color={palette.muted}>Escribe o dicta una frase. Solo se preparará una propuesta; tú revisas y guardas.</Label>
-                  <TextInput
-                    accessibilityLabel="Describe el gasto en una frase"
-                    value={text}
-                    onChangeText={(value) => {
-                      cancelProposal();
-                      setText(value);
-                    }}
-                    placeholder="Pagué 120 por la cena con Ana y Luis"
-                    placeholderTextColor={palette.muted}
-                    multiline
-                    maxLength={500}
-                    style={[design.input, { fontSize: 14, minHeight: 56, borderColor: "white" }]}
-                  />
-                  <Button
-                    compact
-                    secondary
-                    title={preparing ? "Preparando…" : "Completar el formulario"}
-                    disabled={preparing || text.trim().length < 3}
-                    onPress={() => { void prepare(); }}
-                  />
-                  {preparing && (
-                    <Pressable accessibilityRole="button" onPress={cancelProposal} style={{ minHeight: 44, justifyContent: "center" }}>
-                      <Label size={13} weight="bold" color={palette.muted}>Cancelar y llenarlo a mano</Label>
-                    </Pressable>
-                  )}
-                </Card>
-              )}
-            </View>}
-            </>
-          )}
-          {readingReceipt && (
-            <Card style={{ gap: 8, backgroundColor: palette.mint }}>
-              <ActivityIndicator color={palette.primary} />
-              <Label size={13} weight="bold">Leyendo total y productos de la boleta…</Label>
-              <Button compact secondary title="Cancelar lectura" onPress={cancelProposal} />
-            </Card>
-          )}
-          {!!proposal && (
-            <Card style={{ backgroundColor: receiptProposal && !receiptProposal.totalPropuesto ? palette.yellow : palette.mint, padding: 12, gap: 6 }}>
-              <Label weight="bold" size={13} color={receiptProposal && !receiptProposal.totalPropuesto ? "#8A5B05" : "#078B70"}>Revisa antes de guardar</Label>
-              <Label size={12}>{proposal}</Label>
-              {receiptProposal && !receiptProposal.totalPropuesto && receiptProposal.candidatos.length > 0 && (
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-                  {receiptProposal.candidatos.map((candidate) => (
-                    <Button
-                      key={candidate.monto}
-                      compact
-                      secondary
-                      title={`Usar S/ ${centavosASoles(candidate.monto)}`}
-                      onPress={() => setAmount(centavosASoles(candidate.monto))}
-                    />
-                  ))}
-                </View>
-              )}
-              {receiptProposal && receiptProposal.productos.length > 0 && (
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-                  <Button
-                    compact
-                    secondary
-                    title={`Anotar ${receiptProposal.productos.length} ${receiptProposal.productos.length === 1 ? "producto" : "productos"} en la nota`}
-                    onPress={() => {
-                      const summaryText = receiptProposal.productos.map((p) => `${p.nombre} S/ ${centavosASoles(p.monto)}`).join(" · ").slice(0, 500);
-                      setNotes(summaryText);
-                      setDetail(true);
-                    }}
-                  />
-                  <Button
-                    compact
-                    secondary
-                    title="Repartir por consumo de cada uno"
-                    onPress={() => {
-                      setCustomSplit(true);
-                      changeMode("exacto");
-                    }}
-                  />
-                </View>
-              )}
-            </Card>
-          )}
           <Pressable accessibilityRole="button" aria-expanded={detail} onPress={() => setDetail((v) => !v)} style={{ minHeight: 44, justifyContent: "center" }}>
             <Label color={palette.positive} weight="bold" size={16}>
               {detail ? "Menos opciones" : "Más opciones"}

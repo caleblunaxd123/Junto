@@ -17,6 +17,8 @@ import { MoneyText } from "./ui/MoneyText";
 import { NotebookEntry } from "./NotebookEntry";
 import { expensePayerLabel } from "../lib/expensePayers";
 
+const listNames = (names: string[]) => names.length > 1 ? `${names.slice(0, -1).join(", ")} y ${names[names.length - 1]}` : names[0] ?? "";
+
 /** Accounts are the landing view. Conversation stays one explicit tab away. */
 export function GroupOverview({ group, userId, payments, paymentsError, paymentsLoading, stale, onRefresh, onAccounts, onExpense, onPay, onReview }: {
   group: GrupoConBalance; userId?: string; payments: Pago[]; paymentsError: boolean; paymentsLoading: boolean; stale: boolean;
@@ -45,19 +47,21 @@ export function GroupOverview({ group, userId, payments, paymentsError, payments
   const review = pending.find((payment) => payment.permisos?.aprobar);
   const waiting = pending.find((payment) => payment.pagadorId === userId);
   const refresh = () => { onRefresh(); void expenses.refetch(); };
+  const empty = group.resumen.cantidadGastos === 0 && !payments.some((payment) => payment.grupoId === group.id);
   return (
     <ScrollView style={{ backgroundColor: palette.background }} refreshControl={<RefreshControl refreshing={expenses.isRefetching} onRefresh={refresh} />}
       contentContainerStyle={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", padding: desktop ? 24 : 16, paddingBottom: 32 + insets.bottom, gap: 18 }}>
       {(stale || paymentsError) && <><ErrorBox message="No pudimos actualizar todas las cuentas. Los importes pueden haber cambiado." /><Button compact secondary title="Actualizar cuentas" onPress={refresh} /></>}
-      <Card style={{ flexDirection: summaryRows ? "column" : "row", flexWrap: summaryRows ? "nowrap" : "wrap", gap: 12 }}>
+      {/* An empty group asks for one thing only: the first expense. Totals and the notebook come after it. */}
+      {empty ? null : <Card style={{ flexDirection: summaryRows ? "column" : "row", flexWrap: summaryRows ? "nowrap" : "wrap", gap: 12 }}>
         {summary.map(([label, amount]) => (
           <View key={label} style={{ flexGrow: summaryRows ? 0 : 1, flexBasis: summaryRows ? undefined : 80, minWidth: 0, gap: 6, flexDirection: summaryRows && fontScale < 1.7 ? "row" : "column", justifyContent: "space-between" }}>
             <Label size={13} weight="bold" color={palette.muted} style={{ flexShrink: 1 }}>{label}</Label>
             <MoneyText size={desktop ? 24 : 19} containerStyle={summaryRows && fontScale < 1.7 ? { width: '60%' } : undefined}>{amount === undefined ? "—" : money(amount)}</MoneyText>
           </View>
         ))}
-        {!!(me?.pagosEnviados || me?.pagosRecibidos) && <Label size={13} color={palette.muted} style={{ width: "100%" }}>Pagaste en gastos, no en devoluciones. Devolviste {money(me?.pagosEnviados ?? 0)} · recibiste {money(me?.pagosRecibidos ?? 0)}.</Label>}
-      </Card>
+        {!!(me?.pagosEnviados || me?.pagosRecibidos) && <Label size={13} color={palette.muted} style={{ width: "100%" }}>{[me?.pagosRecibidos ? `Ya te devolvieron ${money(me.pagosRecibidos)}` : "", me?.pagosEnviados ? `ya devolviste ${money(me.pagosEnviados)}` : ""].filter(Boolean).join(" · ").replace(/^./, (c) => c.toUpperCase())}.</Label>}
+      </Card>}
       {group.resumen.cantidadGastos > 0 && <Card style={{ backgroundColor: group.balanceUsuario.debes ? palette.lilac : palette.mint, borderColor: "#B3E5D7", gap: 10 }}>
         {debts.length ? debts.slice(0, 3).map((debt) => <Pressable key={`${debt.deudorId}-${debt.acreedorId}`} accessibilityRole="button" onPress={onAccounts} style={{ flexDirection: "row", alignItems: "center", gap: 12, minHeight: 64 }}>
           <Avatar name={debt.acreedorId === userId ? debt.deudorNombre : debt.acreedorNombre} size={44} />
@@ -73,12 +77,17 @@ export function GroupOverview({ group, userId, payments, paymentsError, payments
         {debts.length > 3 && <Button compact secondary title={`Ver las ${debts.length} deudas`} onPress={onAccounts} />}
         {pending.length > 0 && <Label size={14} weight="bold" color="#79520A">{pending.length} {pending.length === 1 ? "pago por confirmar" : "pagos por confirmar"}. La deuda baja al confirmar que llegó el dinero.</Label>}
       </Card>}
-      <NotebookEntry onPress={() => router.push({ pathname: "/(app)/cuentas/cuaderno", params: { grupoId: group.id } })} />
+      {!empty && <NotebookEntry onPress={() => router.push({ pathname: "/(app)/cuentas/cuaderno", params: { grupoId: group.id } })} />}
       {!!group.fechaLimite && <Label size={14} color={palette.muted}>Fecha límite · {deadlineText(group.fechaLimite).text}</Label>}
       {review ? <Button title="Revisar pago recibido" onPress={() => onReview(review.id)} />
         : waiting ? <Button secondary title="Ver mi pago por confirmar" onPress={() => onReview(waiting.id)} />
         : !paymentsError && !paymentsLoading && group.balanceUsuario.debes > 0 ? <Button secondary title="Ya pagué · avisar a quien recibe" onPress={onPay} /> : null}
+      {empty && <Card style={{ gap: 8 }}>
+        <Label size={20} weight="extra">¿Quién pagó el primer gasto?</Label>
+        <Label size={15} color={palette.muted}>Anota cuánto fue, quién pagó y entre quiénes se divide. JUNTO calcula cuánto le toca a cada uno; no hace falta que todos tengan la app.</Label>
+      </Card>}
       {canAddExpenses(group) && <Button title="＋ Agregar gasto" onPress={onExpense} />}
+      {!empty && <>
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
         <Label accessibilityRole="header" size={22} weight="extra">Gastos</Label>
         <Label size={14} color={palette.muted}>{group.resumen.cantidadGastos} {group.resumen.cantidadGastos === 1 ? "gasto" : "gastos"}</Label>
@@ -92,7 +101,7 @@ export function GroupOverview({ group, userId, payments, paymentsError, payments
           <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
             <Label size={17} weight="extra">{expense.descripcion}</Label>
             <Label size={14} color={palette.muted}>{expensePayerLabel(expense, userId)}</Label>
-            <Label size={14} color={palette.muted}>{expense.participantes.length <= 3 ? `Para ${expense.participantes.map((person) => person.usuarioId === userId ? "ti" : person.usuario.nombre).join(", ")}` : `Entre ${expense.participantes.length} personas`}</Label>
+            <Label size={14} color={palette.muted}>{expense.participantes.length <= 3 ? `Para ${listNames([...expense.participantes].sort((a, b) => Number(b.usuarioId === userId) - Number(a.usuarioId === userId)).map((person) => person.usuarioId === userId ? "ti" : person.usuario.nombre.split(" ")[0]))}` : `Entre ${expense.participantes.length} personas`}</Label>
             {expense.participantes.length > 0 && expense.participantes.every((person) => person.montoAsignado === expense.participantes[0].montoAsignado) && <Label size={14} color={palette.muted}>{money(expense.participantes[0].montoAsignado)} por persona</Label>}
             <MoneyText size={18} weight="extra">{money(expense.montoTotal)}</MoneyText>
             {canAddExpenses(group) && <Label size={13} weight="bold" color={palette.positive}>Ver y editar gasto ›</Label>}
@@ -105,8 +114,11 @@ export function GroupOverview({ group, userId, payments, paymentsError, payments
         <Label style={{ flex: 1, textAlign: "center" }}>{page} / {expenses.data.totalPages}</Label>
         <Button compact secondary title="Siguiente" disabled={page >= expenses.data.totalPages} onPress={() => setPage(page + 1)} />
       </View>}
-      <Button compact secondary title="Ver quién paga a quién" onPress={onAccounts} />
-      <Label size={13} color={palette.muted} style={{ textAlign: "center" }}>Paguen por fuera de JUNTO. Quien recibe confirma cada devolución.</Label>
+      </>}
+      {!empty && <>
+        <Button compact secondary title="Ver quién paga a quién" onPress={onAccounts} />
+        <Label size={13} color={palette.muted} style={{ textAlign: "center" }}>Paguen por fuera de JUNTO. Quien recibe confirma cada devolución.</Label>
+      </>}
     </ScrollView>
   );
 }
