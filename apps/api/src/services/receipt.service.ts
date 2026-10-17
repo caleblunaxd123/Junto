@@ -11,7 +11,7 @@ export async function readReceipt(base64: string) {
     busy: "El lector está ocupado. Reintenta en unos segundos o escribe el total.",
     timeout: "El lector tardó demasiado. Puedes escribir el total y continuar.",
     failed: "No pudimos leer la foto. Prueba una imagen más nítida o escribe el total.",
-  });
+  }, { photo: true });
   const proposal = receiptTotals(texts.join("\n"));
   return { ...proposal, productos: receiptItems(texts[0]), confianzaLectura: confidence, texto: texts[0].slice(0, 8000) };
 }

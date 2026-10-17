@@ -17,6 +17,7 @@ import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth.store";
 import { AppDialog as Alert } from "./AppDialog";
 import { openWhatsAppDraft, ShareChannelError, shareChannelError } from "../../lib/shareChannel";
+import { MoneyText } from "./MoneyText";
 
 type ServerMailResult = { estado: "aceptado" | "fallido" | "incierto" | "enviando"; mensaje: string; destinatario?: string };
 const newMailRequestId = () => `correo_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
@@ -103,7 +104,7 @@ export function ShareSummary({ message, reportRef }: { message: ShareMessage; re
         </View>
         <View style={{ gap: 1, marginTop: 6 }}>
           <Label size={12} color="#3F7067">{preview.totalLabel}</Label>
-          <Label weight="extra" size={34} style={{ fontVariant: ["tabular-nums"] }}>{money(preview.total)}</Label>
+          <MoneyText weight="extra" size={34} style={{ fontVariant: ["tabular-nums"] }}>{money(preview.total)}</MoneyText>
         </View>
         <Label size={12} color="#3F7067">{preview.caption}</Label>
       </Card>

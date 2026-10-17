@@ -22,7 +22,7 @@ export async function getGroupChat(userId: string, grupoId: string) {
   const [members, notices, expenses, payments, reminders, messages, events] = await Promise.all([
     prisma.grupoMiembro.findMany({ where: { grupoId }, include: { usuario: { select: { id: true, nombre: true, fotoUrl: true, sinCuenta: true, ultimaConexion: true } } }, orderBy: { fechaUnion: "desc" }, take: LIMIT }),
     prisma.avisoGrupo.findMany({ where: { grupoId, parte: { not: null } }, select: { integranteId: true, parte: true }, orderBy: { fecha: "desc" }, distinct: ["integranteId"] }),
-    prisma.gasto.findMany({ where: { grupoId, activo: true }, include: { creador: person, pagador: person, recurrente: { select: { frecuencia: true, diaMes: true } }, participantes: { select: { usuarioId: true, montoAsignado: true } }, _count: { select: { comentarios: { where: { eliminado: false } } } } }, orderBy: { fechaRegistro: "desc" }, take: LIMIT }),
+    prisma.gasto.findMany({ where: { grupoId, activo: true }, include: { creador: person, pagador: person, pagadores: { include: { usuario: person } }, recurrente: { select: { frecuencia: true, diaMes: true } }, participantes: { select: { usuarioId: true, montoAsignado: true } }, _count: { select: { comentarios: { where: { eliminado: false } } } } }, orderBy: { fechaRegistro: "desc" }, take: LIMIT }),
     prisma.pago.findMany({ where: { grupoId }, include: { pagador: person, receptor: { select: { id: true, nombre: true, fotoUrl: true, sinCuenta: true } }, resolutor: person, comprobante: { select: { id: true } }, _count: { select: { comentarios: { where: { eliminado: false } } } } }, orderBy: { fechaPago: "desc" }, take: LIMIT }),
     // A reminder is between who owes and who collects: the rest of the group never sees it.
     prisma.recordatorio.findMany({ where: { grupoId, OR: [{ enviadoPor: userId }, { enviadoA: userId }] }, include: { enviador: person, receptor: person }, orderBy: { fechaEnvio: "desc" }, take: LIMIT }),
@@ -47,7 +47,7 @@ export async function getGroupChat(userId: string, grupoId: string) {
     })),
     ...expenses.map((e) => ({
       id: `gasto-${e.id}`, tipo: e.partes ? "cuenta" as const : "gasto" as const, fecha: e.fechaRegistro, autor: e.creador, mio: mine(e.creadoPor), ...ticks(mine(e.creadoPor), e.fechaRegistro),
-      gastoId: e.id, descripcion: e.descripcion, monto: e.montoTotal, pagador: e.pagador, comentarios: e._count.comentarios,
+      gastoId: e.id, descripcion: e.descripcion, monto: e.montoTotal, pagador: e.pagador, pagadores: e.pagadores, comentarios: e._count.comentarios,
       tuParte: e.participantes.find((p) => p.usuarioId === userId)?.montoAsignado ?? null,
       // Added by a recurring rule (rent, internet…), with how often it repeats.
       // "cada mes, el día 15 · 15 nov.": which occurrence this one is, so two rents never look alike.
@@ -76,11 +76,13 @@ export async function unreadInGroup(grupoId: string, userId: string, since: Date
   const [messages, payments, expenses, joins, events] = await Promise.all([
     prisma.comentario.count({ where: { grupoId, gastoId: null, pagoId: null, eliminado: false, autorId: { not: userId }, fechaCreacion: after } }),
     prisma.pago.count({ where: { grupoId, OR: [
-      { pagadorId: { not: userId }, fechaPago: after },
+      // A payment you recorded yourself ("Ya me pagó") is not news to you.
+      { pagadorId: { not: userId }, fechaPago: after, OR: [{ resueltoPor: null }, { resueltoPor: { not: userId } }] },
       { resueltoPor: { not: userId }, fechaResolucion: after },
     ] } }),
     prisma.gasto.count({ where: { grupoId, activo: true, creadoPor: { not: userId }, fechaRegistro: after } }),
-    prisma.grupoMiembro.count({ where: { grupoId, usuarioId: { not: userId }, fechaUnion: after } }),
+    // Names you add without an account are not someone joining; a real person joining is.
+    prisma.grupoMiembro.count({ where: { grupoId, usuarioId: { not: userId }, fechaUnion: after, usuario: { sinCuenta: false } } }),
     prisma.eventoGrupo.count({ where: { grupoId, autorId: { not: userId }, fecha: after } }),
   ]);
   return messages + payments + expenses + joins + events;

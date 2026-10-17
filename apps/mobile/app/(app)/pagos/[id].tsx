@@ -15,6 +15,7 @@ import { useAuthStore } from "../../../src/store/auth.store";
 import { memberLabels } from "../../../src/lib/people";
 import { paymentHeadline } from "../../../src/lib/payment";
 import { formatMoney } from "@junto/shared/currency";
+import { MoneyText } from "../../../src/components/ui/MoneyText";
 
 const apps: Record<string, string> = { yape: "Yape", plin: "Plin", transferencia: "Transferencia", efectivo: "Efectivo" };
 const tones = {
@@ -152,7 +153,7 @@ export default function PaymentDetail() {
       </Card>
 
       <Card testID="payment-summary" style={{ gap: 12 }}>
-        <Label testID="payment-amount" weight="extra" size={26} style={{ textAlign: "center" }}>{money(pago.monto)}</Label>
+        <MoneyText testID="payment-amount" weight="extra" size={26} style={{ textAlign: "center" }}>{money(pago.monto)}</MoneyText>
         <View style={[design.row, { justifyContent: "space-between" }]}>
           <View style={{ alignItems: "center", flex: 1, gap: 4 }}>
             <Avatar name={pago.pagador.nombre} photo={pago.pagador.fotoUrl} seed={pago.pagadorId} size={48} />

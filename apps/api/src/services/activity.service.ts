@@ -57,7 +57,7 @@ export async function getActivity(userId: string, grupoId?: string) {
   const groupIds = memberships.map((member) => member.grupoId);
   const person = { select: { id: true, nombre: true } } as const;
   const [expenses, payments, events] = await Promise.all([
-    prisma.gasto.findMany({ where: { grupoId: { in: groupIds }, activo: true }, include: { creador: person, grupo: { select: { nombre: true, moneda: true } }, participantes: { where: { usuarioId: userId }, select: { montoAsignado: true } } }, orderBy: { fecha: 'desc' }, take: 80 }),
+    prisma.gasto.findMany({ where: { grupoId: { in: groupIds }, activo: true }, include: { creador: person, pagadores: true, grupo: { select: { nombre: true, moneda: true } }, participantes: { where: { usuarioId: userId }, select: { montoAsignado: true } } }, orderBy: { fecha: 'desc' }, take: 80 }),
     prisma.pago.findMany({ where: { grupoId: { in: groupIds } }, include: { pagador: person, receptor: person, resolutor: person, grupo: { select: { nombre: true, moneda: true } } }, orderBy: { fechaPago: 'desc' }, take: 80 }),
     prisma.eventoGrupo.findMany({ where: { grupoId: { in: groupIds } }, include: { autor: person, grupo: { select: { nombre: true, moneda: true } } }, orderBy: [{ fecha: 'desc' }, { id: 'desc' }], take: 80 }),
   ]);
@@ -76,7 +76,7 @@ export async function getActivity(userId: string, grupoId?: string) {
       pagoId: null,
       // What the viewer owes for this expense (null when it does not involve them).
       tuParte: e.participantes[0]?.montoAsignado ?? null,
-      pagaste: e.pagadoPor === userId,
+      pagaste: e.pagadores.length ? e.pagadores.some(p => p.usuarioId === userId) : e.pagadoPor === userId,
       requiereAccion: false,
     })),
     ...payments.map((p) => ({

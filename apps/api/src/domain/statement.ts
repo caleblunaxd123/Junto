@@ -3,17 +3,22 @@
  * received, oldest first, with a running balance. Only confirmed payments move the balance; reported
  * or rejected ones are listed with zero effect. The last balance equals the ledger's net exactly.
  */
+import { expensePayers, type ExpensePayer } from './expensePayers';
 export interface StatementExpense {
   id: string; descripcion: string; categoria: string; fecha: Date; fechaRegistro: Date;
   montoTotal: number; pagadoPor: string; pagadorNombre: string;
+  pagadores?: ExpensePayer[];
+  /** Several payers: who put how much, and into what. */
+  aportes?: StatementContribution[];
   participantes: Array<{ usuarioId: string; montoAsignado: number }>;
 }
+export type StatementContribution = { usuarioId: string; nombre: string; monto: number; concepto: string | null };
 export interface StatementPayment {
   id: string; pagadorId: string; pagadorNombre: string; receptorId: string; receptorNombre: string;
   monto: number; estado: string; metodo: string | null; fechaPago: Date; fechaEfectiva: Date | null; conComprobante: boolean;
 }
 export type StatementEntry =
-  | { tipo: 'gasto'; id: string; fecha: string; descripcion: string; categoria: string; monto: number; pagadorId: string; pagadorNombre: string; pagaste: number; tuParte: number; efecto: number; saldo: number }
+  | { tipo: 'gasto'; id: string; fecha: string; descripcion: string; categoria: string; monto: number; pagadorId: string; pagadorNombre: string; aportes?: StatementContribution[]; pagaste: number; tuParte: number; efecto: number; saldo: number }
   | { tipo: 'pago'; id: string; fecha: string; sentido: 'enviado' | 'recibido'; contraparteId: string; contraparteNombre: string; monto: number; metodo: string | null; estado: string; conComprobante: boolean; efecto: number; saldo: number };
 
 
@@ -24,12 +29,12 @@ export function buildStatement(userId: string, expenses: StatementExpense[], pay
   const rows: Row[] = [];
   for (const e of expenses) {
     const tuParte = e.participantes.filter((p) => p.usuarioId === userId).reduce((sum, p) => sum + p.montoAsignado, 0);
-    const pagaste = e.pagadoPor === userId ? e.montoTotal : 0;
+    const pagaste = expensePayers(e).filter(p => p.usuarioId === userId).reduce((sum, p) => sum + p.monto, 0);
     if (!tuParte && !pagaste) continue; // Not yours: it does not change your balance.
     const efecto = pagaste - tuParte;
     rows.push({ at: e.fechaRegistro.getTime(), key: `gasto-${e.id}`, efecto, make: (saldo) => ({
       tipo: 'gasto', id: e.id, fecha: e.fecha.toISOString(), descripcion: e.descripcion, categoria: e.categoria, monto: e.montoTotal,
-      pagadorId: e.pagadoPor, pagadorNombre: e.pagadorNombre, pagaste, tuParte, efecto, saldo,
+      pagadorId: e.pagadoPor, pagadorNombre: e.pagadorNombre, ...(e.aportes && e.aportes.length > 1 ? { aportes: e.aportes } : {}), pagaste, tuParte, efecto, saldo,
     }) });
   }
   for (const p of payments) {

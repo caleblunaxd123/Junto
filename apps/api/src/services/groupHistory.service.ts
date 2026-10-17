@@ -50,8 +50,8 @@ export async function groupHistory(userId: string, grupoId: string, query: Query
       query.tipo === 'todos' || query.tipo === 'gastos' ? tx.gasto.findMany({
         where: { grupoId, activo: true, AND: [afterCursor('gasto', 'fechaRegistro') as Prisma.GastoWhereInput,
           ...(dates ? [{ fecha: dates }] : []),
-          ...(query.buscar ? [{ OR: [{ descripcion: contains }, { notas: contains }, { pagador: { nombre: contains } }, { participantes: { some: { usuario: { nombre: contains } } } }] }] : [])] },
-        include: { pagador: person }, orderBy: [{ fechaRegistro: 'desc' }, { id: 'desc' }], take: 31,
+          ...(query.buscar ? [{ OR: [{ descripcion: contains }, { notas: contains }, { pagador: { nombre: contains } }, { pagadores: { some: { usuario: { nombre: contains } } } }, { participantes: { some: { usuario: { nombre: contains } } } }] }] : [])] },
+        include: { pagador: person, pagadores: { include: { usuario: person } } }, orderBy: [{ fechaRegistro: 'desc' }, { id: 'desc' }], take: 31,
       }) : [],
       query.tipo === 'todos' || query.tipo === 'pagos' ? tx.pago.findMany({
         where: { grupoId, AND: [afterCursor('pago', 'fechaPago') as Prisma.PagoWhereInput,
@@ -67,7 +67,7 @@ export async function groupHistory(userId: string, grupoId: string, query: Query
       }) : [],
     ]);
     const rows = [
-      ...expenses.map(e => ({ clave: `gasto-${e.id}`, tipo: 'gasto', id: e.id, fechaRegistro: e.fechaRegistro.toISOString(), fecha: e.fecha.toISOString(), titulo: e.descripcion, texto: `Pagó ${e.pagador.nombre}`, monto: e.montoTotal, estado: 'vigente', detalle: null as unknown })),
+      ...expenses.map(e => ({ clave: `gasto-${e.id}`, tipo: 'gasto', id: e.id, fechaRegistro: e.fechaRegistro.toISOString(), fecha: e.fecha.toISOString(), titulo: e.descripcion, texto: e.pagadores.length > 1 ? `Pagaron ${e.pagadores.map(p => p.usuario.nombre).join(', ')}` : `Pagó ${e.pagador.nombre}`, monto: e.montoTotal, estado: 'vigente', detalle: null as unknown })),
       ...payments.map(p => ({ clave: `pago-${p.id}`, tipo: 'pago', id: p.id, fechaRegistro: p.fechaPago.toISOString(), fecha: p.fechaEfectiva ? p.fechaEfectiva.toISOString().slice(0, 10) : p.fechaPago.toISOString(), titulo: `${p.pagador.nombre} → ${p.receptor.nombre}`, texto: p.metodo ?? 'Pago', monto: p.monto, estado: p.estado, detalle: null as unknown })),
       ...events.map(e => ({ clave: `evento-${e.id}`, tipo: 'cambio', id: e.id, fechaRegistro: e.fecha.toISOString(), fecha: e.fecha.toISOString(), titulo: e.texto, texto: e.autor.nombre, monto: null, estado: e.tipo, detalle: e.detalle as unknown })),
     ].sort((a, b) => b.fechaRegistro.localeCompare(a.fechaRegistro) || (a.clave < b.clave ? 1 : a.clave > b.clave ? -1 : 0));

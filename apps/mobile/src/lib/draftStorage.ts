@@ -17,12 +17,14 @@ const snapshot = z.object({
 }).strict();
 export const expenseDraftSchema = z.object({
   amount: z.string().max(16), description: z.string().max(200), payer: short,
+  multiplePayers: z.boolean().optional(), payerAmounts: z.record(short, z.string().max(16)).refine(value => Object.keys(value).length <= 50).optional(),
+  payerConcepts: z.record(short, z.string().max(80)).refine(value => Object.keys(value).length <= 50).optional(),
   ids: z.array(short).max(50), mode: z.enum(["igual", "exacto", "porcentaje", "participaciones"]), values: z.record(z.string().max(80), z.string().max(16)),
   category: z.enum(["comida", "transporte", "entretenimiento", "alojamiento", "compras", "otro"]), categoryPicked: z.boolean(),
   text: z.string().max(500), notes: z.string().max(500), date: z.string().datetime(), requestId: short,
   group: snapshot.optional(), savedAt: z.string().datetime(),
   // Frozen payload before a request with an uncertain outcome: never silently edit/re-send it.
-  pending: z.object({ descripcion: z.string().max(200), montoTotal: z.number().int().positive().max(999_999_999), pagadoPor: short, categoria: z.string().max(40), tipoDivision: z.enum(["igual", "exacto", "porcentaje", "participaciones"]), fecha: z.string().datetime(), notas: z.string().max(500).optional(), solicitudId: short, participantes: z.array(z.object({ usuarioId: short, monto: z.number().int().nonnegative().optional(), porcentaje: z.number().min(0).max(100).optional(), participaciones: z.number().int().min(0).max(1000).optional() }).strict()).min(1).max(50) }).strict().optional(),
+  pending: z.object({ descripcion: z.string().max(200), montoTotal: z.number().int().positive().max(999_999_999), pagadoPor: short, pagadores: z.array(z.object({ usuarioId: short, monto: z.number().int().positive().max(999_999_999) }).strict()).min(1).max(50).optional(), categoria: z.string().max(40), tipoDivision: z.enum(["igual", "exacto", "porcentaje", "participaciones"]), fecha: z.string().datetime(), notas: z.string().max(500).optional(), solicitudId: short, participantes: z.array(z.object({ usuarioId: short, monto: z.number().int().nonnegative().optional(), porcentaje: z.number().min(0).max(100).optional(), participaciones: z.number().int().min(0).max(1000).optional() }).strict()).min(1).max(50) }).strict().optional(),
 }).strict();
 export type ExpenseDraft = z.infer<typeof expenseDraftSchema>;
 export const expenseDraftPrefix = (userId: string) => `junto.expenseDraft.v1.${userId}.`;

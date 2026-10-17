@@ -82,6 +82,7 @@ export type Reaccion = { emoji: string; total: number; mia: boolean };
 export type Presencia = { usuarioId: string; enLinea: boolean; ultimaConexion: string | null };
 
 export interface GrupoConBalance extends Grupo {
+  funciones?: { variosPagadores?: boolean };
   /** The pinned group message, shown above the chat. */
   mensajeFijado?: { id: string; texto: string; fechaCreacion: string; autor: { id: string; nombre: string } } | null;
   resumen: {
@@ -147,7 +148,7 @@ export type ChatItem = ChatBase & (
   | { tipo: "creado" }
   | { tipo: 'cambio'; texto: string; evento: string }
   | { tipo: "union"; parte: number | null; activo: boolean; sinCuenta?: boolean }
-  | { tipo: "cuenta" | "gasto"; gastoId: string; descripcion: string; monto: number; pagador: ChatPersona; comentarios: number; tuParte: number | null; repite?: string | null; partes?: number; parte?: number; libres?: number; entrega?: Entrega }
+  | { tipo: "cuenta" | "gasto"; gastoId: string; descripcion: string; monto: number; pagador: ChatPersona; pagadores?: Gasto['pagadores']; comentarios: number; tuParte: number | null; repite?: string | null; partes?: number; parte?: number; libres?: number; entrega?: Entrega }
   | { tipo: "pago"; pagoId: string; monto: number; monedaOrigen?: CurrencyCode | null; montoOrigen?: number | null; tipoCambio?: string | null; metodo: string | null; estado: string; receptor: ChatPersona; resolutor: ChatPersona | null; fechaResolucion: string | null; comentarios: number; tieneComprobante?: boolean; puedeVerComprobante?: boolean; apruebaComo: "receptor" | "administrador" | null }
   | { tipo: "recordatorio"; para: ChatPersona; monto: number | null; aviso: string | null }
   | { tipo: "mensaje"; comentarioId: string; texto: string; eliminado: boolean; puedeEliminar: boolean; entrega?: Entrega; reacciones?: Reaccion[]; fijado?: boolean; respuesta?: Respuesta }
@@ -182,6 +183,9 @@ export interface Gasto {
   descripcion: string;
   montoTotal: number; // en centavos
   pagadoPor: string;
+  tipoDivision?: "igual" | "exacto" | "porcentaje" | "participaciones";
+  /** Several payers: what each one put in and, optionally, into what ("Tour", "Cena"). */
+  pagadores?: { usuarioId: string; monto: number; concepto?: string | null; usuario: Pick<Usuario, "id" | "nombre" | "fotoUrl"> }[];
   categoria: GastoCategoria;
   fecha: string;
   creadoPor: string;

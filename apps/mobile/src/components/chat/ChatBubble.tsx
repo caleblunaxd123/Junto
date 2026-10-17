@@ -5,10 +5,12 @@ import { router } from "expo-router";
 import { Avatar, Button, Label, palette } from "../ui/Design";
 import { avatarColors } from "../../lib/people";
 import { modeWords } from "../../lib/groupMode";
+import { expensePayerLabel } from "../../lib/expensePayers";
 import { chatReactions, isEmojiMessage } from "../../lib/chatExpressions";
 import { type ChatItem, type Entrega, type Respuesta } from "../../types";
 
 import { formatMoney, type CurrencyCode } from "@junto/shared/currency";
+import { MoneyText } from "../ui/MoneyText";
 const methods: Record<string, string> = { yape: "Yape", plin: "Plin", transferencia: "transferencia", efectivo: "efectivo" };
 const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 // WhatsApp's palette: people already know how to read it.
@@ -159,7 +161,7 @@ export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAns
     case "cuenta":
     case "gasto": {
       const bill = item.tipo === "cuenta";
-      const label = `${bill ? words.bill : "Gasto"} ${item.descripcion}, ${money(item.monto)}. ${bill ? words.holder(who(item.pagador)) : `Pagó ${who(item.pagador)}`}.${item.tuParte ? ` Tu parte ${money(item.tuParte)}.` : ""} Ver detalle`;
+      const label = `${bill ? words.bill : "Gasto"} ${item.descripcion}, ${money(item.monto)}. ${bill ? words.holder(who(item.pagador)) : expensePayerLabel(item, meId)}.${item.tuParte ? ` Tu parte ${money(item.tuParte)}.` : ""} Ver detalle`;
       return (
         <Bubble item={item} showAuthor={showAuthor} label={label} onPress={() => router.push(`/(app)/gastos/${item.gastoId}`)}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -167,7 +169,7 @@ export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAns
             <Label size={12} weight="bold" color={bill ? "#007B60" : palette.purple}>{bill ? words.billUpper : "GASTO"}</Label>
           </View>
           <Label weight="bold" size={15}>{item.descripcion}</Label>
-          <Label weight="extra" size={22}>{money(item.monto)}</Label>
+          <MoneyText weight="extra" size={22}>{money(item.monto)}</MoneyText>
           {bill && item.partes ? (
             <Label size={13} color={palette.muted}>{item.partes} {words.parts} {item.monto % item.partes ? "desde" : "de"} {money(Math.floor(item.monto / item.partes))} · {words.holder(who(item.pagador))}</Label>
           ) : (
@@ -175,7 +177,7 @@ export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAns
             // Who paid and your share of THIS expense. What you finally owe is netted across all
             // expenses in the header ("le debes" here could contradict it after compensation).
             <Label size={13} color={palette.muted}>
-              {item.pagador.id === meId ? "Pagaste tú" : `Pagó ${who(item.pagador)}`} · {item.tuParte ? <Label size={13} weight="bold" color={palette.ink}>tu parte {money(item.tuParte)}</Label> : "no te toca"}
+              {expensePayerLabel(item, meId)} · {item.tuParte ? <Label size={13} weight="bold" color={palette.ink}>tu parte {money(item.tuParte)}</Label> : "no te toca"}
             </Label>
           )}
           {bill && !!item.tuParte && <Label size={13} weight="bold" color="#007B60">Tu {words.part}: {money(item.tuParte)}</Label>}
@@ -204,7 +206,7 @@ export function ChatBubble({ item, meId, modo, moneda = "PEN", showAuthor, onAns
             <Ionicons name="cash-outline" size={16} color="#007B60" />
             <Label size={12} weight="bold" color="#007B60">{words.paymentUpper}{item.metodo ? ` · ${(methods[item.metodo] ?? item.metodo).toUpperCase()}` : ""}</Label>
           </View>
-          <Label weight="extra" size={22}>{money(item.monto)}</Label>
+          <MoneyText weight="extra" size={22}>{money(item.monto)}</MoneyText>
           {!!item.monedaOrigen && !!item.montoOrigen && !!item.tipoCambio && <Label size={12} color={palette.muted}>Pagó {formatMoney(item.montoOrigen, item.monedaOrigen)} · Cambio acordado: 1 {item.monedaOrigen} = {item.tipoCambio} {moneda}.</Label>}
           <Label size={13} color={palette.muted}>para {whom(item.receptor)}</Label>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>

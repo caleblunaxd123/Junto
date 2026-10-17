@@ -6,6 +6,7 @@ import { formatMoney } from "@junto/shared/currency";
 import { Label, palette, Skeleton } from "./ui/Design";
 import { accountSummary } from "../lib/accountSummary";
 import type { GrupoConBalance } from "../types";
+import { MoneyText } from "./ui/MoneyText";
 
 /** Group balances only: historical day bills keep their own status below. */
 export function HomeBalances({ groups, loading }: { groups: GrupoConBalance[]; loading: boolean }) {
@@ -27,7 +28,7 @@ export function HomeBalances({ groups, loading }: { groups: GrupoConBalance[]; l
                   <View style={{ backgroundColor: figure.bg, borderRadius: 18, padding: 7 }}><Ionicons name={figure.icon} size={20} color={figure.color} /></View>
                   <Label size={15} weight="bold" color={palette.muted}>{figure.title}</Label>
                 </View>
-                <Label size={27} weight="extra" style={{ fontVariant: ["tabular-nums"] }}>{formatMoney(figure.value, bucket.moneda)}</Label>
+                <MoneyText size={27} weight="extra" style={{ fontVariant: ["tabular-nums"] }}>{formatMoney(figure.value, bucket.moneda)}</MoneyText>
               </View>
             ))}
           </View>

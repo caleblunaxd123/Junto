@@ -204,7 +204,7 @@ export async function getGrupoDetalle(grupoId: string, usuarioId: string) {
   // Every payment waiting for confirmation in the group, not only the viewer's: shared summaries cite it.
   const [pagosPorConfirmar, cuentasPorPartesDelGrupo] = await Promise.all([prisma.pago.count({ where: { grupoId, estado: 'reportado' } }), cuentasPorPartes(grupoId)]);
   const tieneHistorialFinanciero = !!(await prisma.gasto.count({ where: { grupoId } })) || !!(await prisma.pago.count({ where: { grupoId } }));
-  return { ...grupo, miembros: visibleMembers(grupo.miembros), archivado: !!miembro.archivadoEn, tieneHistorialFinanciero, resumen, saldos: resumen.saldos, pagosPorConfirmar, cuenta: cuentasPorPartesDelGrupo[0] ?? null, mensajeFijado: fijado, cuentasPorPartes: cuentasPorPartesDelGrupo, balanceUsuario: { neto: teDeben - debes, teDeben, debes }, rolUsuario: miembro.rol };
+  return { ...grupo, funciones: { variosPagadores: true }, miembros: visibleMembers(grupo.miembros), archivado: !!miembro.archivadoEn, tieneHistorialFinanciero, resumen, saldos: resumen.saldos, pagosPorConfirmar, cuenta: cuentasPorPartesDelGrupo[0] ?? null, mensajeFijado: fijado, cuentasPorPartes: cuentasPorPartesDelGrupo, balanceUsuario: { neto: teDeben - debes, teDeben, debes }, rolUsuario: miembro.rol };
 }
 
 /**

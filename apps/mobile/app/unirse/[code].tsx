@@ -21,6 +21,7 @@ import {
   Avatar,
   palette,
 } from "../../src/components/ui/Design";
+import { MoneyText } from "../../src/components/ui/MoneyText";
 
 type Preview = {
   nombre: string; moneda?: CurrencyCode; tipo: string; modo?: string | null; miembros: number;
@@ -97,13 +98,13 @@ export default function Join() {
                       <Label size={13} weight="bold" color={personal.debes ? "#D9404C" : "#007B60"}>
                         {personal.debes ? "TE TOCA PAGAR" : personal.teDeben ? "TE DEBEN" : "ESTÁS A MANO"}
                       </Label>
-                      {(personal.debes > 0 || personal.teDeben > 0) && <Label size={28} weight="extra">{money(personal.debes || personal.teDeben)}</Label>}
+                      {(personal.debes > 0 || personal.teDeben > 0) && <MoneyText size={28} weight="extra">{money(personal.debes || personal.teDeben)}</MoneyText>}
                       <Label size={13}>Te agregaron como «{personal.nombre}». Al unirte verás cada gasto y podrás registrar tus pagos.</Label>
                     </Card>
                   ) : preview.data.partesAlUnirse?.cuentas.length ? <JoinParts moneda={preview.data.moneda} parts={preview.data.partesAlUnirse} division={modeWords(preview.data.modo).division} /> : preview.data.cuenta ? (
                     <Card style={{ backgroundColor: "#E7FBF3", gap: 4 }}>
                       <Label size={13} weight="bold" color="#007B60">TU PARTE</Label>
-                      <Label size={28} weight="extra">{money(preview.data.cuenta.parte)}</Label>
+                      <MoneyText size={28} weight="extra">{money(preview.data.cuenta.parte)}</MoneyText>
                       <Label size={13}>{first(preview.data.cuenta.pagadorNombre)} pagó {money(preview.data.cuenta.montoTotal)} para {preview.data.cuenta.partes}. Al unirte, le devuelves tu parte por Yape, Plin o efectivo.</Label>
                     </Card>
                   ) : (

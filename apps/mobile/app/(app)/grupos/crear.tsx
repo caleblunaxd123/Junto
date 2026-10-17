@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useNavigation } from "expo-router";
+import { AppDialog } from "../../../src/components/ui/AppDialog";
 import { api } from "../../../src/lib/api";
 import { queryClient } from "../../../src/lib/queryClient";
 import { guessGroupType } from "../../../src/lib/groupType";
@@ -27,6 +28,17 @@ export default function CreateGroup() {
   const [createdId, setCreatedId] = useState("");
   const [options, setOptions] = useState(false);
   const [pendingPerson, setPendingPerson] = useState("");
+  const navigation = useNavigation();
+  // Back (button or gesture) must not silently throw away a name and the people already added.
+  const dirty = !createdId && (name.trim().length > 0 || people.length > 0 || pendingPerson.trim().length > 0);
+  useEffect(() => navigation.addListener("beforeRemove", (event) => {
+    if (!dirty) return;
+    event.preventDefault();
+    AppDialog.alert("¿Salir sin crear el grupo?", "Se perderán el nombre y las personas que agregaste.", [
+      { text: "Seguir aquí", style: "cancel" },
+      { text: "Salir", style: "destructive", onPress: () => navigation.dispatch(event.data.action) },
+    ]);
+  }), [navigation, dirty]);
 
   async function submit() {
     if (busy) return;

@@ -55,3 +55,15 @@ export function extractSpanishAmountCents(text: string): number | null {
   const total = whole*100+cents;
   return Number.isSafeInteger(total) && total > 0 && total <= 999_999_999 ? total : null;
 }
+
+/** "CUARENTA Y DOS CON 40/100 SOLES" (the amount in words printed on Peruvian receipts), in cents. */
+export function receiptWordsCents(text: string): number | null {
+  const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const match = normalized.match(/\bson\s*:?\s*([a-z ]+?)\s+(?:con|y)\s+(\d{1,2})\s*\/\s*100\b/);
+  if (!match) return null;
+  const tokens = match[1].trim().split(/\s+/);
+  if (!tokens.every((token) => allowed.has(token))) return null;
+  const whole = integer(tokens);
+  const total = whole === null ? null : whole * 100 + Number(match[2].padEnd(2, '0'));
+  return total && Number.isSafeInteger(total) && total <= 999_999_999 ? total : null;
+}

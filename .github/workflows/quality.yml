@@ -128,6 +128,7 @@ jobs:
           node ops/test-admin-received.cjs || (cat api.log && exit 1)
           node ops/test-currency-api.cjs || (cat api.log && exit 1)
           node ops/test-payment-flow.cjs || (cat api.log && exit 1)
+          node ops/test-multi-payer-expenses.cjs || (cat api.log && exit 1)
           node ops/test-chat-updates.cjs || (cat api.log && exit 1)
           node ops/test-ledger-concurrency.cjs || (cat api.log && exit 1)
           node ops/test-shares-simplify.cjs || (cat api.log && exit 1)

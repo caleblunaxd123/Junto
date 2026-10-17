@@ -62,3 +62,13 @@ test("OCR refuses to choose between different totals or infer an unknown total",
   assert.equal(receiptTotals("TOTAL 1820").totalPropuesto, null, "Bare OCR integers must not silently autofill a potentially misread amount");
   assert.equal(receiptTotals("TOTAL 1,234.56").totalPropuesto, 123456);
 });
+
+test('transfer screenshots offer a reviewed candidate, never create another expense or confirm money', () => {
+  const payment = receiptTotals('Constancia\nTransferiste\nS/ 195.00\nCuenta destino:\nComercio QA\nCódigo de operación:\n00600327');
+  assert.equal(payment.totalPropuesto, null); assert.deepEqual(payment.candidatos.map(p => p.monto), [19500]);
+  assert.match(payment.advertencia, /Ya pagué/);
+  assert.equal(receiptTotals('¡Yapeaste!\nS/ 9\nComercio QA').candidatos[0].monto, 900);
+  assert.equal(receiptTotals('T0TAL A PAGAR S/ 82.26').totalPropuesto, 8226);
+  assert.equal(receiptTotals('T O T A L S/ 82.26').totalPropuesto, 8226);
+  assert.equal(receiptTotals('TOTAL IGV 12.00\nRUC 20123456789').totalPropuesto, null);
+});
