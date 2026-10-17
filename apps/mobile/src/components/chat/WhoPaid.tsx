@@ -120,7 +120,7 @@ export function WhoPaid({ group, payments = [], userId, visible, onClose, onPay,
                     <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                         <Label weight="bold" size={14} numberOfLines={1} style={{ flexShrink: 1 }}>{mine ? "Tú" : account.nombre}</Label>
-                        {noApp && <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, backgroundColor: palette.yellow }}><Label size={11} weight="bold" color="#8A5A00">sin app</Label></View>}
+                        {noApp && <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, backgroundColor: palette.yellow }}><Label size={12} weight="bold" color="#8A5A00">Aún no se une</Label></View>}
                       </View>
                       <Label size={12} color={palette.muted}>Pagó {money(account.pagaste)} · Su parte {money(account.tuParte)}</Label>
                       {!mine && !noApp && <Label size={11} color={seen.get(account.usuarioId)?.enLinea ? "#007B60" : palette.muted}>{lastSeen(seen.get(account.usuarioId))}</Label>}

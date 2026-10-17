@@ -35,8 +35,7 @@ export function DesktopShell({ children }: { children: React.ReactNode }) {
           </Pressable></Link>;
         })}
         <View style={{ marginTop: 22, gap: 10 }}>
-          <Button compact title="Dividir una cuenta" onPress={() => router.push("/(app)/cuentas/rapida")} />
-          <Button compact secondary title="Crear grupo" onPress={() => router.push("/(app)/grupos/crear")} />
+          <Button compact title="Crear grupo" onPress={() => router.push("/(app)/grupos/crear")} />
           <Pressable accessibilityRole="link" onPress={() => router.push("/(app)/unirme")} style={{ minHeight: 44, justifyContent: "center", alignItems: "center" }}><Label size={12} color={palette.purple} weight="bold">Unirme con un enlace</Label></Pressable>
         </View>
       </ScrollView>

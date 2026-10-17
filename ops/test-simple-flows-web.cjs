@@ -51,6 +51,8 @@ const deferred = () => { let resolve; const promise = new Promise(r => resolve =
           }
           if (loseAnswer) { loseAnswer = false; return route.abort('failed'); }
           status = 201; body = { ...payload, id: 'b24a0000-1111-4111-8111-000000000099', grupoId: gid };
+        } else if (p === `/grupos/${gid}/gastos` && method === 'GET') {
+          body = { gastos: ledger.map((expense, index) => ({ ...expense, id: `b24a0000-1111-4111-8111-${String(index + 100).padStart(12, '0')}`, grupoId: gid, descripcion: expense.descripcion || 'Gasto inicial', categoria: expense.categoria || 'otro', fecha: now, pagador: people.find(person => person.id === expense.pagadoPor), participantes: expense.participantes.map(part => ({ ...part, usuario: people.find(person => person.id === part.usuarioId) })) })), total: ledger.length, totalPages: 1 };
         } else if (p === '/pagos/reportar') {
           body = { ...req.postDataJSON(), id: 'fictional-payment', pagadorId: uid, estado: 'reportado' }; status = 201;
         }
@@ -72,7 +74,8 @@ const deferred = () => { let resolve; const promise = new Promise(r => resolve =
       };
       await page.goto(`${origin}/app/gastos/agregar?grupoId=${gid}`);
       await page.getByLabel('Monto total en PEN', { exact: true }).waitFor();
-      await page.getByText('Entre 2 · en partes iguales', { exact: true }).waitFor();
+      await page.getByText('4. ¿Entre quiénes se divide?', { exact: true }).waitFor();
+      assert.equal(await page.getByRole('checkbox', { checked: true }).count(), 2);
       assert.equal(await page.getByText('¿Se repite?', { exact: true }).count(), 0);
       assert.equal(await page.getByLabel('Nota del gasto', { exact: true }).count(), 0);
       await page.getByRole('button', { name: 'Guardar gasto', exact: true }).click();
@@ -81,7 +84,8 @@ const deferred = () => { let resolve; const promise = new Promise(r => resolve =
       await page.getByRole('button', { name: 'Guardar gasto', exact: true }).click();
       await page.getByText(/Escribe en qué gastaste/).waitFor();
       await page.getByLabel('Descripción del gasto', { exact: true }).fill('Almuerzo');
-      await page.getByText(/S\/\s*60[.,]00 por persona/).waitFor();
+      await page.getByText('5. A cada uno le toca', { exact: true }).waitFor();
+      assert.equal(await page.getByText(/S\/\s*60[.,]00/, { exact: true }).count(), 2);
       await fit('gasto-simple');
       await page.getByRole('button', { name: 'Más opciones', exact: true }).click();
       await page.getByLabel('Nota del gasto', { exact: true }).fill('Comida de prueba');
@@ -95,10 +99,10 @@ const deferred = () => { let resolve; const promise = new Promise(r => resolve =
       await page.getByText('✓ Gasto guardado', { exact: true }).waitFor();
       assert.equal(posts.length, 1); assert.equal(posts[0].montoTotal, 12000);
       assert.equal(posts[0].participantes.length, 2); assert.equal(posts[0].notas, 'Comida de prueba');
-      await page.getByText(/Luis te debe S\/\s*30[.,]00/, { exact: true }).waitFor();
+      await page.getByText('Luis QA te debe', { exact: true }).waitFor();
       await fit('grupo');
       assert.equal(await page.getByRole('button', { name: 'Buscar movimientos', exact: true }).count(), 0);
-      await page.getByRole('button', { name: 'Sacar cuentas', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Sacar cuentas · quién paga a quién', exact: true }).waitFor();
       // A committed write whose response is lost must retry the identical frozen payload.
       await page.goto(`${origin}/app/gastos/agregar?grupoId=${gid}`);
       await page.getByLabel('Monto total en PEN', { exact: true }).fill('10.01');

@@ -27,7 +27,7 @@ import {
   BrandBackdrop,
   brand,
 } from "../../../src/components/ui/Design";
-import { BalanceSummary } from "../../../src/components/BalanceSummary";
+import { HomeBalances } from "../../../src/components/HomeBalances";
 import { Brand, SectionTitle } from "../../../src/components/ui/Reference";
 import { centavosASoles } from "../../../src/types";
 import { useQuickBills } from "../../../src/hooks/useQuickBills";
@@ -38,6 +38,7 @@ import { pendingActions } from "../../../src/lib/pending";
 import { PendingActions } from "../../../src/components/PendingActions";
 import { Invitations } from "../../../src/components/Invitations";
 import { GroupNotices } from "../../../src/components/GroupNotices";
+import { RecentActivity } from "../../../src/components/RecentActivity";
 import { clearTryBill, loadTryBill, type SavedTryBill } from "../../../src/lib/tryBillHandoff";
 import { useResponsiveLayout } from "../../../src/components/ui/responsive";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -97,7 +98,8 @@ export default function Home() {
     if (!trial || !usuario) return;
     router.push({ pathname: "/(app)/cuentas/pasar-a-grupo", params: { prueba: "1" } });
   }
-  const actions = pendingActions(groups, payments.data ?? [], usuario?.id);
+  // Ordinary debts already appear in the balances and group cards. Only decisions interrupt Home.
+  const actions = pendingActions(groups, payments.data ?? [], usuario?.id).filter((action) => action.kind === "confirmar" || action.kind === "revisar");
   const openBills = bills.data?.filter((bill) => !bill.archivada && !bill.grupoId) ?? [];
   const dayPending = pendingDayBills(openBills);
   const archivedCount = groups.filter(g => g.archivado).length;
@@ -144,22 +146,16 @@ export default function Home() {
         </BrandBackdrop>
         <View style={{ width: "100%", maxWidth: web ? 1160 : undefined, alignSelf: "center", paddingHorizontal: desktop ? 32 : 16, marginTop: desktop ? -48 : -44, gap: desktop ? 24 : 16 }}>
 
-        {!unavailable && !empty && !isError && (isLoading || groups.length > 0) && <BalanceSummary groups={groups} loading={isLoading} />}
+        {!unavailable && !empty && !isError && (isLoading || groups.length > 0) && <HomeBalances groups={groups} loading={isLoading} />}
+        {/* Keep the main entry point in the same place for new and returning users. */}
+          <Pressable accessibilityRole="button" accessibilityLabel="Crear grupo" accessibilityHint="Agrega a tu gente y divide lo que pagaron." onPress={() => router.push("/(app)/grupos/crear")}
+            onPressIn={() => setSplitPressed(true)} onPressOut={() => setSplitPressed(false)}
+            style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", minHeight: 72, gap: 12, padding: 18, borderRadius: 28, backgroundColor: splitPressed ? "#006B55" : "#007B60" }}>
+            <Ionicons name="add-circle-outline" size={32} color="white" />
+            <Label weight="extra" size={23} color="white">Crear grupo</Label>
+          </Pressable>
         <Invitations />
         <GroupNotices />
-        {/* One way to start, explained with a real example; once you have groups, "+" does it. */}
-          {!groups.length && <Pressable accessibilityRole="button" accessibilityLabel="Dividir gastos" accessibilityHint="Agrega a las personas y anota quién pagó para calcular cuánto le toca a cada uno." onPress={() => router.push("/(app)/grupos/crear")}
-            onPressIn={() => setSplitPressed(true)} onPressOut={() => setSplitPressed(false)}
-            style={{ flexDirection: "row", alignItems: "center", minHeight: 116, gap: 14, padding: 20, borderRadius: 24, backgroundColor: splitPressed ? "#006B55" : "#007B60" }}>
-            <View style={{ width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", backgroundColor: "white" }}>
-              <Ionicons name="receipt-outline" size={28} color="#007B60" />
-            </View>
-            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-              <Label weight="extra" size={23} color="white">Dividir gastos</Label>
-              <Label size={13} color="#FFFFFF">Agrega a tu gente y anota quién pagó. JUNTO calcula cuánto le toca a cada uno.</Label>
-            </View>
-            <Ionicons name="arrow-forward" size={24} color="white" />
-          </Pressable>}
         {drafts > 0 && <Button compact secondary title={`Retomar ${drafts === 1 ? "1 borrador" : `${drafts} borradores`}`} onPress={() => router.push("/(app)/borradores")} />}
         {trial && (
           <Card style={{ backgroundColor: palette.yellow, borderColor: "#F1DFA8", gap: 8 }}>
@@ -237,8 +233,6 @@ export default function Home() {
             <View style={{ flex: desktop ? 1.25 : undefined, minWidth: 0, gap: 16 }}>
             <SectionTitle
               title="Tus grupos"
-              action={groups.length ? "Crear grupo" : undefined}
-              onPress={() => router.push("/(app)/grupos/crear")}
             />
             {isLoading ? (
               <View accessibilityLabel="Cargando tus grupos" style={{ gap: 12 }}><SkeletonRow /><SkeletonRow /></View>
@@ -248,7 +242,7 @@ export default function Home() {
                 <Button title="Reintentar" onPress={() => refetch()} />
               </>
             ) : groups.length === 0 ? (
-              <Label size={13} color={palette.muted}>Aún no tienes grupos. Pulsa «Dividir gastos» para empezar.</Label>
+              <Label size={14} color={palette.muted}>Aún no tienes grupos. Pulsa «Crear grupo» para empezar.</Label>
             ) : (
               <>
                 {(archivedCount > 0 || showArchived) && <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -273,7 +267,9 @@ export default function Home() {
                   const net = g.balanceUsuario.neto;
                   // Person to person you can owe one friend and be owed by another: say both, never only the net.
                   const { teDeben, debes } = g.balanceUsuario;
-                  const status = teDeben && debes ? `Te deben ${money(teDeben, g.moneda)} · debes ${money(debes, g.moneda)}` : teDeben ? `Te deben ${money(teDeben, g.moneda)}` : debes ? `Debes ${money(debes, g.moneda)}` : net === 0 ? "Estás al día" : net > 0 ? `Te deben ${money(net, g.moneda)}` : `Debes ${money(-net, g.moneda)}`;
+                  const personalDebts = (g.resumen.saldos ?? []).filter((debt) => debt.deudorId === usuario?.id || debt.acreedorId === usuario?.id);
+                  const direct = personalDebts.length === 1 ? personalDebts[0] : null;
+                  const status = direct ? direct.acreedorId === usuario?.id ? `${direct.deudorNombre} te debe ${money(direct.monto, g.moneda)}` : `Le debes ${money(direct.monto, g.moneda)} a ${direct.acreedorNombre}` : teDeben && debes ? `Te deben ${money(teDeben, g.moneda)} · debes ${money(debes, g.moneda)}` : teDeben ? `Te deben ${money(teDeben, g.moneda)}` : debes ? `Debes ${money(debes, g.moneda)}` : net === 0 ? "Estás al día" : net > 0 ? `Te deben ${money(net, g.moneda)}` : `Debes ${money(-net, g.moneda)}`;
                   const waiting = (payments.data ?? []).filter((p) => p.grupoId === g.id && p.estado === "reportado" && p.receptorId === usuario?.id).length;
                   return (
                     <Pressable
@@ -282,7 +278,8 @@ export default function Home() {
                       accessibilityLabel={`${g.nombre}. ${g.miembros.length} personas. ${status}${waiting ? `. ${waiting} pago por confirmar` : ""}${g.noLeidos ? `. ${g.noLeidos} sin leer` : ""}`}
                       onPress={() => router.push(`/(app)/grupos/${g.id}`)}
                     >
-                      <Card style={{ padding: 12, borderRadius: 22, flexDirection: "row", gap: 12, alignItems: "center" }}>
+                      <Card style={{ padding: 14, borderRadius: 24, gap: 12 }}>
+                        <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
                         <Image
                           source={groupCover(g.tipo)}
                           style={{ width: 64, height: 64, borderRadius: 16, backgroundColor: g.tipo === "viaje" ? "#E7F4FD" : "#FFF2E4" }}
@@ -303,13 +300,8 @@ export default function Home() {
                               {g.miembros.length} {g.miembros.length === 1 ? "persona" : "personas"}
                             </Label>
                           </View>
-                          <Label
-                            size={13}
-                            weight="bold"
-                            color={net < 0 ? palette.coral : net > 0 ? "#007B60" : palette.muted}
-                          >
-                            {waiting ? `${status} · ${waiting} por confirmar` : status}
-                          </Label>
+                          <Label size={13} color={palette.muted}>Total gastado: <Label size={14} weight="bold">{money(g.resumen.totalGastado, g.moneda)}</Label></Label>
+
                         </View>
                         {g.noLeidos ? (
                           <View accessibilityLabel={`${g.noLeidos} ${g.noLeidos === 1 ? "novedad" : "novedades"} sin leer`} style={{ minWidth: 26, height: 26, borderRadius: 13, paddingHorizontal: 7, alignItems: "center", justifyContent: "center", backgroundColor: "#25D366" }}>
@@ -318,6 +310,17 @@ export default function Home() {
                         ) : (
                           <Ionicons name="chevron-forward" size={18} color={palette.muted} />
                         )}
+
+                        </View>
+                        <View style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: net < 0 ? palette.lilac : palette.mint }}>
+                          <Label
+                            size={15}
+                            weight="bold"
+                            color={net < 0 ? palette.coral : net > 0 ? "#007B60" : palette.muted}
+                          >
+                            {waiting ? `${status} · ${waiting} por confirmar` : status}
+                          </Label>
+                        </View>
                       </Card>
                     </Pressable>
                   );
@@ -363,6 +366,7 @@ export default function Home() {
             )}
             </View>}
             </View>
+            <RecentActivity />
           </>
         )}
         {!empty && <Button secondary title="Unirme a un grupo" onPress={() => router.push("/(app)/unirme")} />}

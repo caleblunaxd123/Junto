@@ -394,7 +394,12 @@ export default function Payment() {
       <>
       {/* 2. Voucher */}
       {!image ? (
-        <Button secondary title="Adjuntar comprobante (opcional)" accessibilityHint="Elige una captura de Yape, Plin o transferencia. Revisas sus datos antes de enviar." onPress={() => pick(false)} />
+        <Button
+          secondary={params.subir !== "1"}
+          title={params.subir === "1" ? "Subir comprobante del pago" : "Adjuntar comprobante (opcional)"}
+          accessibilityHint="Elige una captura de Yape, Plin o transferencia. Revisas sus datos antes de enviar."
+          onPress={() => pick(false)}
+        />
       ) : (
         <Card style={{ flexDirection: "row", gap: 12, padding: 12 }}>
           <Image source={{ uri: image.uri }} accessibilityLabel="Tu comprobante" style={{ width: 76, height: 130, borderRadius: 10, backgroundColor: "#F2F3F5" }} resizeMode="cover" />

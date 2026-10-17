@@ -62,6 +62,10 @@ jobs:
         run: node ops/test-profile-web.cjs apps/mobile/dist-ci
       - name: Simple expense and payment flows, uncertain retries and responsive layouts
         run: node ops/test-simple-flows-web.cjs apps/mobile/dist-ci
+      - name: Accounts-first group layout and chat separation in the production build
+        env:
+          JUNTO_LAYOUT_API_ORIGIN: https://junto.lunalav.pe
+        run: node ops/test-group-layout-web.cjs apps/mobile/dist-ci
 
   database:
     runs-on: ubuntu-latest

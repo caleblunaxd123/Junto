@@ -67,7 +67,7 @@ export function GroupNotices() {
           </View>
         </View>
         <View style={{ flexDirection: "row", gap: 8 }}>
-          <View style={{ flex: 1 }}><Button compact title="Abrir chat" onPress={() => { void markRead(grupo.id, notices); router.push(`/(app)/grupos/${grupo.id}`); }} /></View>
+          <View style={{ flex: 1 }}><Button compact title="Abrir grupo" onPress={() => { void markRead(grupo.id, notices); router.push(`/(app)/grupos/${grupo.id}`); }} /></View>
           <View style={{ flex: 1 }}><Button compact secondary title="Entendido" loading={busy === grupo.id} disabled={!!busy} onPress={() => { void markRead(grupo.id, notices); }} /></View>
         </View>
       </Card>;

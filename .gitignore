@@ -50,5 +50,6 @@ __pycache__/
 /ai/deepseek-benchmark-*.local.json
 apps/mobile/dist-beta/
 apps/mobile/dist-local/
+apps/mobile/dist-ux-qa/
 ops/artifacts/
 /output/

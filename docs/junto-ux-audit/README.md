@@ -15,6 +15,9 @@
 | [11 Splitwise vs JUNTO](11_SPLITWISE_VS_JUNTO_PRUEBA.md) | Prueba lado a lado en el emulador y simplificación aplicada |
 | [16 REA Yape y Splitwise](16_REA_YAPE_SPLITWISE_SIMPLICIDAD.md) | Evidencia actual, simplificación diaria, pagos y criterios de validación Android |
 | [17 UX simple validada](17_UX_SIMPLE_VALIDACION.md) | Implementación 1.6.0, guardado nativo aislado y regresión de flujos |
+| [18 REA + Voz y Escaneo en 1 toque](18_REA_SPLITWISE_YAPE_UX_MEJORAS.md) | Evidencia REA v6.5.0 (Splitwise APK, ADB y AST JS), barra de voz/boleta en 1 toque y mejoras UX |
+
+Distribución solicitada por el dueño y aplicada localmente: [19 Cuentas y chat](19_DISTRIBUCION_CUENTAS_CHAT_20261017.md).
 
 Capturas: [`screens/before`](screens/before) y [`screens/after`](screens/after) (render web del mismo código
 React Native, API local, datos ficticios) y [`screens/native`](screens/native) (app nativa en el emulador Android). Regenerarlas: `ops/ux-export-web.sh <dir>`, servir con

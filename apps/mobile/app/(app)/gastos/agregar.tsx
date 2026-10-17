@@ -37,6 +37,8 @@ import { formatMoney, currencyInfo } from "@junto/shared/currency";
 import { centavosASoles, TipoDivision, Gasto } from "../../../src/types";
 import { parseMoney, parsePercentage, parseShares, allocatePreview } from "../../../src/lib/expensePreview";
 import { ExpenseDictation } from "../../../src/components/ExpenseDictation";
+import * as ImagePicker from "expo-image-picker";
+import { useReadReceipt, type ReceiptProposal } from "../../../src/hooks/useQuickBills";
 import { useExpenseDraft } from "../../../src/hooks/useExpenseDraft";
 import type { ExpenseDraft } from "../../../src/lib/draftStorage";
 import { groupCover, expenseIcons } from "../../../src/components/ui/Artwork";
@@ -92,17 +94,24 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   const create = useCrearGasto(groupId, params.gastoId);
   const qc = useQueryClient();
   const interpret = useInterpretarGasto();
+  const readReceipt = useReadReceipt();
   const proposalRequest = useRef<AbortController | null>(null);
+  const receiptRequest = useRef<AbortController | null>(null);
   const [preparing, setPreparing] = useState(false);
+  const [readingReceipt, setReadingReceipt] = useState(false);
+  const [receiptProposal, setReceiptProposal] = useState<ReceiptProposal>();
   const cancelProposal = useCallback(() => {
     proposalRequest.current?.abort();
     proposalRequest.current = null;
     setPreparing(false);
+    receiptRequest.current?.abort();
+    receiptRequest.current = null;
+    setReadingReceipt(false);
   }, []);
   useEffect(() => {
     cancelProposal();
   }, [groupId, focused, cancelProposal]);
-  useEffect(() => () => proposalRequest.current?.abort(), []);
+  useEffect(() => () => { proposalRequest.current?.abort(); receiptRequest.current?.abort(); }, []);
   const initializedGroup = useRef("");
   const initializedExpense = useRef("");
   useEffect(() => {
@@ -134,6 +143,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   const [detail, setDetail] = useState(!!params.texto);
   // Splitwise-style: the default split is a sentence; the full editor opens on request.
   const [customSplit, setCustomSplit] = useState(false);
+  const [assistanceOpen, setAssistanceOpen] = useState(false);
   // "¿Se repite?": rent, internet… The first one is added now and then on schedule.
   const [repeat, setRepeat] = useState<"no" | "semanal" | "quincenal" | "mensual">("no");
   const [picker, setPicker] = useState<"grupo" | "pagador" | null>(null);
@@ -246,11 +256,9 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
           ? parsedUnits.every((value) => value !== null) && unitsSum > 0 && shares.reduce((a, b) => a + b, 0) === total
         : parsedPct.every((value) => value !== null) && Math.abs(pctSum - 100) < 0.000001 &&
           pct.every((p) => p >= 0 && p <= 100));
-  // The usual case (you paid, everyone in the group, equal parts) shows as one sentence.
-  const simpleSplit = !customSplit && !params.gastoId && params.cuenta !== "1" && mode === "igual" && !!group &&
-    payer === user?.id && ids.length === group.miembros.length && group.miembros.some((m) => m.usuarioId === user?.id);
   function changeMode(m: TipoDivision) {
     cancelProposal();
+    setError("");
     setMode(m);
     if (m === "porcentaje") {
       const hundredths = allocatePreview(
@@ -265,8 +273,9 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     } else if (m === "participaciones") setValues(Object.fromEntries(ids.map((id) => [id, "1"])));
     else setValues({});
   }
-  async function prepare() {
-    if (preparing || !groupId || text.trim().length < 3) return;
+  async function prepare(customText?: string) {
+    const phrase = (typeof customText === "string" ? customText : text).trim();
+    if (preparing || !groupId || phrase.length < 3) return;
     const request = new AbortController();
     proposalRequest.current = request;
     setPreparing(true);
@@ -274,7 +283,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     try {
       const p = await interpret.mutateAsync({
         grupoId: groupId,
-        texto: text.trim(),
+        texto: phrase,
         signal: request.signal,
       });
       if (request.signal.aborted || proposalRequest.current !== request) return;
@@ -284,6 +293,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       setIds(p.participanteIds);
       setCategory(p.categoria);
       setMode("igual");
+      setReceiptProposal(undefined);
       setProposal(
         `${p.explicacion}${p.nombresSinCoincidencia.length ? ` Revisa: ${p.nombresSinCoincidencia.join(", ")}.` : ""}`,
       );
@@ -296,6 +306,49 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       if (proposalRequest.current === request) {
         proposalRequest.current = null;
         setPreparing(false);
+      }
+    }
+  }
+  async function scanReceipt(camera: boolean) {
+    if (readingReceipt || preparing || saving.current || create.isPending) return;
+    cancelProposal();
+    const controller = new AbortController();
+    receiptRequest.current = controller;
+    setReadingReceipt(true);
+    setError("");
+    try {
+      if (camera && !(await ImagePicker.requestCameraPermissionsAsync()).granted) {
+        setError("Puedes elegir una foto o escribir el monto sin dar permiso a la cámara.");
+        return;
+      }
+      const options: ImagePicker.ImagePickerOptions = { mediaTypes: ["images"], base64: true, quality: 0.8, allowsEditing: false };
+      const picked = camera ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
+      if (picked.canceled || controller.signal.aborted || receiptRequest.current !== controller) return;
+      const imagen = picked.assets[0]?.base64;
+      if (!imagen || imagen.length > 5_600_000) {
+        setError("Usa una foto JPG/PNG de hasta 4 MB.");
+        return;
+      }
+      setReceiptProposal(undefined);
+      const scanned = await readReceipt.mutateAsync({ imagen, signal: controller.signal });
+      if (controller.signal.aborted || receiptRequest.current !== controller) return;
+      setReceiptProposal(scanned);
+      if (scanned.totalPropuesto) {
+        setAmount(centavosASoles(scanned.totalPropuesto));
+      }
+      if (!description.trim()) {
+        setDescription("Consumo de boleta");
+        if (!categoryPicked) setCategory("comida");
+      }
+      setProposal(scanned.advertencia);
+    } catch (err) {
+      if (!controller.signal.aborted && receiptRequest.current === controller) {
+        setError(errorMessage(err, "No pudimos leer la boleta. Escribe el monto para continuar."));
+      }
+    } finally {
+      if (receiptRequest.current === controller) {
+        receiptRequest.current = null;
+        setReadingReceipt(false);
       }
     }
   }
@@ -474,14 +527,8 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       ) : (
         <>
           {moneda !== "PEN" && <Label size={13} color={palette.muted}>Gastos y pagos en {moneda}. Usa el formulario; el asistente de texto interpreta soles por ahora. No convertimos monedas.</Label>}
-          {!!proposal && (
-            <Card style={{ backgroundColor: palette.mint, padding: 12, gap: 4 }}>
-              <Label weight="bold" size={13} color="#078B70">Revisa antes de guardar</Label>
-              <Label size={12}>{proposal}</Label>
-            </Card>
-          )}
           <Card style={{ gap: 12, padding: 12 }}>
-            <Field label="¿Cuánto pagaste?">
+            <Field label="1. ¿Cuánto pagaste?">
               <View
                 style={[
                   design.input,
@@ -509,22 +556,22 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                   keyboardType="decimal-pad"
                   placeholder="0.00"
                   placeholderTextColor="#94A3B8"
-                  autoFocus={!params.gastoId}
+                  autoFocus={false}
                   style={{
                     flex: 1,
                     minWidth: 0,
-                    fontSize: 31,
+                    fontSize: 36,
                     fontFamily: "JakartaExtra",
                     color: palette.ink,
-                    minHeight: 48,
+                    minHeight: 64,
                   }}
                 />
-                <Label size={10} color={palette.muted}>
+                <Label size={13} color={palette.muted}>
                   {moneda}
                 </Label>
               </View>
             </Field>
-            <Field label="¿En qué gastaste?">
+            <Field label="2. ¿En qué gastaste?">
               <View
                 style={[
                   design.input,
@@ -583,21 +630,16 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
               </Pressable>
             </Field>
             )}
-            {simpleSplit ? (
-              <View style={{ gap: 6, padding: 12, borderRadius: 16, backgroundColor: palette.mint }}>
-                <Pressable accessibilityRole="button" accessibilityLabel="Cambiar quién pagó o cómo se divide" onPress={() => { cancelProposal(); setCustomSplit(true); }}
-                  style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 12 }}>
-                  <View style={{ flex: 1 }}>
-                    <Label size={16} weight="bold">Pagaste tú</Label>
-                    <Label size={15} color={palette.muted}>Entre {ids.length} · en partes iguales</Label>
-                  </View>
-                  <Label size={16} weight="bold" color={palette.positive}>Cambiar</Label>
-                </Pressable>
-                {total > 0 && <Label size={16} weight="bold" color={palette.positive}>{shares.every((v) => v === shares[0]) ? `${money(shares[0] ?? 0)} por persona` : `Desde ${money(Math.min(...shares))} por persona`}</Label>}
-              </View>
-            ) : (
-              <>
-            <Field label={params.cuenta === "1" ? "¿Quién adelantó el total?" : "¿Quién pagó?"}>
+            <Field label={params.cuenta === "1" ? "3. ¿Quién adelantó el total?" : "3. ¿Quién pagó?"}>
+              {orderedMembers.length <= 6 ? <View accessibilityRole="radiogroup" accessibilityLabel="Quién pagó" style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                {orderedMembers.map((member) => <Pressable key={member.usuarioId} accessibilityRole="radio" aria-checked={payer === member.usuarioId}
+                  accessibilityLabel={member.usuario.nombre} onPress={() => { cancelProposal(); setError(""); setPayer(member.usuarioId); }}
+                  style={{ flexGrow: 1, flexBasis: 140, minHeight: 64, padding: 10, borderRadius: 16, borderWidth: 1.5, borderColor: payer === member.usuarioId ? "#68D6B6" : palette.line, backgroundColor: payer === member.usuarioId ? palette.mint : "white", flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Avatar name={member.usuario.nombre} photo={member.usuario.fotoUrl} seed={member.usuarioId} size={36} />
+                  <Label size={15} weight="bold" style={{ flex: 1 }}>{nameOf(member.usuarioId)}</Label>
+                  <Ionicons name={payer === member.usuarioId ? "checkmark-circle" : "ellipse-outline"} size={24} color={payer === member.usuarioId ? palette.positive : palette.muted} />
+                </Pressable>)}
+              </View> : <>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Pagó: ${selectedPayer ? nameOf(selectedPayer.usuarioId) : "elige"}. Cambiar`}
@@ -614,8 +656,9 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                 </Label>
                 <Ionicons name="chevron-down" size={17} color={palette.muted} />
               </Pressable>
+              </>}
             </Field>
-            <Field label="¿Entre quiénes se divide?">
+            <Field label="4. ¿Entre quiénes se divide?">
               {/* Everyone visible at once (wrapping rows): nobody hides past the edge of the screen. */}
               <View
                 style={{
@@ -634,6 +677,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                       accessibilityLabel={nameOf(m.usuarioId) === "Tú" ? "Tú" : m.usuario.nombre}
                       onPress={() => {
                         cancelProposal();
+                        setError("");
                         setIds((current) =>
                           current.includes(m.usuarioId)
                             ? current.filter((id) => id !== m.usuarioId)
@@ -647,10 +691,11 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                         setValues({});
                       }}
                       style={{
-                        alignItems: "center",
-                        opacity: ids.includes(m.usuarioId) ? 1 : 0.4,
-                        width: 64,
-                        minHeight: 48,
+                        flexDirection: "row", alignItems: "center", gap: 10,
+                        flexGrow: 1, flexBasis: 130, padding: 10, borderRadius: 14,
+                        backgroundColor: ids.includes(m.usuarioId) ? palette.mint : "white",
+                        borderWidth: 1, borderColor: ids.includes(m.usuarioId) ? "#68D6B6" : palette.line,
+                        minHeight: 64,
                       }}
                     >
                       <View>
@@ -670,7 +715,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                           />
                         )}
                       </View>
-                      <Label size={11} numberOfLines={1}>
+                      <Label size={15} weight="bold" style={{ flex: 1 }}>
                         {nameOf(m.usuarioId)}
                       </Label>
                     </Pressable>
@@ -681,6 +726,12 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                 Toca a alguien para sacarlo. Ejemplo: el cumpleañero no paga y su parte se reparte entre los demás.
               </Label>
             </Field>
+            <Pressable accessibilityRole="button" accessibilityLabel="Cambiar tipo de reparto" aria-expanded={customSplit} onPress={() => setCustomSplit(!customSplit)}
+              style={{ minHeight: 48, flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Label size={15} weight="bold" style={{ flex: 1 }}>{mode === "igual" ? "Partes iguales" : mode === "exacto" ? "Por montos" : mode === "porcentaje" ? "Por porcentajes" : "Por participaciones"}</Label>
+              <Label size={14} weight="bold" color={palette.positive}>{customSplit ? "Ocultar opciones" : "Cambiar reparto"}</Label>
+            </Pressable>
+            {customSplit && <>
             <Label weight="bold" size={16}>
               ¿Cómo se divide?
             </Label>
@@ -721,6 +772,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                 </Pressable>
               ))}
             </View>
+            </>}
             <View
               style={{
                 backgroundColor: palette.lilac,
@@ -730,20 +782,18 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
               }}
             >
               <Label weight="bold" size={14}>
-                Parte de cada persona
+                5. A cada uno le toca
               </Label>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 {ids.map((id, i) => (
                   <View
                     key={id}
                     style={{
-                      flexGrow: 1,
-                      minWidth: "27%",
-                      maxWidth: "48%",
+                      width: "100%",
+                      flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 12,
                       padding: 8,
                       borderRadius: 16,
                       backgroundColor: "white",
-                      gap: 4,
                     }}
                   >
                     <View
@@ -751,6 +801,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                         flexDirection: "row",
                         gap: 5,
                         alignItems: "center",
+                        flex: 1, minWidth: 100,
                       }}
                     >
                       <Avatar
@@ -761,7 +812,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                         seed={id}
                         size={28}
                       />
-                      <Label size={11} weight="bold" numberOfLines={1}>
+                      <Label size={15} weight="bold" style={{ flexShrink: 1 }}>
                         {nameOf(id)}
                       </Label>
                     </View>
@@ -771,13 +822,14 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                         value={values[id] || ""}
                         onChangeText={(v) => {
                           cancelProposal();
+                          setError("");
                           setValues((current) => ({ ...current, [id]: v }));
                         }}
                         keyboardType={mode === "participaciones" ? "number-pad" : "decimal-pad"}
-                        placeholder={mode === "exacto" ? "Soles" : mode === "participaciones" ? "Ej. 1" : "%"}
+                        placeholder={mode === "exacto" ? moneda : mode === "participaciones" ? "Ej. 1" : "%"}
                         style={[
                           design.input,
-                          { fontSize: 13, padding: 7, minHeight: 40 },
+                          { fontSize: 15, padding: 8, minHeight: 48, minWidth: 80, flex: 1 },
                         ]}
                       />
                     )}
@@ -787,7 +839,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                   </View>
                 ))}
               </View>
-              <Label size={12} color={total === 0 ? palette.muted : valid ? "#078B70" : palette.coral}>
+              <Label size={14} color={total === 0 ? palette.muted : valid ? "#078B70" : palette.coral}>
                 {total === 0
                   ? "Escribe el monto y verás la parte de cada uno."
                   : valid
@@ -799,10 +851,143 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                       : `Asignado: ${money(shares.reduce((a, b) => a + b, 0))} de ${money(total)}.`}
               </Label>
             </View>
-              </>
-            )}
           </Card>
           {mode === "porcentaje" && parsedPct.some((value) => value === null) && <ErrorBox message="Completa cada porcentaje: entre 0 y 100, con máximo 2 decimales. Usa 0 explícitamente si no participa en el costo." />}
+          {!params.gastoId && moneda === "PEN" && (
+            <>
+            <Pressable accessibilityRole="button" accessibilityLabel="Completar con voz o boleta" aria-expanded={assistanceOpen} onPress={() => setAssistanceOpen(!assistanceOpen)}
+              style={{ flexDirection: "row", alignItems: "center", gap: 10, minHeight: 52, padding: 12, borderRadius: 16, backgroundColor: "white", borderWidth: 1, borderColor: palette.line }}>
+              <Ionicons name="sparkles-outline" size={21} color={palette.purple} />
+              <Label size={15} weight="bold" style={{ flex: 1 }}>Completar con voz o boleta</Label>
+              <Ionicons name={assistanceOpen ? "chevron-up" : "chevron-down"} size={20} color={palette.muted} />
+            </Pressable>
+            {assistanceOpen && <View style={{ gap: 8 }}>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Dictar con voz"
+                  disabled={preparing || readingReceipt}
+                  onPress={() => { cancelProposal(); setDictating(true); }}
+                  style={{ flexGrow: 1, flexBasis: 132, minHeight: 46, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: palette.lilac, borderWidth: 1, borderColor: "#D8CEFF", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
+                >
+                  <Ionicons name="mic-outline" size={19} color={palette.purple} />
+                  <Label size={13} weight="bold" color={palette.purple} style={{ flexShrink: 1 }}>Dictar con voz</Label>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Escanear boleta con cámara"
+                  disabled={preparing || readingReceipt}
+                  onPress={() => { void scanReceipt(true); }}
+                  style={{ flexGrow: 1, flexBasis: 132, minHeight: 46, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: palette.mint, borderWidth: 1, borderColor: "#A4EDD7", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
+                >
+                  <Ionicons name="camera-outline" size={19} color="#007B60" />
+                  <Label size={13} weight="bold" color="#007B60" style={{ flexShrink: 1 }}>Foto a boleta</Label>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Subir foto de boleta"
+                  disabled={preparing || readingReceipt}
+                  onPress={() => { void scanReceipt(false); }}
+                  style={{ flexGrow: 1, flexBasis: 120, minHeight: 46, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: "white", borderWidth: 1, borderColor: palette.line, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6 }}
+                >
+                  <Ionicons name="image-outline" size={18} color={palette.ink} />
+                  <Label size={13} weight="bold" style={{ flexShrink: 1 }}>Subir boleta</Label>
+                </Pressable>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                aria-expanded={writeIt}
+                onPress={() => setWriteIt((v) => !v)}
+                style={[design.row, { minHeight: 40, gap: 6, paddingHorizontal: 4 }]}
+              >
+                <Ionicons name="sparkles-outline" size={17} color={palette.purple} />
+                <Label size={13} weight="bold" color={palette.purple} style={{ flex: 1 }}>
+                  {writeIt ? "Ocultar" : "Escribir o dictar un gasto"}
+                </Label>
+              </Pressable>
+              {writeIt && (
+                <Card style={{ backgroundColor: palette.lilac, padding: 12, gap: 8 }}>
+                  <Button compact secondary title="Dictar gasto con voz" onPress={() => { cancelProposal(); setDictating(true); }} disabled={preparing} />
+                  <Label size={12} color={palette.muted}>Escribe o dicta una frase. Solo se preparará una propuesta; tú revisas y guardas.</Label>
+                  <TextInput
+                    accessibilityLabel="Describe el gasto en una frase"
+                    value={text}
+                    onChangeText={(value) => {
+                      cancelProposal();
+                      setText(value);
+                    }}
+                    placeholder="Pagué 120 por la cena con Ana y Luis"
+                    placeholderTextColor={palette.muted}
+                    multiline
+                    maxLength={500}
+                    style={[design.input, { fontSize: 14, minHeight: 56, borderColor: "white" }]}
+                  />
+                  <Button
+                    compact
+                    secondary
+                    title={preparing ? "Preparando…" : "Completar el formulario"}
+                    disabled={preparing || text.trim().length < 3}
+                    onPress={() => { void prepare(); }}
+                  />
+                  {preparing && (
+                    <Pressable accessibilityRole="button" onPress={cancelProposal} style={{ minHeight: 44, justifyContent: "center" }}>
+                      <Label size={13} weight="bold" color={palette.muted}>Cancelar y llenarlo a mano</Label>
+                    </Pressable>
+                  )}
+                </Card>
+              )}
+            </View>}
+            </>
+          )}
+          {readingReceipt && (
+            <Card style={{ gap: 8, backgroundColor: palette.mint }}>
+              <ActivityIndicator color={palette.primary} />
+              <Label size={13} weight="bold">Leyendo total y productos de la boleta…</Label>
+              <Button compact secondary title="Cancelar lectura" onPress={cancelProposal} />
+            </Card>
+          )}
+          {!!proposal && (
+            <Card style={{ backgroundColor: receiptProposal && !receiptProposal.totalPropuesto ? palette.yellow : palette.mint, padding: 12, gap: 6 }}>
+              <Label weight="bold" size={13} color={receiptProposal && !receiptProposal.totalPropuesto ? "#8A5B05" : "#078B70"}>Revisa antes de guardar</Label>
+              <Label size={12}>{proposal}</Label>
+              {receiptProposal && !receiptProposal.totalPropuesto && receiptProposal.candidatos.length > 0 && (
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                  {receiptProposal.candidatos.map((candidate) => (
+                    <Button
+                      key={candidate.monto}
+                      compact
+                      secondary
+                      title={`Usar S/ ${centavosASoles(candidate.monto)}`}
+                      onPress={() => setAmount(centavosASoles(candidate.monto))}
+                    />
+                  ))}
+                </View>
+              )}
+              {receiptProposal && receiptProposal.productos.length > 0 && (
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                  <Button
+                    compact
+                    secondary
+                    title={`Anotar ${receiptProposal.productos.length} ${receiptProposal.productos.length === 1 ? "producto" : "productos"} en la nota`}
+                    onPress={() => {
+                      const summaryText = receiptProposal.productos.map((p) => `${p.nombre} S/ ${centavosASoles(p.monto)}`).join(" · ").slice(0, 500);
+                      setNotes(summaryText);
+                      setDetail(true);
+                    }}
+                  />
+                  <Button
+                    compact
+                    secondary
+                    title="Repartir por consumo de cada uno"
+                    onPress={() => {
+                      setCustomSplit(true);
+                      changeMode("exacto");
+                    }}
+                  />
+                </View>
+              )}
+            </Card>
+          )}
           <Pressable accessibilityRole="button" aria-expanded={detail} onPress={() => setDetail((v) => !v)} style={{ minHeight: 44, justifyContent: "center" }}>
             <Label color={palette.positive} weight="bold" size={16}>
               {detail ? "Menos opciones" : "Más opciones"}
@@ -832,50 +1017,6 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
           )}
           {detail && (
             <Card>
-          {!params.gastoId && moneda === "PEN" && (
-            <Pressable
-              accessibilityRole="button"
-              aria-expanded={writeIt}
-              onPress={() => setWriteIt((v) => !v)}
-              style={[design.row, { minHeight: 44, gap: 8 }]}
-            >
-              <Ionicons name="sparkles-outline" size={18} color={palette.purple} />
-              <Label size={13} weight="bold" color={palette.purple} style={{ flex: 1 }}>
-                {writeIt ? "Ocultar" : "Escribir o dictar un gasto"}
-              </Label>
-            </Pressable>
-          )}
-          {writeIt && !params.gastoId && moneda === "PEN" && (
-            <Card style={{ backgroundColor: palette.lilac, padding: 12, gap: 8 }}>
-              <Button compact secondary title="Dictar gasto con voz" onPress={() => { cancelProposal(); setDictating(true); }} disabled={preparing} />
-              <Label size={12} color={palette.muted}>Escribe o dicta una frase. Solo se preparará una propuesta; tú revisas y guardas.</Label>
-              <TextInput
-                accessibilityLabel="Describe el gasto en una frase"
-                value={text}
-                onChangeText={(value) => {
-                  cancelProposal();
-                  setText(value);
-                }}
-                placeholder="Pagué 120 por la cena con Ana y Luis"
-                placeholderTextColor={palette.muted}
-                multiline
-                maxLength={500}
-                style={[design.input, { fontSize: 14, minHeight: 56, borderColor: "white" }]}
-              />
-              <Button
-                compact
-                secondary
-                title={preparing ? "Preparando…" : "Completar el formulario"}
-                disabled={preparing || text.trim().length < 3}
-                onPress={prepare}
-              />
-              {preparing && (
-                <Pressable accessibilityRole="button" onPress={cancelProposal} style={{ minHeight: 44, justifyContent: "center" }}>
-                  <Label size={13} weight="bold" color={palette.muted}>Cancelar y llenarlo a mano</Label>
-                </Pressable>
-              )}
-            </Card>
-          )}
             <Field label="Fecha">
               <Pressable
                 accessibilityRole="button"
@@ -944,7 +1085,13 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
               />
             </Card>
           )}
-          <ExpenseDictation visible={dictating && focused && moneda === "PEN" && !params.gastoId} replacing={!!text.trim()} onClose={() => setDictating(false)} onUse={(value) => { cancelProposal(); setText(value); }} />
+          <ExpenseDictation
+            visible={dictating && focused && moneda === "PEN" && !params.gastoId}
+            replacing={!!text.trim()}
+            onClose={() => setDictating(false)}
+            onUse={(value) => { cancelProposal(); setText(value); setWriteIt(true); }}
+            onUseAndPrepare={(value) => { cancelProposal(); setText(value); void prepare(value); }}
+          />
       <Sheet visible={picker !== null} onClose={() => setPicker(null)} title={picker === "grupo" ? "Elige el grupo" : "¿Quién pagó?"} width={560}>
                   {picker === "grupo"
                     ? groups.map((g) => (

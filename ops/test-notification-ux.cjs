@@ -8,6 +8,9 @@ test("notification destinations require an exact UUID and open the specific reso
   assert.equal(notificationTarget({ gastoId: id, grupoId: id }), `/(app)/gastos/${id}`);
   assert.equal(notificationTarget({ pagoId: id, grupoId: id }), `/(app)/pagos/${id}`);
   assert.equal(notificationTarget({ grupoId: id }), `/(app)/grupos/${id}`);
+  assert.equal(notificationTarget({ type: "mensaje", grupoId: id }), `/(app)/grupos/${id}?vista=chat`);
+  assert.equal(notificationTarget({ type: "mensaje", grupoId: id, gastoId: id }), `/(app)/gastos/${id}`);
+  assert.equal(notificationTarget({ type: "mensaje", grupoId: "../../perfil" }), null);
   for (const invalid of ["-".repeat(36), "a".repeat(36), "../../perfil", 123, {}, null]) assert.equal(notificationTarget({ gastoId: invalid }), null);
   assert.equal(notificationTarget(undefined), null);
   assert.equal(notificationTarget({ type: "invitacion" }), "/(app)/(tabs)");

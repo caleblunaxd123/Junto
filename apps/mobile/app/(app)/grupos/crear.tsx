@@ -1,17 +1,18 @@
 import React, { useState } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { api } from "../../../src/lib/api";
 import { queryClient } from "../../../src/lib/queryClient";
 import { guessGroupType } from "../../../src/lib/groupType";
 import { useAuthStore } from "../../../src/store/auth.store";
-import { Screen, Label, Button, ErrorBox, Avatar, palette } from "../../../src/components/ui/Design";
+import { Screen, Card, Label, Button, ErrorBox, Avatar, palette } from "../../../src/components/ui/Design";
 import { FormField } from "../../../src/components/ui/Reference";
 import { DeadlinePicker } from "../../../src/components/DeadlinePicker";
 import { NamesInput } from "../../../src/components/NamesInput";
 import { errorMessage } from "../../../src/lib/errorMessage";
 import { GroupCurrencyPicker } from "../../../src/components/GroupCurrencyPicker";
-import type { CountryCode, CurrencyCode } from "@junto/shared/currency";
+import { countries, currencyInfo, type CountryCode, type CurrencyCode } from "@junto/shared/currency";
 
 /** A group is just a name and its people. Amounts go in each expense, inside the group. */
 export default function CreateGroup() {
@@ -24,12 +25,15 @@ export default function CreateGroup() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [createdId, setCreatedId] = useState("");
+  const [options, setOptions] = useState(false);
+  const [pendingPerson, setPendingPerson] = useState("");
 
   async function submit() {
     if (busy) return;
     if (createdId) return router.replace(`/(app)/grupos/${createdId}`);
+    if (pendingPerson.trim()) { setError("Te falta agregar a esa persona. Pulsa «Agregar» junto a su nombre y luego crea el grupo."); return; }
     if (name.trim().length < 2 || name.trim().length > 100) {
-      setError("Ponle un nombre de 2 a 100 letras, por ejemplo «Paseo a Lunahuaná».");
+      setError("Ponle un nombre de 2 a 100 caracteres, por ejemplo «Paseo a Lunahuaná».");
       return;
     }
     try {
@@ -58,8 +62,8 @@ export default function CreateGroup() {
 
   return (
     <Screen
-      title="Dividir gastos"
-      subtitle="Primero, ponle nombre al plan y agrega a tu gente."
+      title="Crear grupo"
+      subtitle="Haz un plan y agrega a tu gente."
       back
       footer={
         <>
@@ -68,38 +72,44 @@ export default function CreateGroup() {
         </>
       }
     >
+      <Card style={{ gap: 22 }}>
       <FormField
-        label="Nombre del grupo"
+        label="1. Ponle nombre al grupo"
         icon="people-outline"
         accessibilityLabel="Nombre del grupo"
         maxLength={100}
         value={name}
-        onChangeText={setName}
+        onChangeText={(value) => { setName(value); setError(""); }}
         editable={!busy}
-        autoFocus
         placeholder="Ej. Paseo a Lunahuaná"
       />
 
-      <GroupCurrencyPicker country={country} currency={currency} onChange={(nextCountry, nextCurrency) => { setCountry(nextCountry); setCurrency(nextCurrency); }} disabled={busy || !!createdId} />
-
-      <View style={{ gap: 8 }}>
-        <Label weight="bold" size={15}>¿Quiénes participan?</Label>
-        <Label size={13} color={palette.muted}>Escribe sus nombres, aunque todavía no tengan JUNTO. Así puedes anotar gastos desde ya; después cada uno entra con su enlace.</Label>
+      <View style={{ gap: 12, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 20 }}>
+        <Label weight="bold" size={18}>2. ¿Quiénes participan?</Label>
+        <Label size={14} color={palette.muted}>Agrega sus nombres. Pueden unirse después desde la app o la web.</Label>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8, alignSelf: "flex-start", paddingLeft: 4, paddingRight: 12, minHeight: 40, borderRadius: 20, backgroundColor: palette.mint }}>
           <Avatar name={user?.nombre || "Tú"} photo={user?.fotoUrl} seed={user?.id} size={30} />
-          <Label size={14} weight="bold" color="#007B60">Tú</Label>
+          <Label size={14} weight="bold" color="#007B60">{user?.nombre.split(" ")[0] || "Tú"} (tú)</Label>
         </View>
-        <NamesInput names={people} onChange={setPeople} taken={user?.nombre ? [user.nombre] : []} disabled={busy || !!createdId} />
+        <NamesInput names={people} onChange={(next) => { setPeople(next); setError(""); }} taken={user?.nombre ? [user.nombre] : []} disabled={busy || !!createdId} collapsible onPendingChange={setPendingPerson} />
       </View>
 
-      <DeadlinePicker value={deadline} onChange={setDeadline} />
-
-      <View style={{ padding: 14, borderRadius: 16, backgroundColor: palette.yellow, gap: 4 }}>
-        <Label size={13} weight="bold">Así funciona</Label>
-        <Label size={13}>1. Anota cada gasto: cuánto, quién pagó y entre quiénes.</Label>
-        <Label size={13}>2. JUNTO te dice quién le debe a quién.</Label>
-        <Label size={13}>3. Cada uno paga por fuera de JUNTO {currency === "PEN" ? "(Yape, Plin, transferencia o efectivo)" : "(transferencia o efectivo)"} y quien recibe lo confirma.</Label>
-      </View>
+      </Card>
+      <Card style={{ gap: 12 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Opciones del grupo" aria-expanded={options} onPress={() => setOptions(!options)} style={{ flexDirection: "row", alignItems: "center", gap: 12, minHeight: 56 }}>
+          <Ionicons name="settings-outline" size={27} color={palette.muted} />
+          <View style={{ flex: 1, gap: 4 }}>
+            <Label size={18} weight="bold">Opciones del grupo</Label>
+            <Label size={14} color={palette.muted}>{countries.find((item) => item.code === country)?.name} · {currencyInfo(currency).name} ({currency}){deadline ? " · Con fecha límite" : ""}</Label>
+          </View>
+          <Ionicons name={options ? "chevron-up" : "chevron-down"} size={22} color={palette.muted} />
+        </Pressable>
+        {options && <>
+          <GroupCurrencyPicker country={country} currency={currency} onChange={(nextCountry, nextCurrency) => { setCountry(nextCountry); setCurrency(nextCurrency); }} disabled={busy || !!createdId} />
+          <DeadlinePicker value={deadline} onChange={setDeadline} />
+        </>}
+      </Card>
+      <Label size={14} color={palette.muted}>Después anota el primer gasto. JUNTO calcula cuánto le toca a cada uno.</Label>
     </Screen>
   );
 }

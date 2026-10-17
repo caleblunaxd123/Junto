@@ -18,13 +18,14 @@ export function CreateSheet({ visible, onClose, groups }: { visible: boolean; on
       ? [{
           icon: "receipt-outline" as const,
           title: "Agregar un gasto",
-          subtitle: "¿Cuánto?, ¿quién pagó? y ¿entre quiénes?",
+          subtitle: "Escribe el monto, dicta con voz o escanea una boleta.",
           href: (groups.length === 1 ? { pathname: "/(app)/gastos/agregar", params: { grupoId: groups[0].id } } : "/(app)/gastos/agregar") as Href,
           color: "#007B60",
           bg: palette.mint,
         }]
       : []),
-    { icon: "people-outline", title: "Dividir gastos", subtitle: "Viaje, salida, cumple o depa. Agrega a tu gente por su nombre.", href: "/(app)/grupos/crear", color: "#1D5FA8", bg: "#E2F0FF" },
+    { icon: "camera-outline", title: "Dividir una boleta", subtitle: "Escanea la cuenta o reparte por consumo sin crear un grupo.", href: "/(app)/cuentas/rapida", color: "#5835B0", bg: palette.lilac },
+    { icon: "people-outline", title: "Crear grupo", subtitle: "Viaje, salida, cumple o depa. Agrega a tu gente por su nombre.", href: "/(app)/grupos/crear", color: "#1D5FA8", bg: "#E2F0FF" },
     { icon: "link-outline", title: "Unirme con un enlace", subtitle: "Pega la invitación que te compartieron.", href: "/(app)/unirme", color: "#8A5A00", bg: palette.yellow },
   ];
   return (

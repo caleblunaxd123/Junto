@@ -1,5 +1,18 @@
 # JUNTO — estado real
 
+## Distribución de Inicio, grupo y gasto basada en capturas (17/10/2026, local)
+
+Crear grupo grande y permanente; creación con opciones desplegables y moneda visible;
+gasto con pagador/participantes y resultado explícitos; grupo abre en Cuentas, Chat
+separado con novedades y enlace directo desde notificaciones de mensajes. No se marcan
+mensajes como leídos al consultar cuentas. Se preservaron cálculos, borradores,
+confirmación del receptor y el trabajo previamente pendiente del dueño.
+
+Validación: mobile TypeScript/lint, API TypeScript y 106 pruebas de dominio; 26 pruebas
+ops y recorrido Chromium con fixtures de interfaz a 320–1440 px, sin producción ni
+mensajes reales. Detalles y límites: `docs/junto-ux-audit/19_DISTRIBUCION_CUENTAS_CHAT_20261017.md`.
+No publicado, sin APK nuevo ni commit mezclado con los pendientes anteriores.
+
 ## Beta 1.4.0 publicada: voz y comprobantes en chat
 
 Implementados y publicados dictado con revisión, clip conectado al lector de pagos, tarjeta privada según permisos, cancelación de lectura y etiqueta de moneda correcta. Ver `ops/web/FLOW-VOICE-CHAT-20261011.md` y `ops/web/DEPLOY-20261011-VOICE140.md`: CI verde, respaldo restaurable, API/web/APK activados y pruebas. Dictado del gasto solo PEN por ahora; voz física y push con app cerrada no se acreditan con simulaciones.

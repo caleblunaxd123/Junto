@@ -6,8 +6,8 @@ import { Button, Label, ErrorBox, design, palette } from "./ui/Design";
 import { createDictation, dictationError, type DictationState } from "../lib/dictation";
 import { getSpeechDriver } from "../lib/speechDriver";
 
-export function ExpenseDictation({ visible, onClose, onUse, replacing }: {
-  visible: boolean; onClose: () => void; onUse: (text: string) => void; replacing: boolean;
+export function ExpenseDictation({ visible, onClose, onUse, onUseAndPrepare, replacing }: {
+  visible: boolean; onClose: () => void; onUse: (text: string) => void; onUseAndPrepare?: (text: string) => void; replacing: boolean;
 }) {
   const [state, setState] = useState<DictationState>("idle");
   const [text, setText] = useState(""); const [error, setError] = useState("");
@@ -33,6 +33,7 @@ export function ExpenseDictation({ visible, onClose, onUse, replacing }: {
       if (own === attempt.current) { locked.current = false; setState("idle"); setError(dictationError("unavailable")); }
     }
   }
+  const ready = state === "idle" && text.trim().length >= 3;
   return <Sheet visible={visible} onClose={onClose} title="Dictar un gasto" subtitle="Habla → revisa el texto → revisa el reparto." width={520}>
     <View style={{ gap: 12 }}>
       <Label size={13}>Ejemplo: «Pagué ciento veinte soles por la cena con Ana y Luis».</Label>
@@ -45,7 +46,8 @@ export function ExpenseDictation({ visible, onClose, onUse, replacing }: {
       {!!error && <ErrorBox message={error} />}
       <TextInput accessibilityLabel="Texto dictado del gasto" value={text} onChangeText={setText} editable={state === "idle"} multiline maxLength={500} placeholder="Aquí aparecerá tu frase. También puedes escribirla." placeholderTextColor={palette.muted} style={[design.input, { minHeight: 90 }]} />
       {replacing && <Label size={12} color={palette.muted}>«Usar este texto» reemplaza tu frase anterior. Cerrar conserva lo que ya escribiste.</Label>}
-      <Button secondary title="Usar este texto" disabled={state !== "idle" || text.trim().length < 3} onPress={() => { onUse(text.trim()); onClose(); }} />
+      {onUseAndPrepare && <Button title="Completar formulario con esta frase" disabled={!ready} onPress={() => { onUseAndPrepare(text.trim()); onClose(); }} />}
+      <Button secondary title="Usar este texto" disabled={!ready} onPress={() => { onUse(text.trim()); onClose(); }} />
       <Label size={12} color={palette.muted}>Todavía no se guarda ningún gasto. Revisa los nombres y el monto antes de continuar.</Label>
     </View>
   </Sheet>;

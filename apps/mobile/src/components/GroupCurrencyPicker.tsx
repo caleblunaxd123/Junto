@@ -14,23 +14,22 @@ export function GroupCurrencyPicker({ country, currency, onChange, disabled }: {
   const info = currencyInfo(currency);
   const options = picking === "country" ? countries : currencies;
   return (
-    <View style={{ backgroundColor: palette.mint, borderRadius: 20, padding: 16, gap: 12, borderWidth: 1, borderColor: "#A5EBD7" }}>
-      <Label size={17} weight="bold">¿Dónde es el plan?</Label>
-      <Label size={13} color={palette.muted}>El país sugiere una moneda. Puedes usar dólares o euros aunque viajes a otro país.</Label>
-      <View style={{ gap: 10 }}>
+    <View style={{ backgroundColor: palette.mint, borderRadius: 20, padding: 14, gap: 10, borderWidth: 1, borderColor: "#A5EBD7" }}>
+      <Label size={15} weight="bold">¿Dónde es el plan y en qué moneda?</Label>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
         {(["country", "currency"] as const).map((field) => (
           <Pressable key={field} accessibilityRole="button" accessibilityLabel={field === "country" ? `País del plan: ${selectedCountry.name}` : `Moneda del grupo: ${info.name}, ${currency}`}
             disabled={disabled} onPress={() => setPicking(field)}
-            style={{ minHeight: 62, borderRadius: 14, padding: 12, backgroundColor: "white", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            style={{ flexGrow: 1, flexBasis: 140, minHeight: 54, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "white", flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
             <View style={{ flex: 1, gap: 2 }}>
-              <Label size={12} color={palette.muted}>{field === "country" ? "País del plan" : "Moneda de todos los gastos"}</Label>
-              <Label size={15} weight="bold">{field === "country" ? selectedCountry.name : `${info.symbol} · ${info.name} (${currency})`}</Label>
+              <Label size={11} color={palette.muted}>{field === "country" ? "País del plan" : "Moneda del grupo"}</Label>
+              <Label size={14} weight="bold">{field === "country" ? selectedCountry.name : `${info.symbol} · ${info.name} (${currency})`}</Label>
             </View>
             <Label color="#007B60">⌄</Label>
           </Pressable>
         ))}
       </View>
-      <Label size={12} color="#007B60">{selectedCountry.currency ? `Sugerida para ${selectedCountry.name}: ${selectedCountry.currency}. ` : "Elige la moneda en que pagaron. "}Los saldos se llevarán en {currency}; no se podrá cambiar después. Si alguien paga en otra moneda, registrará el cambio acordado.</Label>
+      <Label size={12} color="#007B60">{selectedCountry.currency ? `Sugerida para ${selectedCountry.name}: ${selectedCountry.currency}. ` : "Elige la moneda en que pagaron. "}Los saldos se llevarán en {currency}; si alguien paga en otra moneda, registrará el cambio acordado.</Label>
       <Sheet visible={!!picking} onClose={() => setPicking(null)} closeLabel="Cerrar sin cambiar" width={480}
         title={picking === "country" ? "País del plan" : "Moneda del grupo"}
         subtitle={picking === "country" ? "No necesitamos tu ubicación. Elegir el país actualizará la sugerencia; revisa la moneda antes de crear." : "Los gastos y saldos usan esta moneda. Los pagos en otra moneda conservan su importe original y el equivalente acordado."}>

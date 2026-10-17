@@ -21,8 +21,8 @@ function Figure({ label, value, color, hint }: { label: string; value: string; c
  */
 export function BalanceSummary({ groups, loading }: { groups: GrupoConBalance[]; loading: boolean }) {
   // Pressed state by hand: a function `style` on Pressable is dropped by NativeWind's interop on Android.
-  const [pressed, setPressed] = React.useState<"detail" | "expense" | "pay" | null>(null);
-  const press = (key: "detail" | "expense" | "pay") => ({ onPressIn: () => setPressed(key), onPressOut: () => setPressed(null) });
+  const [pressed, setPressed] = React.useState<"detail" | "expense" | "pay" | "bill" | null>(null);
+  const press = (key: "detail" | "expense" | "pay" | "bill") => ({ onPressIn: () => setPressed(key), onPressOut: () => setPressed(null) });
   if (loading) {
     return (
       <View accessibilityLabel="Cargando tu balance" style={{ padding: 18, gap: 14, borderRadius: 24, backgroundColor: "white", borderWidth: 1, borderColor: palette.line }}>
@@ -36,6 +36,7 @@ export function BalanceSummary({ groups, loading }: { groups: GrupoConBalance[];
   const summary = accountSummary(groups);
   const owing = groups.filter((group) => group.balanceUsuario.debes > 0);
   const payTarget = owing.length === 1 ? `/(app)/pagos/pagar?grupoId=${owing[0].id}` : "/(app)/cuentas/resumen";
+  const allSettled = summary.owed === 0 && summary.owes === 0 && summary.pending.length === 0;
   return (
     <View style={{ borderRadius: 24, backgroundColor: "white", borderWidth: 1, borderColor: palette.line, overflow: "hidden" }}>
       <Pressable
@@ -45,9 +46,14 @@ export function BalanceSummary({ groups, loading }: { groups: GrupoConBalance[];
         {...press("detail")}
         style={{ padding: 18, gap: 14, backgroundColor: pressed === "detail" ? "#F7FAF9" : "white" }}
       >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <Ionicons name="wallet-outline" size={18} color={palette.positive} />
           <Label weight="extra" size={18} style={{ flex: 1 }}>Tus cuentas</Label>
+          {allSettled && (
+            <View style={{ paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, backgroundColor: palette.mint }}>
+              <Label size={12} weight="bold" color={palette.positive}>✓ Estás al día</Label>
+            </View>
+          )}
           <Label size={16} weight="bold" color={palette.positive}>Ver ›</Label>
         </View>
         {summary.byCurrency.map((bucket) => {
@@ -67,16 +73,16 @@ export function BalanceSummary({ groups, loading }: { groups: GrupoConBalance[];
           <Label size={16} weight="bold" color={palette.positive}>Sacar cuentas</Label>
         </View>
       </Pressable>
-      <View style={{ flexDirection: "row", borderTopWidth: 1, borderTopColor: palette.line }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", borderTopWidth: 1, borderTopColor: palette.line }}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Agregar un gasto"
           onPress={() => router.push(groups.length === 1 ? { pathname: "/(app)/gastos/agregar", params: { grupoId: groups[0].id } } : "/(app)/gastos/agregar")}
           {...press("expense")}
-          style={{ flex: 1, minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: pressed === "expense" ? palette.mint : "white" }}
+          style={{ flexGrow: 1, flexBasis: 130, minHeight: 52, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: pressed === "expense" ? palette.mint : "white" }}
         >
           <Ionicons name="add-circle-outline" size={20} color={palette.positive} />
-          <Label weight="bold" size={16} style={{ flexShrink: 1 }}>Agregar gasto</Label>
+          <Label weight="bold" size={15} style={{ flexShrink: 1 }}>Agregar gasto</Label>
         </Pressable>
         <View style={{ width: 1, backgroundColor: palette.line }} />
         <Pressable
@@ -85,10 +91,21 @@ export function BalanceSummary({ groups, loading }: { groups: GrupoConBalance[];
           accessibilityHint="Pagas por Yape, Plin, transferencia o efectivo fuera de JUNTO y aquí lo registras para que lo confirmen."
           onPress={() => router.push(payTarget as never)}
           {...press("pay")}
-          style={{ flex: 1, minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: pressed === "pay" ? palette.lilac : "white" }}
+          style={{ flexGrow: 1, flexBasis: 110, minHeight: 52, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: pressed === "pay" ? palette.lilac : "white" }}
         >
           <Ionicons name="cash-outline" size={20} color={palette.purple} />
-          <Label weight="bold" size={16} style={{ flexShrink: 1 }} color={palette.purple}>Ya pagué</Label>
+          <Label weight="bold" size={15} style={{ flexShrink: 1 }} color={palette.purple}>Ya pagué</Label>
+        </Pressable>
+        <View style={{ width: 1, backgroundColor: palette.line }} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Dividir una boleta o cuenta del día"
+          onPress={() => router.push("/(app)/cuentas/rapida")}
+          {...press("bill")}
+          style={{ flexGrow: 1, flexBasis: 120, minHeight: 52, paddingHorizontal: 8, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: pressed === "bill" ? palette.yellow : "white" }}
+        >
+          <Ionicons name="camera-outline" size={19} color="#8A5A00" />
+          <Label weight="bold" size={15} style={{ flexShrink: 1 }} color="#8A5A00">Dividir boleta</Label>
         </Pressable>
       </View>
     </View>

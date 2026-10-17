@@ -14,7 +14,7 @@ import { avatarColors } from "../../../src/lib/people";
 import { useGrupo, usePagos, useResolverPago } from "../../../src/hooks/useGrupos";
 import { api } from "../../../src/lib/api";
 import { useAuthStore } from "../../../src/store/auth.store";
-import { Label, Button, ErrorBox, palette, design, Skeleton } from "../../../src/components/ui/Design";
+import { Label, Button, ErrorBox, palette, design, Skeleton, BrandBackdrop } from "../../../src/components/ui/Design";
 import { groupArt } from "../../../src/components/ui/Artwork";
 import { PendingActions } from "../../../src/components/PendingActions";
 import { pendingActions } from "../../../src/lib/pending";
@@ -24,6 +24,7 @@ import { groupShareMessage, type ShareMessage } from "../../../src/lib/shareMess
 import { useResponsiveLayout } from "../../../src/components/ui/responsive";
 import { ChatBubble, DaySeparator, chatColors } from "../../../src/components/chat/ChatBubble";
 import { WhoPaid } from "../../../src/components/chat/WhoPaid";
+import { GroupOverview } from "../../../src/components/GroupOverview";
 import { deadlineText } from "../../../src/lib/billForm";
 import { personalInvite, sinCuenta } from "../../../src/lib/members";
 import { RecordPayment, LinkMember } from "../../../src/components/chat/RecordPayment";
@@ -52,7 +53,9 @@ function Chip({ icon, title, onPress, primary, highlight }: { icon: keyof typeof
 
 export default function Group() {
   const { web } = useResponsiveLayout();
-  const { id, cuentas, gastoGuardado } = useLocalSearchParams<{ id: string; cuentas?: string; gastoGuardado?: string }>();
+  const { id, cuentas, gastoGuardado, vista } = useLocalSearchParams<{ id: string; cuentas?: string; gastoGuardado?: string; vista?: string }>();
+  const [tab, setTab] = useState<"cuentas" | "chat">(vista === "chat" ? "chat" : "cuentas");
+  useEffect(() => { setTab(vista === "chat" ? "chat" : "cuentas"); }, [id, vista]);
   const [savedExpense, setSavedExpense] = useState(false);
   useEffect(() => {
     if (gastoGuardado !== "1") return;
@@ -75,23 +78,27 @@ export default function Group() {
   const presence = useQuery<Presencia[]>({
     queryKey: ["presencia", id],
     queryFn: () => api.get(`/grupos/${id}/presencia`).then((r) => r.data),
-    enabled: !!id && focused,
-    refetchInterval: focused ? 15_000 : false,
+    enabled: !!id && focused && tab === "chat",
+    refetchInterval: focused && tab === "chat" ? 15_000 : false,
   });
   const chat = useQuery<ChatItem[]>({
     queryKey: ["chat", id],
     queryFn: () => api.get(`/grupos/${id}/chat`).then((r) => r.data),
-    enabled: !!id && focused,
+    enabled: !!id && focused && tab === "chat",
     // Close to live while the conversation is open; push notifications cover the rest.
-    refetchInterval: focused ? 4_000 : false,
+    refetchInterval: focused && tab === "chat" ? 4_000 : false,
   });
   const refetchChat = chat.refetch;
   const refreshAll = useCallback(() => {
     refetch();
     refetchPayments();
-    refetchChat();
-  }, [refetch, refetchPayments, refetchChat]);
+    if (tab === "chat") refetchChat();
+  }, [refetch, refetchPayments, refetchChat, tab]);
   useFocusEffect(refreshAll);
+  useFocusEffect(useCallback(() => {
+    const timer = setInterval(() => { void refetch(); void refetchPayments(); }, 15_000);
+    return () => clearInterval(timer);
+  }, [refetch, refetchPayments]));
   useFocusEffect(useCallback(() => { setStatusBarStyle("light"); }, []));
   // A join or payment changes the ledger too, not just its bubble. Structural sharing
   // keeps unchanged polling responses from triggering extra balance/history requests.
@@ -394,12 +401,12 @@ export default function Group() {
   const lastIndex = items.length - 1;
 
   return (
-    <View style={{ flex: 1, backgroundColor: chatColors.feed, paddingLeft: insets.left, paddingRight: insets.right }}>
-      {/* Green behind the status bar too, like WhatsApp. */}
-      <View style={{ height: insets.top, backgroundColor: chatColors.header }} />
+    <View style={{ flex: 1, backgroundColor: tab === "cuentas" ? palette.background : chatColors.feed, paddingLeft: insets.left, paddingRight: insets.right }}>
+      {/* Accounts first; opening them never marks unseen chat messages as read. */}
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        <BrandBackdrop style={{ paddingTop: insets.top + 6, paddingBottom: 10 }}>
         {/* Header, like a chat: who this conversation is with. */}
-        <View style={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 8, paddingVertical: 8, backgroundColor: chatColors.header }}>
+        <View style={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 8, paddingVertical: 8 }}>
           <Pressable accessibilityLabel="Volver" accessibilityRole="button" hitSlop={8} onPress={() => (router.canGoBack() ? router.back() : router.replace("/(app)/(tabs)"))} style={{ width: 40, height: 44, alignItems: "center", justifyContent: "center" }}>
             <Ionicons name="arrow-back" size={24} color="white" />
           </Pressable>
@@ -408,10 +415,10 @@ export default function Group() {
               <Image source={groupArt(group.tipo)} accessibilityIgnoresInvertColors style={{ width: 42, height: 42 }} resizeMode="cover" />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Label accessibilityRole="header" size={17} weight="extra" color="white" numberOfLines={1}>{group.nombre}</Label>
+              <Label accessibilityRole="header" size={21} weight="extra" color="white" numberOfLines={2}>{group.nombre}</Label>
               <Label size={12} color="#D8F3EC" numberOfLines={1}>{onlineNames.length
                 ? `🟢 ${onlineNames.slice(0, 3).join(", ")}${onlineNames.length > 3 ? ` y ${onlineNames.length - 3} más` : ""} en línea`
-                : `${group.miembros.length} ${group.miembros.length === 1 ? "integrante" : "integrantes"}${noApp.length ? ` · ${noApp.length} sin app` : ""} · ${group.moneda ?? "PEN"}`}</Label>
+                : `${group.miembros.length} ${group.miembros.length === 1 ? "integrante" : "integrantes"} · ${group.moneda ?? "PEN"}`}</Label>
             </View>
           </Pressable>
           {openForExpenses && <Pressable accessibilityRole="button" accessibilityLabel="Invitar personas" hitSlop={8} onPress={goInvite} style={{ width: 40, height: 44, alignItems: "center", justifyContent: "center" }}>
@@ -421,6 +428,17 @@ export default function Group() {
             <Ionicons name="ellipsis-vertical" size={22} color="white" />
           </Pressable>
         </View>
+        </BrandBackdrop>
+
+        <View accessibilityRole="tablist" accessibilityLabel="Secciones del grupo" style={{ flexDirection: "row", width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", backgroundColor: "white" }}>
+          {([['cuentas', 'Cuentas', 'receipt-outline'], ['chat', 'Chat', 'chatbubbles-outline']] as const).map(([value, label, icon]) => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: tab === value }} accessibilityLabel={value === "chat" && group.noLeidos ? `Chat, ${group.noLeidos} novedades sin leer` : label}
+            onPress={() => { Keyboard.dismiss(); if (value === "chat" && tab !== "chat") { seen.current = null; nearBottom.current = true; setNewMessages(false); } setTab(value); router.setParams({ vista: value }); }}
+            style={{ flex: 1, minHeight: 52, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderBottomWidth: 3, borderBottomColor: tab === value ? palette.positive : "transparent" }}>
+            <Ionicons name={icon} size={21} color={tab === value ? palette.positive : palette.muted} />
+            <Label size={16} weight="bold" color={tab === value ? palette.positive : palette.muted}>{label}</Label>
+            {value === "chat" && !!group.noLeidos && <View style={{ borderRadius: 12, paddingHorizontal: 7, backgroundColor: palette.positive }}><Label size={12} weight="bold" color="white">{group.noLeidos > 99 ? "99+" : group.noLeidos}</Label></View>}
+          </Pressable>)}
+        </View>
 
         {savedExpense && <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={{ backgroundColor: palette.mint, paddingHorizontal: 16, paddingVertical: 10 }}><Label size={16} weight="bold" color={palette.positive}>✓ Gasto guardado</Label></View>}
         {/* Pinned message: the bill and how much of it is settled. */}
@@ -428,6 +446,7 @@ export default function Group() {
           <Label weight="bold" color="#173D37">{groupStateLabel(group)}{group.cerradoEn ? ` · ${new Date(group.cerradoEn).toLocaleDateString('es-PE')}` : ''}</Label>
           <Label size={12} color="#435C53">{groupStateDescription(group)}</Label>
         </View>}
+        {tab === "cuentas" ? <GroupOverview key={id} group={group} userId={user?.id} payments={payments} paymentsError={paymentsError} paymentsLoading={paymentsLoading} stale={isRefetchError} onRefresh={refreshAll} onAccounts={() => setWhoPaid(true)} onExpense={goExpense} onPay={goPay} onReview={(paymentId) => router.push(`/(app)/pagos/${paymentId}`)} /> : <>
         <View style={{ width: "100%", maxWidth: web ? 960 : undefined, alignSelf: "center", paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "white", borderBottomWidth: 1, borderColor: palette.line }}>
           {group.resumen.cantidadGastos ? (
             <Pressable accessibilityRole="button" accessibilityLabel={`${myDebts.map((d) => d.text).join(". ") || status?.text || ""}. ${why}. Total ${money(total)} en ${group.resumen.cantidadGastos} gastos. Ver cuentas del grupo`} onPress={() => setWhoPaid(true)} style={{ gap: 4 }}>
@@ -528,7 +547,7 @@ export default function Group() {
               style={{ alignSelf: "center", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, minHeight: 36, borderRadius: 18, backgroundColor: "#FFFFFFCC" }}>
               <Ionicons name="logo-whatsapp" size={16} color={palette.positive} />
               <Label size={12} color={palette.muted}>
-                {owingNoApp.length > 2 ? `${owingNoApp.slice(0, 2).map((m) => m.usuario.nombre.split(" ")[0]).join(", ")} y ${owingNoApp.length - 2} más` : joinNames(owingNoApp.map((m) => m.usuario.nombre.split(" ")[0]))} {owingNoApp.length === 1 ? "no tiene" : "no tienen"} JUNTO ·{" "}
+                {owingNoApp.length > 2 ? `${owingNoApp.slice(0, 2).map((m) => m.usuario.nombre.split(" ")[0]).join(", ")} y ${owingNoApp.length - 2} más` : joinNames(owingNoApp.map((m) => m.usuario.nombre.split(" ")[0]))} {owingNoApp.length === 1 ? "aún no se une" : "aún no se unen"} ·{" "}
                 <Label size={12} weight="bold" color={palette.positive}>Enviar su enlace</Label>
               </Label>
             </Pressable>
@@ -545,7 +564,7 @@ export default function Group() {
             {paymentToReview ? <Chip primary icon="checkmark-circle-outline" title="Revisar pago" onPress={() => router.push(`/(app)/pagos/${paymentToReview.id}`)} />
               : myWaitingPayment ? <Chip icon="time-outline" title="Ver mi pago" onPress={() => router.push(`/(app)/pagos/${myWaitingPayment.id}`)} />
               : group.balanceUsuario.debes > 0 ? <Chip icon="cash-outline" title="Ya pagué" onPress={goPay} /> : null}
-            <Chip icon="document-text-outline" title="Sacar cuentas" onPress={() => router.push(`/(app)/cuentas/cuaderno?grupoId=${id}`)} />
+            <Chip icon="document-text-outline" title="Sacar cuentas" onPress={() => setWhoPaid(true)} />
           </View>
           {expressions && <ExpressionTray onClose={() => setExpressions(false)} onPick={(value) => {
             const next = appendExpression(text, value);
@@ -599,6 +618,7 @@ export default function Group() {
             </Pressable>
           </View>
         </View>
+        </>}
       </KeyboardAvoidingView>
 
       <Sheet visible={attachment && focused} onClose={() => setAttachment(false)} title="Compartir comprobante" subtitle="Yape, Plin o transferencia: primero pagas por fuera." width={520}>
