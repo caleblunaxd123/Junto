@@ -1,6 +1,15 @@
 # JUNTO — estado real
 
-## Distribución de Inicio, grupo y gasto basada en capturas (17/10/2026, local)
+## Beta 1.7.0 publicada (17/10/2026)
+
+Web `junto-web:20261017-beta170` y APK 1.7.0/código 12 con Google, misma firma,
+publicados desde `3607fb8`. Crear grupo permanente, creación breve, gasto explícito
+y grupo en Cuentas con Chat a un toque. CI de rama/main verde; respaldo restaurado
+y copia externa cifrada autorizada. Hash local/HTTPS idéntico, smoke y datos sin
+cambios. Emulador actualizado sin perder sesión. API e infraestructura ajena intactas.
+Ver `ops/web/DEPLOY-20261017-BETA170.md` para pruebas, descarga, límites y rollback.
+
+## Distribución de Inicio, grupo y gasto basada en capturas (17/10/2026)
 
 Crear grupo grande y permanente; creación con opciones desplegables y moneda visible;
 gasto con pagador/participantes y resultado explícitos; grupo abre en Cuentas, Chat
@@ -11,7 +20,7 @@ confirmación del receptor y el trabajo previamente pendiente del dueño.
 Validación: mobile TypeScript/lint, API TypeScript y 106 pruebas de dominio; 26 pruebas
 ops y recorrido Chromium con fixtures de interfaz a 320–1440 px, sin producción ni
 mensajes reales. Detalles y límites: `docs/junto-ux-audit/19_DISTRIBUCION_CUENTAS_CHAT_20261017.md`.
-No publicado, sin APK nuevo ni commit mezclado con los pendientes anteriores.
+Publicación completada después, incluyendo los pendientes revisados con autorización del dueño: beta 1.7.0.
 
 ## Beta 1.4.0 publicada: voz y comprobantes en chat
 

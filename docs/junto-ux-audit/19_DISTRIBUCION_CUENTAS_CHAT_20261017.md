@@ -1,6 +1,7 @@
 # Distribución basada en las cuatro capturas del dueño
 
-Estado: implementada localmente. No publicada ni empaquetada en un APK nuevo.
+Estado: publicada en web y APK beta 1.7.0/código 12 el 17/10/2026, después de CI verde,
+respaldo restaurado y autorización explícita. Registro: [despliegue 1.7.0](../../ops/web/DEPLOY-20261017-BETA170.md).
 Rama: `codex/clear-group-layout-20261017`, sobre `582b896`.
 
 ## Decisión de producto
@@ -71,9 +72,9 @@ Las fixtures comprueban la interfaz y el contrato enviado, no persistencia real 
 PostgreSQL, reconocimiento de voz/OCR, entregas de WhatsApp/correo ni push físico.
 No se crearon cuentas reales, enviaron mensajes o cambiaron pagos de producción.
 No hubo cambios de esquema ni migraciones. Los archivos previamente modificados
-del dueño se conservaron; la rama contiene también esos pendientes, no solo esta
-implementación. No se hizo commit mezclando trabajo ajeno ni push/despliegue.
+del dueño se conservaron; después autorizó publicar todos los pendientes revisados,
+incluidos con esta implementación en `3607fb8`, CI verde y main actualizado.
 
-Antes de publicar: repetir el recorrido con dos personas reales, teclado Android,
-TalkBack, Google del APK y push físico; generar una nueva distribución firmada y
-publicar con aprobación y el procedimiento habitual de respaldo/verificación.
+Antes de anunciar validación completa en dispositivos reales: repetir el recorrido
+con dos personas, teclado físico/virtual, TalkBack, Google de esta APK y push físico.
+La distribución beta firmada no sustituye esas pruebas de campo.

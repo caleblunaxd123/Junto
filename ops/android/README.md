@@ -1,5 +1,10 @@
 # APK beta interna de JUNTO
 
+Actualización vigente: [beta 1.7.0/código 12](../web/DEPLOY-20261017-BETA170.md),
+publicada el 17/10/2026, con Google y el firmante beta existente. Web y descarga
+HTTPS verificadas; actualización en emulador conserva sesión. No equivale a Google
+físico, push con app cerrada ni publicación en tienda.
+
 `build-beta.ps1` genera `apps/mobile/android/app/build/outputs/apk/release/app-release.apk`.
 Ejecutar el script en un proceso PowerShell dedicado. Requiere Node, Android Studio,
 SDK/NDK y dependencias instaladas. El proyecto nativo es generado e ignorado por Git.
