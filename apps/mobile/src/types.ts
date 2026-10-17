@@ -184,7 +184,8 @@ export interface Gasto {
   montoTotal: number; // en centavos
   pagadoPor: string;
   tipoDivision?: "igual" | "exacto" | "porcentaje" | "participaciones";
-  pagadores?: { usuarioId: string; monto: number; usuario: Pick<Usuario, "id" | "nombre" | "fotoUrl"> }[];
+  /** Several payers: what each one put in and, optionally, into what ("Tour", "Cena"). */
+  pagadores?: { usuarioId: string; monto: number; concepto?: string | null; usuario: Pick<Usuario, "id" | "nombre" | "fotoUrl"> }[];
   categoria: GastoCategoria;
   fecha: string;
   creadoPor: string;

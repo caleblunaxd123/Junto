@@ -426,6 +426,6 @@ export async function eliminarGasto(gastoId: string, usuarioId: string) {
 }
 
 async function expenseSnapshot(tx: Prisma.TransactionClient, id: string) {
-  const expense = await tx.gasto.findUniqueOrThrow({ where: { id }, select: { descripcion: true, montoTotal: true, pagadoPor: true, categoria: true, fecha: true, notas: true, partes: true, pagadores: { select: { usuarioId: true, monto: true }, orderBy: { usuarioId: 'asc' } }, participantes: { select: { usuarioId: true, montoAsignado: true }, orderBy: { usuarioId: 'asc' } } } });
+  const expense = await tx.gasto.findUniqueOrThrow({ where: { id }, select: { descripcion: true, montoTotal: true, pagadoPor: true, categoria: true, fecha: true, notas: true, partes: true, pagadores: { select: { usuarioId: true, monto: true, concepto: true }, orderBy: { usuarioId: 'asc' } }, participantes: { select: { usuarioId: true, montoAsignado: true }, orderBy: { usuarioId: 'asc' } } } });
   return { ...expense, fecha: expense.fecha.toISOString() };
 }

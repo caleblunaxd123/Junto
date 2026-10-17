@@ -101,6 +101,9 @@ export function GroupOverview({ group, userId, payments, paymentsError, payments
           <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
             <Label size={17} weight="extra">{expense.descripcion}</Label>
             <Label size={14} color={palette.muted}>{expensePayerLabel(expense, userId)}</Label>
+            {(expense.pagadores?.length ?? 0) > 1 && expense.pagadores!.some((p) => p.concepto) && <View style={{ gap: 2, paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: palette.line }}>
+              {expense.pagadores!.map((p) => <Label key={p.usuarioId} size={13} color={palette.ink}>{p.usuarioId === userId ? "Tú" : p.usuario.nombre.split(" ")[0]}{p.concepto ? ` · ${p.concepto}` : ""} · {money(p.monto)}</Label>)}
+            </View>}
             <Label size={14} color={palette.muted}>{expense.participantes.length <= 3 ? `Para ${listNames([...expense.participantes].sort((a, b) => Number(b.usuarioId === userId) - Number(a.usuarioId === userId)).map((person) => person.usuarioId === userId ? "ti" : person.usuario.nombre.split(" ")[0]))}` : `Entre ${expense.participantes.length} personas`}</Label>
             {expense.participantes.length > 0 && expense.participantes.every((person) => person.montoAsignado === expense.participantes[0].montoAsignado) && <Label size={14} color={palette.muted}>{money(expense.participantes[0].montoAsignado)} por persona</Label>}
             <MoneyText size={18} weight="extra">{money(expense.montoTotal)}</MoneyText>

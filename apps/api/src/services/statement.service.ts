@@ -21,7 +21,8 @@ export async function groupStatement(userId: string, grupoId: string) {
       titular: { id: userId, nombre: member.usuario.nombre },
       grupo: { nombre: member.grupo.nombre, moneda: member.grupo.moneda, estado: member.grupo.estado, cerradoEn: member.grupo.cerradoEn?.toISOString() ?? null },
       ...buildStatement(userId,
-        expenses.map((e) => ({ ...e, pagadorNombre: e.pagadores.length ? e.pagadores.map(p => p.usuario.nombre).join(', ') : e.pagador.nombre })),
+        expenses.map((e) => ({ ...e, pagadorNombre: e.pagadores.length ? e.pagadores.map(p => p.usuario.nombre).join(', ') : e.pagador.nombre,
+          aportes: e.pagadores.map((p) => ({ usuarioId: p.usuarioId, nombre: p.usuario.nombre, monto: p.monto, concepto: p.concepto })) })),
         payments.map((p) => ({ ...p, pagadorNombre: p.pagador.nombre, receptorNombre: p.receptor.nombre, conComprobante: !!p.comprobante }))),
       saldos,
       balance: {

@@ -1,5 +1,5 @@
 import { UserError } from './errors';
-export type ExpensePayer = { usuarioId: string; monto: number };
+export type ExpensePayer = { usuarioId: string; monto: number; concepto?: string | null };
 export type WithPayers = { montoTotal: number; pagadoPor: string; pagadores?: ExpensePayer[] };
 
 /** Legacy single-payer rows need no backfill, and must keep exactly the same balances. */

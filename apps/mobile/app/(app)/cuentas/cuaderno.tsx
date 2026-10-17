@@ -11,7 +11,7 @@ import { formatMoney } from "@junto/shared/currency";
 import { api } from "../../../src/lib/api";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { Button, ErrorBox, Label, palette } from "../../../src/components/ui/Design";
-import { categoryLabel, dayLabel, describe, registeredLabel, settlementLines, signed, standing, statementText, type Statement } from "../../../src/lib/statement";
+import { categoryLabel, contributionLines, dayLabel, describe, registeredLabel, settlementLines, signed, standing, statementText, type Statement } from "../../../src/lib/statement";
 import { shareStatementFile, type StatementFormat } from "../../../src/lib/statementFile";
 import { StatementExportError } from "../../../src/lib/statementExportError";
 import { groupStateLabel, groupStateDescription } from '../../../src/lib/groupLifecycle';
@@ -161,6 +161,8 @@ export default function Notebook() {
                         {e.tipo === "pago" && e.conComprobante && <Ionicons name="attach" size={15} color={paper.pencil} accessibilityElementsHidden />}
                       </View>
                       <Label size={12} color={paper.pencil}>{detail}</Label>
+                      {/* Who put what into what, written under the line like in a notebook. */}
+                      {contributionLines(e, money, user?.id).map((line) => <Label key={line} size={12} color={paper.ink} style={{ paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: paper.marker, marginTop: 2 }}>{line}</Label>)}
                       {!!registeredLabel(e) && <Label size={11} color={paper.pencil}>{registeredLabel(e)}</Label>}
                     </View>
                     <View style={{ alignItems: narrow ? 'flex-start' : 'flex-end', flexShrink: 1, minWidth: narrow ? 0 : 100, justifyContent: 'center', gap: 5 }}>

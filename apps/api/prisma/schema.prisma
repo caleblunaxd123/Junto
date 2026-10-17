@@ -256,6 +256,8 @@ model GastoAporte {
   gastoId   String @map("gasto_id") @db.Uuid
   usuarioId String @map("usuario_id") @db.Uuid
   monto     Int
+  /// What this person put the money into ("Tour", "Cena"), when several people paid.
+  concepto  String? @db.VarChar(80)
   gasto     Gasto @relation(fields: [gastoId], references: [id], onDelete: Cascade)
   usuario   Usuario @relation(fields: [usuarioId], references: [id])
 

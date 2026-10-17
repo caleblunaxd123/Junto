@@ -131,6 +131,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
   const [payer, setPayer] = useState(user?.id || "");
   const [multiplePayers, setMultiplePayers] = useState(false);
   const [payerAmounts, setPayerAmounts] = useState<Record<string, string>>({});
+  const [payerConcepts, setPayerConcepts] = useState<Record<string, string>>({});
   const [ids, setIds] = useState<string[]>([]);
   const [mode, setMode] = useState<TipoDivision>("igual");
   const [values, setValues] = useState<Record<string, string>>({});
@@ -174,7 +175,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     const value = draft.data;
     cachedGroup.current = value.group;
     setAmount(value.amount); setDescription(value.description); setPayer(value.payer); setIds(value.ids);
-    setMultiplePayers(value.multiplePayers ?? false); setPayerAmounts(value.payerAmounts ?? {});
+    setMultiplePayers(value.multiplePayers ?? false); setPayerAmounts(value.payerAmounts ?? {}); setPayerConcepts(value.payerConcepts ?? {});
     setMode(value.mode); setValues(value.values); setCategory(value.category); setCategoryPicked(value.categoryPicked);
     setText(value.text); setNotes(value.notes); setDate(new Date(value.date)); requestId.current = value.requestId;
     setPending(value.pending); setHydratedKey(groupId);
@@ -182,10 +183,10 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     if (draft.restored && value.ids.length && value.payer) initializedGroup.current = groupId;
   }, [draft.ready, draft.data, draft.restored, groupId, hydratedKey, params.gastoId]);
   const captureDraft = useCallback((payload?: ExpenseDraft["pending"]): ExpenseDraft => ({
-    amount, description, payer, multiplePayers, payerAmounts, ids, mode, values, category: category as ExpenseDraft["category"], categoryPicked,
+    amount, description, payer, multiplePayers, payerAmounts, payerConcepts, ids, mode, values, category: category as ExpenseDraft["category"], categoryPicked,
     text, notes, date: date.toISOString(), requestId: requestId.current, savedAt: new Date().toISOString(), pending: payload ?? pending,
     ...(group ? { group: { id: group.id, nombre: group.nombre, tipo: group.tipo, moneda: group.moneda || "PEN", estado: group.estado, miembros: group.miembros.map((m) => ({ usuarioId: m.usuarioId, usuario: { id: m.usuarioId, nombre: m.usuario.nombre } })) } } : {}),
-  }), [amount, description, payer, multiplePayers, payerAmounts, ids, mode, values, category, categoryPicked, text, notes, date, pending, group]);
+  }), [amount, description, payer, multiplePayers, payerAmounts, payerConcepts, ids, mode, values, category, categoryPicked, text, notes, date, pending, group]);
   const updateDraft = draft.update;
   useEffect(() => { if (!params.gastoId && formReady && group && focused && !saving.current) updateDraft(captureDraft()); }, [params.gastoId, formReady, group, focused, captureDraft, updateDraft]);
   const labels = memberLabels(group?.miembros.map((m) => ({ ...m.usuario, id: m.usuarioId })) ?? [], user?.id);
@@ -220,6 +221,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
     setPayer(expense.pagadoPor);
     setMultiplePayers((expense.pagadores?.length ?? 0) > 1);
     setPayerAmounts(Object.fromEntries((expense.pagadores ?? []).map(p => [p.usuarioId, centavosASoles(p.monto)])));
+    setPayerConcepts(Object.fromEntries((expense.pagadores ?? []).filter(p => p.concepto).map(p => [p.usuarioId, p.concepto!])));
     setIds(expense.participantes.map((p) => p.usuarioId));
     // An equal split stays equal: changing the total re-divides it without retyping every share.
     const shares = expense.participantes.map((p) => p.montoAsignado);
@@ -243,7 +245,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       : "Conservamos las partes originales por montos. Puedes revisarlas y cambiar la división antes de guardar.");
   }, [original.data, group, focused]);
   const total = parseMoney(amount) || 0;
-  const advances = Object.entries(payerAmounts).map(([usuarioId, value]) => ({ usuarioId, monto: parseMoney(value) ?? 0 }));
+  const advances = Object.entries(payerAmounts).map(([usuarioId, value]) => ({ usuarioId, monto: parseMoney(value) ?? 0, ...(payerConcepts[usuarioId]?.trim() ? { concepto: payerConcepts[usuarioId].trim().slice(0, 80) } : {}) }));
   const advancesValid = !multiplePayers || (advances.length > 0 && advances.every(p => p.monto > 0 && group?.miembros.some(m => m.usuarioId === p.usuarioId)) && advances.reduce((sum, p) => sum + p.monto, 0) === total);
   const parsedPct = ids.map((id) => parsePercentage(values[id] || ""));
   const pct = parsedPct.map((value) => value ?? 0);
@@ -458,7 +460,7 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
       setDate(new Date());
       setIds(group?.miembros.map((member) => member.usuarioId) || []);
       setPayer(user?.id || "");
-      setMultiplePayers(false); setPayerAmounts({});
+      setMultiplePayers(false); setPayerAmounts({}); setPayerConcepts({});
       requestId.current = newRequestId();
       // Back to the screen this came from (the group or the expense), never a second copy of it.
       router.dismissTo(`/(app)/grupos/${groupId}?gastoGuardado=1`);
@@ -819,7 +821,15 @@ export default function Expense({ editing = false }: { editing?: boolean }) {
                 <Ionicons name={multiplePayers ? "checkbox" : "square-outline"} size={24} color={palette.positive} />
                 <Label size={15} weight="bold" style={{ flex: 1 }}>Pagaron varias personas</Label>
               </Pressable>}
-              {multiplePayers && <ExpensePayers members={orderedMembers} values={payerAmounts} onChange={setPayerAmounts} total={total} currency={moneda} />}
+              {multiplePayers && <ExpensePayers members={orderedMembers} values={payerAmounts} onChange={setPayerAmounts} concepts={payerConcepts}
+                onConcepts={(next) => {
+                  // Like Tricount: with what each one paid for, the expense title can come from it.
+                  const listed = Object.keys(payerAmounts).map((id) => next[id]?.trim()).filter(Boolean) as string[];
+                  const before = Object.keys(payerAmounts).map((id) => payerConcepts[id]?.trim()).filter(Boolean) as string[];
+                  const auto = (items: string[]) => items.length > 1 ? `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}` : items[0] ?? "";
+                  if (!description.trim() || description.trim() === auto(before)) setDescription(auto(listed).slice(0, 100));
+                  setPayerConcepts(next);
+                }} total={total} currency={moneda} />}
             </Field>
             <Field label="4. ¿Entre quiénes se divide?">
               {/* Everyone visible at once (wrapping rows): nobody hides past the edge of the screen. */}

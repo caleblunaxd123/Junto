@@ -18,6 +18,7 @@ const snapshot = z.object({
 export const expenseDraftSchema = z.object({
   amount: z.string().max(16), description: z.string().max(200), payer: short,
   multiplePayers: z.boolean().optional(), payerAmounts: z.record(short, z.string().max(16)).refine(value => Object.keys(value).length <= 50).optional(),
+  payerConcepts: z.record(short, z.string().max(80)).refine(value => Object.keys(value).length <= 50).optional(),
   ids: z.array(short).max(50), mode: z.enum(["igual", "exacto", "porcentaje", "participaciones"]), values: z.record(z.string().max(80), z.string().max(16)),
   category: z.enum(["comida", "transporte", "entretenimiento", "alojamiento", "compras", "otro"]), categoryPicked: z.boolean(),
   text: z.string().max(500), notes: z.string().max(500), date: z.string().datetime(), requestId: short,

@@ -80,8 +80,14 @@ export default function ExpenseDetail() {
               {money(expense.montoTotal)}
             </MoneyText>
             {(expense.pagadores?.length ?? 0) > 1 ? <>
-              <Label weight="bold" size={15}>Quiénes adelantaron el dinero</Label>
-              {expense.pagadores!.map(p => <View key={p.usuarioId} style={{ gap: 4 }}><Label size={14}>{p.usuario.nombre}{p.usuarioId === user?.id ? ' (tú)' : ''}</Label><MoneyText size={19}>{money(p.monto)}</MoneyText></View>)}
+              <Label weight="bold" size={15}>Quién puso qué</Label>
+              {expense.pagadores!.map(p => <View key={p.usuarioId} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Label size={14} weight="bold">{p.usuario.nombre}{p.usuarioId === user?.id ? ' (tú)' : ''}</Label>
+                  {!!p.concepto && <Label size={13} color={palette.muted}>{p.concepto}</Label>}
+                </View>
+                <MoneyText size={19} containerStyle={{ flexGrow: 0, maxWidth: "45%" }}>{money(p.monto)}</MoneyText>
+              </View>)}
             </> : <Label>{expense.pagadoPor === user?.id ? "Tú adelantaste este dinero." : `${expense.pagador.nombre} adelantó este dinero.`}</Label>}
             <Label size={13} color={palette.muted}>
               {new Date(expense.fecha).toLocaleDateString("es-PE")} ·{" "}
