@@ -118,11 +118,10 @@ async function run() {
     await page.getByLabel('Monto total en PEN', { exact: true }).fill('80');
     await page.getByLabel('Descripción del gasto', { exact: true }).fill('Cena QA');
     await page.getByText('5. A cada uno le toca', { exact: true }).waitFor();
-    assert.equal(await page.getByRole('button', { name: 'Dictar con voz', exact: true }).count(), 0);
-    await page.getByRole('button', { name: 'Completar con voz o boleta', exact: true }).click();
+    // Voice and receipt are shortcuts above the form (they save typing), always one tap away.
     await page.getByRole('button', { name: 'Dictar con voz', exact: true }).waitFor();
     await page.getByRole('button', { name: 'Escanear boleta con cámara', exact: true }).waitFor();
-    await page.getByRole('button', { name: 'Completar con voz o boleta', exact: true }).click();
+    await page.getByRole('button', { name: 'Subir foto de boleta', exact: true }).waitFor();
     assert.ok(await page.getByRole('radio', { name: 'Caleb QA', exact: true }).getAttribute('aria-checked') === 'true');
     for (const width of [320, 390, 768, 1440]) { await page.setViewportSize({ width, height: 900 }); await layout(`expense-${width}`, width === 390 || width === 1440); }
     await page.setViewportSize({ width: 390, height: 900 });
