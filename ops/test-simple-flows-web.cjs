@@ -102,7 +102,9 @@ const deferred = () => { let resolve; const promise = new Promise(r => resolve =
       await page.getByText('Luis QA te debe', { exact: true }).waitFor();
       await fit('grupo');
       assert.equal(await page.getByRole('button', { name: 'Buscar movimientos', exact: true }).count(), 0);
-      await page.getByRole('button', { name: 'Sacar cuentas · quién paga a quién', exact: true }).waitFor();
+      // The notebook ("Sacar cuentas") and who pays whom are both one tap away from the group.
+      await page.getByRole('button', { name: 'Sacar cuentas. Abrir tu cuaderno del grupo', exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Ver quién paga a quién', exact: true }).waitFor();
       // A committed write whose response is lost must retry the identical frozen payload.
       await page.goto(`${origin}/app/gastos/agregar?grupoId=${gid}`);
       await page.getByLabel('Monto total en PEN', { exact: true }).fill('10.01');

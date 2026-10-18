@@ -2,12 +2,27 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { crearGrupoSchema, editarGrupoSchema } from '../schemas/grupos.schema';
 import { crearGastoSchema, paginaGastosSchema } from '../schemas/gastos.schema';
+import { expenseNoticeText } from '../services/groupNotices.service';
 
 test('group names trim whitespace; empty names and empty changes are rejected', () => {
   assert.equal(crearGrupoSchema.parse({ nombre: '  Mi depa  ' }).nombre, 'Mi depa');
   assert.equal(editarGrupoSchema.safeParse({ nombre: '    ' }).success, false);
   assert.equal(editarGrupoSchema.safeParse({}).success, false);
   assert.deepEqual(editarGrupoSchema.parse({ descripcion: '  ' }), { descripcion: '' });
+});
+
+test('group creation accepts name-only members as strings or objects with normalized Peruvian phone', () => {
+  const parsed = crearGrupoSchema.parse({
+    nombre: 'Viaje Cusco',
+    integrantes: ['Ana', { nombre: 'Luis', celular: '+51 987 654 321' }, { nombre: 'Marta' }],
+  });
+  assert.deepEqual(parsed.integrantes, ['Ana', { nombre: 'Luis', celular: '987654321' }, { nombre: 'Marta' }]);
+  assert.equal(crearGrupoSchema.safeParse({ nombre: 'Viaje', integrantes: [{ nombre: 'Luis', celular: '12345' }] }).success, false);
+});
+
+test('expense notice text formats Splitwise-style summary without trailing .00', () => {
+  assert.equal(expenseNoticeText('Lucía Pérez', 'Cena', 4000, 'PEN'), 'Lucía agregó «Cena»: tu parte S/ 40');
+  assert.equal(expenseNoticeText('Lucía Pérez', 'Cena', 4050, 'PEN'), 'Lucía agregó «Cena»: tu parte S/ 40.50');
 });
 
 test('group metadata cannot edit ownership, members or invitation codes', () => {

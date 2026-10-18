@@ -46,11 +46,15 @@ import { expenseDraftPrefix } from "../../../src/lib/draftStorage";
 import { groupStateLabel } from '../../../src/lib/groupLifecycle';
 
 import { formatMoney as money } from "@junto/shared/currency";
+import { api } from "../../../src/lib/api";
+import { AppDialog } from "../../../src/components/ui/AppDialog";
+import { MoneyText } from "../../../src/components/ui/MoneyText";
 
 export default function Home() {
   const { usuario } = useAuthStore();
   const { desktop, web } = useResponsiveLayout();
   const insets = useSafeAreaInsets();
+  const [scrolled, setScrolled] = useState(false);
   // White status bar text on the emerald band (other screens set their own on focus).
   useFocusEffect(useCallback(() => { setStatusBarStyle("light"); }, []));
   const {
@@ -67,6 +71,8 @@ export default function Home() {
   const [showArchived, setShowArchived] = useState(false);
   const [splitPressed, setSplitPressed] = useState(false);
   const [allPending, setAllPending] = useState(false);
+  const [archiveBusy, setArchiveBusy] = useState<string | null>(null);
+  const [archiveError, setArchiveError] = useState("");
   const bills = useQuickBills();
   const refreshBills = bills.refetch;
   const qc = useQueryClient();
@@ -113,10 +119,23 @@ export default function Home() {
     groups.length, openBills.length, dayPending.count,
   );
   const refreshing = isRefetching || payments.isRefetching || bills.isRefetching;
+  function askArchive(id: string, name: string, archived: boolean) {
+    AppDialog.alert(archived ? "¿Volver a mostrar este grupo?" : "¿Archivar este grupo?", archived ? `«${name}» volverá a «Mis grupos».` : `«${name}» pasará a «Archivados» solo para ti. No se borran gastos: las deudas y los pagos pendientes siguen contando.`, [
+      { text: "Cancelar", style: "cancel" },
+      { text: archived ? "Mostrar grupo" : "Archivar grupo", onPress: async () => {
+        setArchiveBusy(id); setArchiveError("");
+        try { await api.put(`/grupos/${id}/archivo`, { archivar: !archived }); await qc.invalidateQueries({ queryKey: ["grupos"] }); }
+        catch { setArchiveError("No pudimos cambiar el archivo del grupo. Reintenta; no se ha eliminado nada."); }
+        finally { setArchiveBusy(null); }
+      } },
+    ]);
+  }
   return (
     <SafeAreaView edges={[]} style={{ flex: 1, backgroundColor: palette.background }}>
       <ScrollView
         style={{ backgroundColor: palette.background }}
+        onScroll={(event) => { const next = event.nativeEvent.contentOffset.y > insets.top + 40; if (next !== scrolled) setScrolled(next); }}
+        scrollEventThrottle={64}
         contentContainerStyle={{ paddingBottom: desktop ? 40 : 110 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshAll} tintColor="#FFFFFF" colors={[palette.primary]} progressBackgroundColor="#FFFFFF" />}
       >
@@ -204,7 +223,7 @@ export default function Home() {
                     <Label weight="bold" style={{ flex: 1 }}>Por cobrar en cuentas anteriores</Label>
                     <Ionicons name="chevron-forward" size={20} color="#8A5A00" />
                   </View>
-                  <Label size={28} weight="extra">{money(dayPending.cents)}</Label>
+                  <MoneyText size={28} weight="extra">{money(dayPending.cents)}</MoneyText>
                   <Label size={13} color={palette.muted}>{dayPending.count} {dayPending.count === 1 ? "cuenta pendiente" : "cuentas pendientes"} · Revisa quién ya te pagó.</Label>
                 </Card>
               </Pressable>
@@ -234,6 +253,7 @@ export default function Home() {
             <SectionTitle
               title="Tus grupos"
             />
+            {!!archiveError && <ErrorBox message={archiveError} />}
             {isLoading ? (
               <View accessibilityLabel="Cargando tus grupos" style={{ gap: 12 }}><SkeletonRow /><SkeletonRow /></View>
             ) : isError ? (
@@ -272,8 +292,8 @@ export default function Home() {
                   const status = direct ? direct.acreedorId === usuario?.id ? `${direct.deudorNombre} te debe ${money(direct.monto, g.moneda)}` : `Le debes ${money(direct.monto, g.moneda)} a ${direct.acreedorNombre}` : teDeben && debes ? `Te deben ${money(teDeben, g.moneda)} · debes ${money(debes, g.moneda)}` : teDeben ? `Te deben ${money(teDeben, g.moneda)}` : debes ? `Debes ${money(debes, g.moneda)}` : net === 0 ? "Estás al día" : net > 0 ? `Te deben ${money(net, g.moneda)}` : `Debes ${money(-net, g.moneda)}`;
                   const waiting = (payments.data ?? []).filter((p) => p.grupoId === g.id && p.estado === "reportado" && p.receptorId === usuario?.id).length;
                   return (
+                    <View key={g.id} style={{ gap: 2 }}>
                     <Pressable
-                      key={g.id}
                       accessibilityRole="button"
                       accessibilityLabel={`${g.nombre}. ${g.miembros.length} personas. ${status}${waiting ? `. ${waiting} pago por confirmar` : ""}${g.noLeidos ? `. ${g.noLeidos} sin leer` : ""}`}
                       onPress={() => router.push(`/(app)/grupos/${g.id}`)}
@@ -323,6 +343,12 @@ export default function Home() {
                         </View>
                       </Card>
                     </Pressable>
+                    {/* Only settled groups offer "Archivar" here, so the list stays clean; any group can be archived from its menu. */}
+                    {(g.archivado || (!g.balanceUsuario.teDeben && !g.balanceUsuario.debes && !waiting)) && <Pressable accessibilityRole="button" accessibilityLabel={`${g.archivado ? "Mostrar" : "Archivar"} grupo ${g.nombre}`} disabled={archiveBusy !== null} onPress={() => askArchive(g.id, g.nombre, !!g.archivado)} style={{ minHeight: 44, alignSelf: "flex-end", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12 }}>
+                      <Ionicons name={g.archivado ? "arrow-undo-outline" : "archive-outline"} size={18} color={palette.positive} />
+                      <Label size={13} weight="bold" color={palette.positive}>{archiveBusy === g.id ? "Guardando…" : g.archivado ? "Volver a Mis grupos" : "Ya terminaron · Archivar"}</Label>
+                    </Pressable>}
+                    </View>
                   );
                 })}
                 {!filtered.length && <Label color={palette.muted}>{search ? 'No hay grupos con ese nombre.' : showArchived ? 'No tienes grupos archivados.' : 'Tus grupos están archivados. Puedes abrirlos desde «Archivados».'}</Label>}
@@ -372,6 +398,8 @@ export default function Home() {
         {!empty && <Button secondary title="Unirme a un grupo" onPress={() => router.push("/(app)/unirme")} />}
         </View>
       </ScrollView>
+      {/* Once the emerald band scrolls away, the status bar keeps a band of its own (no text under the clock). */}
+      {scrolled && insets.top > 0 && <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, height: insets.top, backgroundColor: brand.deep }} />}
     </SafeAreaView>
   );
 }

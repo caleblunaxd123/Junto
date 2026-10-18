@@ -1,7 +1,7 @@
 import { errorMessage } from "../../../src/lib/errorMessage";
 import { groupAccountExplanation } from "../../../src/lib/accountSummary";
 import React, { useState, useCallback, useRef, useEffect } from "react";
-import { View, Pressable, ActivityIndicator, Image, ScrollView, TextInput, Keyboard, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Pressable, ActivityIndicator, Image, Linking, ScrollView, TextInput, Keyboard, KeyboardAvoidingView, Platform } from "react-native";
 import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { setStatusBarStyle } from "expo-status-bar";
 import { useIsFocused } from "@react-navigation/native";
@@ -26,7 +26,7 @@ import { ChatBubble, DaySeparator, chatColors } from "../../../src/components/ch
 import { WhoPaid } from "../../../src/components/chat/WhoPaid";
 import { GroupOverview } from "../../../src/components/GroupOverview";
 import { deadlineText } from "../../../src/lib/billForm";
-import { personalInvite, sinCuenta } from "../../../src/lib/members";
+import { personalInvite, personalWhatsAppUrl, sinCuenta } from "../../../src/lib/members";
 import { RecordPayment, LinkMember } from "../../../src/components/chat/RecordPayment";
 import { ExpressionTray } from "../../../src/components/chat/ExpressionTray";
 import { appendExpression, chatReactions } from "../../../src/lib/chatExpressions";
@@ -632,7 +632,12 @@ export default function Group() {
         onRecord={(person, max, receiver) => { setWhoPaid(false); setRecordFor({ person, max, receiver }); }}
         onRemind={(person, monto) => { setWhoPaid(false); remindPerson(person, monto); }}
         presence={presence.data ?? []}
-        onShare={(member) => { setWhoPaid(false); setShareMessage(personalInvite(group, member, user?.nombre ?? "")); }}
+        onShare={(member) => {
+          setWhoPaid(false);
+          const wa = personalWhatsAppUrl(group, member, user?.nombre ?? "");
+          if (wa) void Linking.openURL(wa).catch(() => setShareMessage(personalInvite(group, member, user?.nombre ?? "")));
+          else setShareMessage(personalInvite(group, member, user?.nombre ?? ""));
+        }}
         onLink={(member) => { setWhoPaid(false); setLinkFor(member); }} />
       <RecordPayment grupoId={group.id} moneda={group.moneda} person={recordFor?.person ?? null} receiver={recordFor?.receiver} max={recordFor?.max ?? 0} onClose={() => setRecordFor(null)} onSave={recordPayment} />
       <LinkMember member={linkFor} candidates={group.miembros.filter((m) => !sinCuenta(m))} onClose={() => setLinkFor(null)} onPick={linkMember} />

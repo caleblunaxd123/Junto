@@ -1,9 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { matchRecipient, readVoucher, voucherCents } from "./voucher";
+import { matchRecipient, readVoucher, readPaymentVoucher, voucherCents } from "./voucher";
 
 // Fictitious vouchers written the way OCR returns them (names, numbers and codes are invented).
 const today = new Date("2026-10-07T18:00:00Z");
+
+test('bank account numbers and operation codes are never confused with the payment', () => {
+  const result = readPaymentVoucher('Constancia\nTransferiste\nS/ 195.00\ngratis e inmediato\nCuenta cargo:\nAhorro Sueldo Soles\n111 1234567890\nCuenta destino:\nComercio QA\n200 11122233344\nFecha y hora:\n15 Oct 2026 2:29 PM\nCódigo de operación:\n00600327');
+  assert.equal(result.monto, 19500); assert.equal(result.app, 'transferencia');
+  assert.equal(result.destinatario, 'Comercio QA'); assert.deepEqual(result.candidatos, [19500]);
+  assert.equal(readPaymentVoucher('¡Yapeaste!\ns/\nComercio QA\nCódigo de seguridad 6 7 9\nNro. operación 12345678\nS/9').monto, 900);
+});
 const yape = `¡Yapeaste!
 S/ 25
 Ana M. Torres

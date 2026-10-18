@@ -37,11 +37,14 @@ function expenseShareMessage(expense, groupName, currency = "PEN") {
   const shareMoney = (value) => formatMoney(value, currency);
   const assigned = expense.participantes.reduce((sum, person) => sum + person.montoAsignado, 0);
   if (assigned !== expense.montoTotal) throw new Error("El reparto no coincide con el total. Actualiza el gasto antes de compartir.");
+  const payers = expense.pagadores ?? [];
+  if (payers.length && payers.reduce((sum, payer) => sum + payer.monto, 0) !== expense.montoTotal) throw new Error("Los pagos adelantados no coinciden con el total. Actualiza el gasto antes de compartir.");
+  const advanced = payers.length > 1 ? `Adelantaron: ${payers.map(p => `${line(p.usuario.nombre)} ${shareMoney(p.monto)}`).join(' · ')}` : `Adelantó: ${line(expense.pagador.nombre)}`;
   return {
     subject: `JUNTO · ${line(expense.descripcion)}`,
     preview: {
       title: line(expense.descripcion), total: expense.montoTotal, totalLabel: "Total del gasto", moneda: currency,
-      caption: `${line(groupName)} · Adelantó ${line(expense.pagador.nombre)}`,
+      caption: `${line(groupName)} · ${advanced}`,
       rowsHeading: "Parte de cada persona",
       rows: expense.participantes.map((person, i) => ({ id: String(i), name: line(person.usuario.nombre), amount: person.montoAsignado })),
       note: "Estas son las partes del gasto, no las deudas pendientes del grupo.", reconciled: true,
@@ -50,7 +53,7 @@ function expenseShareMessage(expense, groupName, currency = "PEN") {
       `GASTO COMPARTIDO · ${line(groupName)} · JUNTO`,
       line(expense.descripcion),
       `Total del gasto: ${shareMoney(expense.montoTotal)}`,
-      `Adelantó: ${line(expense.pagador.nombre)}`,
+      advanced,
       "", "Parte de cada persona:",
       ...expense.participantes.map((person) => `• ${line(person.usuario.nombre)}: ${shareMoney(person.montoAsignado)}`),
       "", "Estas son las partes de este gasto, no los saldos pendientes. Otros gastos y pagos confirmados pueden cambiar lo que debe cada persona.",

@@ -29,3 +29,10 @@ export function personalInvite(group: GrupoConBalance, member: Member, senderNam
   ].filter(Boolean);
   return { subject: `Tus cuentas de «${group.nombre}» en JUNTO`, body: lines.join("\n") };
 }
+
+/** Direct WhatsApp draft (https://wa.me/51XXXXXXXXX?text=...) with their personal link when a phone was saved. */
+export function personalWhatsAppUrl(group: GrupoConBalance, member: Member, senderName: string) {
+  const phone = (member.usuario.celular ?? "").replace(/^\+?51\s*/, "").replace(/\D/g, "");
+  if (!/^9\d{8}$/.test(phone)) return null;
+  return `https://wa.me/51${phone}?text=${encodeURIComponent(personalInvite(group, member, senderName).body)}`;
+}

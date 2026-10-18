@@ -9,7 +9,7 @@ export interface Saldo { deudorId: string; deudorNombre: string; acreedorId: str
 export async function resumenCuentasGrupo(grupoId: string, tx?: Prisma.TransactionClient) {
   const queries = (db: Prisma.TransactionClient | typeof prisma) => [
     db.grupoMiembro.findMany({ where: { grupoId }, include: { usuario: { select: { id: true, nombre: true } } } }),
-    db.gasto.findMany({ where: { grupoId, activo: true }, include: { participantes: true } }),
+    db.gasto.findMany({ where: { grupoId, activo: true }, include: { participantes: true, pagadores: true } }),
     db.pago.findMany({ where: { grupoId } }),
     db.grupo.findUnique({ where: { id: grupoId }, select: { simplificarDeudas: true } }),
   ] as const;

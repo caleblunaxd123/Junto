@@ -1,6 +1,7 @@
 import { simplifyNetBalances } from './money';
+import { expensePayers, type ExpensePayer } from './expensePayers';
 export interface AccountMember { id: string; nombre: string; activo?: boolean }
-export interface AccountExpense { montoTotal: number; pagadoPor: string; categoria?: string; participantes: Array<{ usuarioId: string; montoAsignado: number }> }
+export interface AccountExpense { montoTotal: number; pagadoPor: string; pagadores?: ExpensePayer[]; categoria?: string; participantes: Array<{ usuarioId: string; montoAsignado: number }> }
 export interface AccountPayment { pagadorId: string; receptorId: string; monto: number; estado: string }
 export interface DirectDebt { deudorId: string; acreedorId: string; monto: number }
 
@@ -17,7 +18,21 @@ export function directDebts(expenses: AccountExpense[], payments: AccountPayment
     const key = `${a}|${b}`;
     pairs.set(key, (pairs.get(key) ?? 0) + sign * amount);
   };
-  for (const expense of expenses) for (const part of expense.participantes) owe(part.usuarioId, expense.pagadoPor, part.montoAsignado);
+  for (const expense of expenses) {
+    const payers = expensePayers(expense);
+    if (payers.length === 1) {
+      for (const part of expense.participantes) owe(part.usuarioId, payers[0].usuarioId, part.montoAsignado);
+      continue;
+    }
+    // First offset each person's own share against what they advanced. Only the remainder is owed.
+    const net = new Map<string, number>();
+    for (const payer of payers) net.set(payer.usuarioId, (net.get(payer.usuarioId) ?? 0) + payer.monto);
+    for (const part of expense.participantes) net.set(part.usuarioId, (net.get(part.usuarioId) ?? 0) - part.montoAsignado);
+    const ordered = [...net].sort(([a], [b]) => a.localeCompare(b));
+    const debtors = ordered.filter(([, amount]) => amount < 0).map(([id, amount]) => ({ id, nombre: '', monto: -amount }));
+    const creditors = ordered.filter(([, amount]) => amount > 0).map(([id, amount]) => ({ id, nombre: '', monto: amount }));
+    for (const debt of simplifyNetBalances(debtors, creditors)) owe(debt.deudorId, debt.acreedorId, debt.monto);
+  }
   for (const payment of payments) if (payment.estado === 'exitoso') owe(payment.receptorId, payment.pagadorId, payment.monto);
   return [...pairs].filter(([, amount]) => amount !== 0).map(([key, amount]) => {
     const [a, b] = key.split('|');
@@ -32,7 +47,7 @@ export function directDebts(expenses: AccountExpense[], payments: AccountPayment
 export function calculateAccounts(members: AccountMember[], expenses: AccountExpense[], payments: AccountPayment[], simplify = true) {
   const confirmed = payments.filter((p) => p.estado === 'exitoso');
   const cuentas = members.map((member) => {
-    const pagaste = expenses.filter((e) => e.pagadoPor === member.id).reduce((sum, e) => sum + e.montoTotal, 0);
+    const pagaste = expenses.reduce((sum, e) => sum + expensePayers(e).filter(p => p.usuarioId === member.id).reduce((paid, p) => paid + p.monto, 0), 0);
     const tuParte = expenses.reduce((sum, e) => sum + e.participantes.filter((p) => p.usuarioId === member.id).reduce((value, p) => value + p.montoAsignado, 0), 0);
     const pagosEnviados = confirmed.filter((p) => p.pagadorId === member.id).reduce((sum, p) => sum + p.monto, 0);
     const pagosRecibidos = confirmed.filter((p) => p.receptorId === member.id).reduce((sum, p) => sum + p.monto, 0);

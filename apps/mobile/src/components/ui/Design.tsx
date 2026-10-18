@@ -208,6 +208,7 @@ export function Screen({
     }, [resetOnFocus]),
   );
   const insets = useSafeAreaInsets();
+  const [scrolled, setScrolled] = React.useState(false);
   // Titled screens get the emerald band; the content sits on a rounded mint sheet over it.
   const band = !!title;
   // The status bar follows the screen in focus: white on the emerald band, dark on plain pages.
@@ -249,7 +250,9 @@ export function Screen({
   ) : content;
   return (
     <SafeAreaView
-      style={{ flex: 1, backgroundColor: band ? brand.base : palette.background }}
+      // Under the content only the page color may show: emerald here appeared as a strip under the
+      // footer / navigation bar on Android.
+      style={{ flex: 1, backgroundColor: footer ? "#FFFFFF" : palette.background }}
       edges={band ? ["left", "right"] : ["top", "left", "right", "bottom"]}
     >
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
@@ -257,6 +260,8 @@ export function Screen({
         <ScrollView
           ref={scrollView}
           keyboardShouldPersistTaps="handled"
+          onScroll={band ? (event) => { const next = event.nativeEvent.contentOffset.y > 8; if (next !== scrolled) setScrolled(next); } : undefined}
+          scrollEventThrottle={band ? 64 : undefined}
           style={{ backgroundColor: palette.background }}
           contentContainerStyle={{ paddingBottom: band ? 24 + insets.bottom : 24, flexGrow: 1 }}
           refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={palette.primary} colors={[palette.primary]} progressBackgroundColor="#FFFFFF" /> : undefined}
@@ -268,6 +273,8 @@ export function Screen({
       )}
       {footer && <View style={{ borderTopWidth: 1, borderTopColor: palette.line, backgroundColor: "#FFFFFF", paddingBottom: band ? insets.bottom : 0 }}><View style={{ width: "100%", maxWidth: web ? maxWidth : undefined, alignSelf: "center", padding: 16, gap: 8 }}>{footer}</View></View>}
       </KeyboardAvoidingView>
+      {/* The status bar keeps its emerald band while the page scrolls under it. */}
+      {band && scrolled && insets.top > 0 && <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, height: insets.top, backgroundColor: brand.deep }} />}
     </SafeAreaView>
   );
 }

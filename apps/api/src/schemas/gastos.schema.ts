@@ -11,6 +11,11 @@ export const crearGastoSchema = z.object({
   descripcion: z.string().trim().min(1).max(200),
   montoTotal: z.number().int().positive().max(999_999_999), // mismo límite del formulario, en centavos
   pagadoPor: z.string().uuid(),
+  pagadores: z.array(z.object({
+    usuarioId: z.string().uuid(), monto: z.number().int().positive().max(999_999_999),
+    // What this person paid for ("Tour", "Cena"). Optional; blank means not said.
+    concepto: z.string().max(80).transform((value) => value.replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim() || undefined).optional(),
+  }).strict()).min(1).max(50).optional(),
   categoria: z
     .enum([
       "comida",

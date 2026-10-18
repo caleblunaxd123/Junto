@@ -2,7 +2,7 @@ import { formatMoney } from "@junto/shared/currency";
 
 type BaseEntry = { id: string; fecha: string; fechaRegistro: string; monto: number; efecto: number; saldo: number };
 export type StatementEntry = BaseEntry & (
-  | { tipo: "gasto"; descripcion: string; categoria: string; pagadorId: string; pagadorNombre: string; pagaste: number; tuParte: number }
+  | { tipo: "gasto"; descripcion: string; categoria: string; pagadorId: string; pagadorNombre: string; aportes?: Contribution[]; pagaste: number; tuParte: number }
   | { tipo: "pago"; sentido: "enviado" | "recibido"; contraparteNombre: string; metodo: string | null; estado: string; conComprobante: boolean }
 );
 export type Statement = {
@@ -28,10 +28,16 @@ export function registeredLabel(e: StatementEntry) {
   return dayLabel(e.fecha) !== dayLabel(e.fechaRegistro) ? `Anotado el ${dayLabel(e.fechaRegistro)}` : "";
 }
 
+/** Several payers: who put how much and into what ("Martina · Cena · S/ 120.00"). */
+export type Contribution = { usuarioId: string; nombre: string; monto: number; concepto: string | null };
+export function contributionLines(e: StatementEntry, money: (v: number) => string, userId?: string) {
+  if (e.tipo !== "gasto" || !e.aportes?.length) return [];
+  return e.aportes.map((a) => `${a.usuarioId === userId ? "Tú" : a.nombre.split(" ")[0]}${a.concepto ? ` · ${a.concepto}` : ""} · ${money(a.monto)}`);
+}
 export function describe(e: StatementEntry, money: (v: number) => string) {
   if (e.tipo === "gasto") return {
     title: e.descripcion,
-    detail: `${money(e.monto)} · ${e.pagaste ? "pagaste tú" : `pagó ${e.pagadorNombre}`} · tu parte ${money(e.tuParte)}`,
+    detail: `${money(e.monto)} · ${e.aportes?.length ? `pagaron ${e.aportes.length}` : e.pagaste ? "pagaste tú" : `pagó ${e.pagadorNombre}`} · tu parte ${money(e.tuParte)}`,
   };
   const confirmed = e.estado === "exitoso";
   const who = e.contraparteNombre;
@@ -54,6 +60,7 @@ export function statementText(s: Statement, owedLines: string[]) {
   for (const e of s.movimientos) {
     const { title, detail } = describe(e, money);
     lines.push(`${dayLabel(e.fecha)} · ${title} (${detail})${registeredLabel(e) ? ` · ${registeredLabel(e)}` : ""} → ${signed(e.efecto, s.grupo.moneda)} · saldo ${standing(e.saldo, s.grupo.moneda)}`);
+    for (const line of contributionLines(e, money, s.titular?.id)) lines.push(`    ${line}`);
   }
   const t = s.totales;
   lines.push("", `Mi parte de los gastos: ${money(t.tuParte)}`, `Puse en gastos: ${money(t.pagasteEnGastos)}`, `Me pagaron (confirmado): ${money(t.pagosRecibidos)}`, `Pagué (confirmado): ${money(t.pagosEnviados)}`);

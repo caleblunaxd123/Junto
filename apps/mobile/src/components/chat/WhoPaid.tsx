@@ -118,18 +118,17 @@ export function WhoPaid({ group, payments = [], userId, visible, onClose, onPay,
                       {seen.get(account.usuarioId)?.enLinea && !mine && <View accessibilityLabel="En línea" style={{ position: "absolute", right: -1, bottom: -1, width: 13, height: 13, borderRadius: 7, backgroundColor: "#25D366", borderWidth: 2, borderColor: "white" }} />}
                     </View>
                     <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <Label weight="bold" size={14} numberOfLines={1} style={{ flexShrink: 1 }}>{mine ? "Tú" : account.nombre}</Label>
-                        {noApp && <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, backgroundColor: palette.yellow }}><Label size={12} weight="bold" color="#8A5A00">Aún no se une</Label></View>}
-                      </View>
-                      <Label size={12} color={palette.muted}>Pagó {money(account.pagaste)} · Su parte {money(account.tuParte)}</Label>
+                      {/* The name gets the full line; "not joined yet" goes under it instead of cutting it. */}
+                      <Label weight="bold" size={14} numberOfLines={1}>{mine ? "Tú" : account.nombre}</Label>
+                      {noApp && <View style={{ alignSelf: "flex-start", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, backgroundColor: palette.yellow }}><Label size={12} weight="bold" color="#8A5A00">Aún no se une</Label></View>}
+                      <Label size={12} color={palette.muted}>{mine ? `Pagaste ${money(account.pagaste)} · Tu parte ${money(account.tuParte)}` : `Pagó ${money(account.pagaste)} · Su parte ${money(account.tuParte)}`}</Label>
                       {!mine && !noApp && <Label size={11} color={seen.get(account.usuarioId)?.enLinea ? "#007B60" : palette.muted}>{lastSeen(seen.get(account.usuarioId))}</Label>}
                     </View>
-                    <Label size={13} weight="bold" color={state.color} style={{ textAlign: "right", maxWidth: 120 }}>{state.text}</Label>
+                    <Label size={13} weight="bold" color={state.color} style={{ textAlign: "right", maxWidth: 130 }}>{state.text.replace(/S\/ /g, "S/\u00a0")}</Label>
                   </View>
                   {noApp && (!group.estado || group.estado === 'abierto') && (
                     <View style={{ flexDirection: "row", gap: 8 }}>
-                      <View style={{ flex: 1 }}><Button compact secondary title="Enviar su enlace" onPress={() => onShare(member)} /></View>
+                      <View style={{ flex: 1 }}><Button compact secondary title={member.usuario.celular ? "Avisar por WhatsApp" : "Enviar su enlace"} onPress={() => onShare(member)} /></View>
                       {admin && <View style={{ flex: 1 }}><Button compact secondary title="Ya se unió" onPress={() => onLink(member)} /></View>}
                     </View>
                   )}

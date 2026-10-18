@@ -10,7 +10,9 @@ const category = (key: string) => categories[key] ?? key;
 const day = (value: string, timeZone: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
 const state = (value: string) => value === 'exitoso' ? 'Confirmado' : value === 'reportado' || value === 'pendiente' ? 'Por confirmar (no cuenta)' : value === 'rechazado' ? 'Rechazado (no cuenta)' : 'No confirmado (no cuenta)';
 const groupState = (s: Statement, timeZone: string) => `Grupo ${s.grupo.estado === 'cerrado' ? 'cerrado' : s.grupo.estado === 'por_liquidar' ? 'por liquidar' : 'abierto'}${s.grupo.cerradoEn ? ` / Cierre: ${new Intl.DateTimeFormat('es-PE', { timeZone, dateStyle: 'short', timeStyle: 'short' }).format(new Date(s.grupo.cerradoEn))}` : ''}`;
-function concept(e: Statement['movimientos'][number]) {
+function concept(e: Statement['movimientos'][number], currency?: string) {
+  // Several payers: the concept says who put what into what, so the file answers "¿en qué pusiste?".
+  if (e.tipo === 'gasto' && e.aportes?.length) return `${e.descripcion} (${e.aportes.map((a) => `${a.nombre}${a.concepto ? `: ${a.concepto}` : ''} ${currency ? formatMoney(a.monto, currency) : (a.monto / 100).toFixed(2)}`).join('; ')})`;
   return e.tipo === 'gasto' ? e.descripcion : e.sentido === 'enviado' ? `Pago a ${e.contraparteNombre}` : `Pago de ${e.contraparteNombre}`;
 }
 function settlements(s: Statement) {
@@ -61,8 +63,8 @@ export async function statementXlsx(s: Statement, timeZone = 'America/Lima') {
     const expense = e.tipo === 'gasto';
     const sent = !expense && e.sentido === 'enviado' && e.estado === 'exitoso' ? e.monto : 0;
     const received = !expense && e.sentido === 'recibido' && e.estado === 'exitoso' ? e.monto : 0;
-    const row = rows.addRow([new Date(`${day(e.fecha, timeZone)}T00:00:00Z`), new Date(e.fechaRegistro), expense ? 'Gasto' : 'Pago', concept(e), e.monto / 100, expense ? e.tuParte / 100 : 0, expense ? e.pagaste / 100 : 0, sent / 100, received / 100, { formula: `ROUND(G${n}-F${n}+H${n}-I${n},2)`, result: e.efecto / 100 }, { formula: n === 2 ? `J${n}` : `ROUND(K${n - 1}+J${n},2)`, result: e.saldo / 100 }, expense ? 'Vigente' : state(e.estado), !expense && e.conComprobante ? 'Sí (en JUNTO)' : null, expense ? category(e.categoria) : null]);
-    row.height = Math.max(32, Math.ceil(concept(e).length / 43) * 15);
+    const row = rows.addRow([new Date(`${day(e.fecha, timeZone)}T00:00:00Z`), new Date(e.fechaRegistro), expense ? 'Gasto' : 'Pago', concept(e, s.grupo.moneda), e.monto / 100, expense ? e.tuParte / 100 : 0, expense ? e.pagaste / 100 : 0, sent / 100, received / 100, { formula: `ROUND(G${n}-F${n}+H${n}-I${n},2)`, result: e.efecto / 100 }, { formula: n === 2 ? `J${n}` : `ROUND(K${n - 1}+J${n},2)`, result: e.saldo / 100 }, expense ? 'Vigente' : state(e.estado), !expense && e.conComprobante ? 'Sí (en JUNTO)' : null, expense ? category(e.categoria) : null]);
+    row.height = Math.max(32, Math.ceil(concept(e, s.grupo.moneda).length / 43) * 15);
     row.alignment = { vertical: 'middle', wrapText: true };
     row.getCell(1).numFmt = 'dd/mm/yyyy'; row.getCell(2).numFmt = 'dd/mm/yyyy hh:mm';
     for (let c = 5; c <= 11; c++) row.getCell(c).numFmt = fmt;
@@ -125,7 +127,7 @@ export function statementPdf(s: Statement, timeZone = 'America/Lima'): Promise<B
     doc.font('Helvetica').fontSize(8).fillColor('#687775').text(`Gastos vigentes y pagos en orden de registro. Fecha del gasto o pago: ${timeZone}.`, 40, y, { width }); y = doc.y + 10;
     inTable = true; tableHeader();
     for (const [i, e] of s.movimientos.entries()) {
-      const title = concept(e);
+      const title = concept(e, s.grupo.moneda);
       const detail = e.tipo === 'gasto' ? `${money(e.monto)} - ${e.pagaste ? 'pagaste tú' : `pagó ${e.pagadorNombre}`} - tu parte ${money(e.tuParte)}` : `${money(e.monto)} - ${methodName(e.metodo)} - ${state(e.estado)}${e.conComprobante ? ' - comprobante en JUNTO' : ''}`;
       const registered = day(e.fecha, timeZone) !== day(e.fechaRegistro, timeZone) ? `Anotado el ${date(e.fechaRegistro)}` : '';
       doc.font('Helvetica-Bold').fontSize(9);

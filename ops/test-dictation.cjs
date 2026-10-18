@@ -41,6 +41,23 @@ test('transcripts have a bounded Unicode-safe size', async () => {
   const f = fixture(); await f.session.start(); f.events().result('💚'.repeat(600));
   assert.equal(Array.from(f.texts[0]).length, 500); f.session.cancel();
 });
+
+test('a service that never starts fails promptly and remains retryable', async () => {
+  const states = [], errors = []; let aborts = 0;
+  const session = createDictation({ available: () => true, permission: async () => true, listen: () => () => {}, start: () => {}, stop: () => {}, abort: () => aborts++ },
+    { state: value => states.push(value), text: () => assert.fail('no transcript expected'), error: value => errors.push(value) }, 1000, 1000, 5);
+  await session.start(); await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(states.at(-1), 'idle'); assert.match(errors.at(-1), /no respondió/); assert.equal(aborts, 1);
+  session.cancel();
+});
+
+test('Spanish locale selection handles Samsung/service locale differences without English fallback', () => {
+  const { speechLocale } = require('../apps/mobile/src/lib/speechLocale.ts');
+  assert.equal(speechLocale(['en-US', 'es-ES']), 'es-ES');
+  assert.equal(speechLocale(['es_ES', 'es_PE']), 'es-PE');
+  assert.equal(speechLocale(['es-CO']), 'es-CO');
+  assert.equal(speechLocale([]), 'es-PE');
+});
 test('updating an old APK removes only its stale microphone removal marker', () => {
   const { enableDictationPermission } = require('../apps/mobile/plugins/withDictationPermission');
   const manifest = { 'uses-permission': [ { $: { 'android:name': 'android.permission.RECORD_AUDIO', 'tools:node': 'remove' } }, { $: { 'android:name': 'android.permission.WRITE_CONTACTS', 'tools:node': 'remove' } } ] };
@@ -48,4 +65,10 @@ test('updating an old APK removes only its stale microphone removal marker', () 
   assert.equal(manifest['uses-permission'].length, 2);
   assert.equal(manifest['uses-permission'][0].$['tools:node'], undefined);
   assert.equal(manifest['uses-permission'][1].$['tools:node'], 'remove');
+});
+test('a session that ends without hearing anything says so instead of looking like a dead mic', async () => {
+  const f = fixture(); await f.session.start(); f.events().end();
+  assert.equal(f.states.at(-1), 'idle'); assert.match(f.errors.at(-1), /No escuchamos/);
+  const heard = fixture(); await heard.session.start(); heard.events().result('Pagué 30 soles'); heard.events().end();
+  assert.equal(heard.errors.filter(Boolean).length, 0);
 });

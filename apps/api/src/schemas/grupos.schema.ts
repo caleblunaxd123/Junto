@@ -15,11 +15,26 @@ const grupoSchema = z.object({
     .refine((value) => !value || new Date(value).getTime() < Date.now() + 366 * 86_400_000, 'La fecha límite debe estar dentro del próximo año'),
 });
 
+export const integranteEntradaSchema = z.union([
+  z.string().max(60),
+  z.object({
+    nombre: z.string().max(60),
+    celular: z
+      .string()
+      .trim()
+      .transform((value) => value.replace(/^\+?51\s*/, '').replace(/[\s()-]/g, ''))
+      .refine((value) => !value || /^9\d{8}$/.test(value), 'El celular debe ser formato peruano: 9XXXXXXXX')
+      .optional(),
+  }).strict(),
+]);
+
+export type IntegranteEntrada = z.infer<typeof integranteEntradaSchema>;
+
 export const crearGrupoSchema = grupoSchema.extend({
   moneda: z.enum(['PEN', 'COP', 'USD', 'EUR', 'MXN', 'BRL']).default('PEN'),
   pais: z.enum(['PE', 'CO', 'US', 'ES', 'MX', 'BR', 'OTHER']).optional(),
-  // People added by name right away ("Ana", "Luis"); they join later with their personal link.
-  integrantes: z.array(z.string().max(60)).max(30, 'Agrega hasta 30 personas a la vez').optional(),
+  // People added by name right away ("Ana", "Luis", or { nombre, celular }); they join later with their personal link or invitation.
+  integrantes: z.array(integranteEntradaSchema).max(30, 'Agrega hasta 30 personas a la vez').optional(),
   // The bill the creator already paid (or will collect for), split in equal parts. Optional.
   cuenta: z.object({
     descripcion: z.string().trim().min(1).max(200).optional(),

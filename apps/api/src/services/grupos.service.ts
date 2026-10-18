@@ -9,6 +9,7 @@ import { allocateParts, nextPart, partsSummary } from '../domain/billParts';
 import { unreadInGroup } from './groupChat.service';
 import { transactionLock } from '../lib/transactionLock';
 import { crearSinCuenta, heredar, tieneDineroPorRecibir } from './integrantes.service';
+import { pushAddedPeople } from './invitaciones.service';
 import { requireOpenGroup, groupEvent } from './groupLifecycle.service';
 
 function generateLinkInvitacion(): string {
@@ -22,8 +23,9 @@ function visibleMembers<T extends { archivadoEn: Date | null }>(members: T[]) {
 
 export async function crearGrupo(input: CrearGrupoInput, creadoPor: string) {
   const { cuenta, integrantes, ...datos } = input;
+  const pushTokens: string[] = [];
   // Group and bill together: never a group with half a bill.
-  return prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx) => {
     await transactionLock(tx, `account-membership:${creadoPor}`);
     if (!(await tx.usuario.count({ where: { id: creadoPor, activo: true } }))) throw new Error('Tu cuenta ya no está activa. Inicia sesión nuevamente.', 401);
     const grupo = await tx.grupo.create({
@@ -52,7 +54,7 @@ export async function crearGrupo(input: CrearGrupoInput, creadoPor: string) {
         },
       },
     });
-    if (integrantes?.length) await crearSinCuenta(tx, grupo.id, integrantes);
+    if (integrantes?.length) await crearSinCuenta(tx, grupo.id, integrantes, false, creadoPor, pushTokens);
     if (cuenta) {
       await tx.gasto.create({
         data: {
@@ -68,6 +70,8 @@ export async function crearGrupo(input: CrearGrupoInput, creadoPor: string) {
     }
     return { ...grupo, miembros: visibleMembers(grupo.miembros) };
   });
+  await pushAddedPeople(created.id, creadoPor, pushTokens);
+  return created;
 }
 
 /** The group's bill in parts (the oldest one), with how many parts are still free. */
@@ -204,7 +208,7 @@ export async function getGrupoDetalle(grupoId: string, usuarioId: string) {
   // Every payment waiting for confirmation in the group, not only the viewer's: shared summaries cite it.
   const [pagosPorConfirmar, cuentasPorPartesDelGrupo] = await Promise.all([prisma.pago.count({ where: { grupoId, estado: 'reportado' } }), cuentasPorPartes(grupoId)]);
   const tieneHistorialFinanciero = !!(await prisma.gasto.count({ where: { grupoId } })) || !!(await prisma.pago.count({ where: { grupoId } }));
-  return { ...grupo, miembros: visibleMembers(grupo.miembros), archivado: !!miembro.archivadoEn, tieneHistorialFinanciero, resumen, saldos: resumen.saldos, pagosPorConfirmar, cuenta: cuentasPorPartesDelGrupo[0] ?? null, mensajeFijado: fijado, cuentasPorPartes: cuentasPorPartesDelGrupo, balanceUsuario: { neto: teDeben - debes, teDeben, debes }, rolUsuario: miembro.rol };
+  return { ...grupo, funciones: { variosPagadores: true }, miembros: visibleMembers(grupo.miembros), archivado: !!miembro.archivadoEn, tieneHistorialFinanciero, resumen, saldos: resumen.saldos, pagosPorConfirmar, cuenta: cuentasPorPartesDelGrupo[0] ?? null, mensajeFijado: fijado, cuentasPorPartes: cuentasPorPartesDelGrupo, balanceUsuario: { neto: teDeben - debes, teDeben, debes }, rolUsuario: miembro.rol };
 }
 
 /**

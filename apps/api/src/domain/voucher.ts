@@ -69,7 +69,7 @@ function cleanName(value: string | undefined) {
 
 function readRecipient(lines: string[], amountLine: number) {
   for (let index = 0; index < lines.length; index++) {
-    const labelled = lines[index].match(/^(?:para|destinatario|beneficiario|enviado\s+a|a\s+nombre\s+de|nombre\s+del\s+destinatario)\s*:?\s*(.*)$/i);
+    const labelled = lines[index].match(/^(?:para|destinatario|beneficiario|cuenta\s+(?:de\s+)?destino|enviado\s+a|a\s+nombre\s+de|nombre\s+del\s+destinatario)\s*:?\s*(.*)$/i);
     if (labelled) {
       const name = cleanName(labelled[1]) ?? cleanName(lines[index + 1]);
       if (name) return name;

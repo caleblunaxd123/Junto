@@ -3,6 +3,8 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { UserError as Error } from "../domain/errors";
 import { requireOpenGroup } from './groupLifecycle.service';
+import type { IntegranteEntrada } from "../schemas/grupos.schema";
+import { linkAddedPersonInvitation, pushAddedPeople } from "./invitaciones.service";
 
 /**
  * Members added by name only ("Ana"), so whoever paid can split right away. They are ordinary
@@ -22,20 +24,35 @@ export function nombreIntegrante(value: string) {
   return nombre;
 }
 
+export function celularIntegrante(value?: string | null) {
+  if (!value) return null;
+  const clean = value.trim().replace(/^\+?51\s*/, "").replace(/[\s()-]/g, "");
+  if (!clean) return null;
+  if (!/^9\d{8}$/.test(clean)) throw new Error("El celular debe ser formato peruano: 9XXXXXXXX");
+  return clean;
+}
+
 /** Inside the group's lock. Unusable e-mail and password: this row can never sign in. */
-export async function crearSinCuenta(tx: Tx, grupoId: string, nombres: string[], historical = false) {
+export async function crearSinCuenta(tx: Tx, grupoId: string, entradas: IntegranteEntrada[], historical = false, inviterId?: string, pushTokens?: string[]) {
   const existentes = await tx.grupoMiembro.findMany({ where: { grupoId, activo: true }, select: { usuario: { select: { nombre: true, sinCuenta: true } } } });
-  if (existentes.filter((m) => m.usuario.sinCuenta).length + nombres.length > MAX_SIN_CUENTA)
+  if (existentes.filter((m) => m.usuario.sinCuenta).length + entradas.length > MAX_SIN_CUENTA)
     throw new Error(`Un grupo puede tener hasta ${MAX_SIN_CUENTA} personas agregadas por nombre.`);
   const usados = new Set(existentes.filter((m) => !historical || m.usuario.sinCuenta).map((m) => m.usuario.nombre.toLocaleLowerCase("es")));
   const creados = [];
-  for (const nombre of nombres.map((n) => historical ? n.trim().replace(/\s+/g, " ") : nombreIntegrante(n))) {
+  for (const entrada of entradas) {
+    const rawNombre = typeof entrada === "string" ? entrada : entrada.nombre;
+    const celular = typeof entrada === "string" ? null : celularIntegrante(entrada.celular);
+    const nombre = historical ? rawNombre.trim().replace(/\s+/g, " ") : nombreIntegrante(rawNombre);
     const clave = nombre.toLocaleLowerCase("es");
     if (usados.has(clave)) throw new Error(`Ya hay alguien llamado «${nombre}» en el grupo. Usa otro nombre, por ejemplo con su apellido.`, 409);
     usados.add(clave);
-    const usuario = await tx.usuario.create({ data: { nombre, email: `sin-cuenta.${randomUUID()}@junto.invalid`, passwordHash: "!", sinCuenta: true } });
+    const usuario = await tx.usuario.create({ data: { nombre, celular, email: `sin-cuenta.${randomUUID()}@junto.invalid`, passwordHash: "!", sinCuenta: true } });
     await tx.grupoMiembro.create({ data: { grupoId, usuarioId: usuario.id, rol: "miembro", codigoPersonal: codigoPersonal() } });
-    creados.push({ id: usuario.id, nombre });
+    if (celular && inviterId && !historical) {
+      const token = await linkAddedPersonInvitation(tx, grupoId, inviterId, usuario.id, celular);
+      if (token && pushTokens) pushTokens.push(token);
+    }
+    creados.push({ id: usuario.id, nombre, ...(celular ? { celular } : {}) });
   }
   return creados;
 }
@@ -48,11 +65,14 @@ async function lockActiveMember(tx: Tx, grupoId: string, userId: string) {
   return member;
 }
 
-export async function agregarIntegrantes(grupoId: string, userId: string, nombres: string[]) {
-  return prisma.$transaction(async (tx) => {
+export async function agregarIntegrantes(grupoId: string, userId: string, entradas: IntegranteEntrada[]) {
+  const pushTokens: string[] = [];
+  const creados = await prisma.$transaction(async (tx) => {
     await lockActiveMember(tx, grupoId, userId);
-    return crearSinCuenta(tx, grupoId, nombres);
+    return crearSinCuenta(tx, grupoId, entradas, false, userId, pushTokens);
   });
+  await pushAddedPeople(grupoId, userId, pushTokens);
+  return creados;
 }
 
 async function sinCuentaActivo(tx: Tx, grupoId: string, integranteId: string) {
@@ -68,7 +88,7 @@ export async function quitarIntegrante(grupoId: string, userId: string, integran
     const member = await sinCuentaActivo(tx, grupoId, integranteId);
     const [parte, pagado, pagos] = await Promise.all([
       tx.gastoParticipante.count({ where: { usuarioId: integranteId, gasto: { grupoId, activo: true } } }),
-      tx.gasto.count({ where: { grupoId, activo: true, pagadoPor: integranteId } }),
+      tx.gasto.count({ where: { grupoId, activo: true, OR: [{ pagadoPor: integranteId }, { pagadores: { some: { usuarioId: integranteId } } }] } }),
       tx.pago.count({ where: { grupoId, OR: [{ pagadorId: integranteId }, { receptorId: integranteId }] } }),
     ]);
     if (parte || pagado || pagos) throw new Error("Esta persona ya está en gastos o pagos del grupo. Corrige esos gastos antes de quitarla.", 409);
@@ -80,7 +100,7 @@ export async function quitarIntegrante(grupoId: string, userId: string, integran
 /** Paid an expense or received a payment: taking their place means collecting money. */
 export async function tieneDineroPorRecibir(tx: Tx, grupoId: string, integranteId: string) {
   const [pagado, recibido] = await Promise.all([
-    tx.gasto.count({ where: { grupoId, activo: true, pagadoPor: integranteId } }),
+    tx.gasto.count({ where: { grupoId, activo: true, OR: [{ pagadoPor: integranteId }, { pagadores: { some: { usuarioId: integranteId } } }] } }),
     tx.pago.count({ where: { grupoId, receptorId: integranteId, estado: { in: ["reportado", "exitoso"] } } }),
   ]);
   return pagado + recibido > 0;
@@ -112,6 +132,14 @@ export async function heredar(tx: Tx, grupoId: string, desdeId: string, haciaId:
     } else {
       await tx.gastoParticipante.update({ where: { id: part.id }, data: { usuarioId: haciaId } });
     }
+  }
+  const advances = await tx.gastoAporte.findMany({ where: { usuarioId: desdeId, gasto: { grupoId } } });
+  for (const advance of advances) {
+    const own = await tx.gastoAporte.findUnique({ where: { gastoId_usuarioId: { gastoId: advance.gastoId, usuarioId: haciaId } } });
+    if (own) {
+      await tx.gastoAporte.update({ where: { id: own.id }, data: { monto: { increment: advance.monto } } });
+      await tx.gastoAporte.delete({ where: { id: advance.id } });
+    } else await tx.gastoAporte.update({ where: { id: advance.id }, data: { usuarioId: haciaId } });
   }
   await tx.gasto.updateMany({ where: { grupoId, pagadoPor: desdeId }, data: { pagadoPor: haciaId } });
   await tx.gasto.updateMany({ where: { grupoId, creadoPor: desdeId }, data: { creadoPor: haciaId } });

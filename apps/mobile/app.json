@@ -2,7 +2,7 @@
   "expo": {
     "name": "JUNTO",
     "slug": "junto",
-    "version": "1.7.0",
+    "version": "1.8.0",
     "orientation": "portrait",
     "icon": "./assets/brand/icon-v2.png",
     "userInterfaceStyle": "light",
@@ -24,7 +24,7 @@
         "backgroundColor": "#FFFCF7"
       },
       "package": "com.junto.app",
-      "versionCode": 12
+      "versionCode": 13
     },
     "web": {
       "favicon": "./assets/brand/favicon-v2.png",

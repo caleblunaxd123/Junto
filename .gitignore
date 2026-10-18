@@ -51,5 +51,8 @@ __pycache__/
 apps/mobile/dist-beta/
 apps/mobile/dist-local/
 apps/mobile/dist-ux-qa/
+apps/mobile/dist-feedback-qa/
+# Tesseract language cache written next to the process when no cache path is set
+*.traineddata
 ops/artifacts/
 /output/

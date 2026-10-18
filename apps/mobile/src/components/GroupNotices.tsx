@@ -9,7 +9,7 @@ import { api } from "../lib/api";
 import { errorMessage } from "../lib/errorMessage";
 import { Button, Card, ErrorBox, Label, palette } from "./ui/Design";
 
-type Notice = { id: string; tipo?: string; leido: boolean; fecha: string; parte: number | null; grupo: { id: string; nombre: string; moneda?: CurrencyCode }; integrante: { nombre: string }; pago?: { id: string; monto: number; estado: string; pagador: { nombre: string }; receptor: { nombre: string } } | null };
+type Notice = { id: string; tipo?: string; leido: boolean; fecha: string; parte: number | null; mensaje?: string; grupo: { id: string; nombre: string; moneda?: CurrencyCode }; integrante: { nombre: string }; pago?: { id: string; monto: number; estado: string; pagador: { nombre: string }; receptor: { nombre: string } } | null; gasto?: { id: string; descripcion: string; montoTotal: number } | null };
 const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 /** "Ana", "Ana y Luis", "Ana, Luis y Marta". */
 const names = (list: string[]) => (list.length < 2 ? list.join("") : `${list.slice(0, -1).join(", ")} y ${list[list.length - 1]}`);
@@ -21,8 +21,9 @@ export function GroupNotices() {
   const [busy, setBusy] = React.useState("");
   const [error, setError] = React.useState("");
   const unread = query.data?.filter((n) => !n.leido) ?? [];
-  const joins = unread.filter((n) => !n.pago && (!n.tipo || n.tipo === "integrante_unido"));
+  const joins = unread.filter((n) => !n.pago && !n.gasto && (!n.tipo || n.tipo === "integrante_unido"));
   const payments = unread.filter((n) => !!n.pago);
+  const expenses = unread.filter((n) => n.tipo === "gasto_registrado" && !!n.gasto);
   const groups = [...new Map(joins.map((n) => [n.grupo.id, n.grupo])).values()].map((grupo) => ({ grupo, notices: joins.filter((n) => n.grupo.id === grupo.id) }));
   async function markRead(grupoId: string, notices: Notice[]) {
     if (busy) return;
@@ -34,9 +35,26 @@ export function GroupNotices() {
     finally { setBusy(""); }
   }
   if (query.isError) return <ErrorBox message="No pudimos actualizar los avisos de tu grupo. Revisa tu conexión o actualiza Inicio." />;
-  if (!groups.length && !payments.length) return null;
+  if (!groups.length && !payments.length && !expenses.length) return null;
   return <View style={{ gap: 8 }}>
     {!!error && <ErrorBox message={error} />}
+    {expenses.map((notice) => {
+      const expense = notice.gasto!;
+      const text = notice.mensaje || `${firstName(notice.integrante.nombre)} agregó «${expense.descripcion}»: tu parte ${formatMoney(notice.parte ?? 0, notice.grupo.moneda).replace(/\.00$/, "")}`;
+      return <Card key={notice.id} style={{ backgroundColor: palette.yellow, gap: 8, padding: 14 }}>
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <Ionicons name="receipt-outline" size={22} color="#8A5A00" />
+          <View style={{ flex: 1, gap: 4 }}>
+            <Label weight="bold">{text}</Label>
+            <Label size={12} color={palette.muted}>{notice.grupo.nombre} · Total {formatMoney(expense.montoTotal, notice.grupo.moneda)}</Label>
+          </View>
+        </View>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <View style={{ flex: 1 }}><Button compact title="Ver gasto" onPress={() => { void markRead(notice.id, [notice]); router.push(`/(app)/gastos/${expense.id}`); }} /></View>
+          <View style={{ flex: 1 }}><Button compact secondary title="Entendido" loading={busy === notice.id} disabled={!!busy} onPress={() => { void markRead(notice.id, [notice]); }} /></View>
+        </View>
+      </Card>;
+    })}
     {payments.map((notice) => {
       const payment = notice.pago!;
       const pending = payment.estado === "reportado";

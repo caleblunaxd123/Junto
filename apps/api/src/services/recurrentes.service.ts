@@ -39,6 +39,7 @@ async function member(grupoId: string, usuarioId: string, db: Prisma.Transaction
 
 /** Programs a recurring expense. If its first day is today (or earlier), the first one is added now. */
 export async function crearRecurrente(grupoId: string, input: CrearRecurrenteInput, userId: string) {
+  if (input.pagadores) throw new UserError('Los gastos con varios pagadores se guardan como gastos normales, sin repetición automática.');
   await member(grupoId, userId);
   const today = calendarToday();
   // Same split rules as a manual expense: an invalid template is rejected now, not every month.

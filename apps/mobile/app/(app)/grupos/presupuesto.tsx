@@ -10,6 +10,7 @@ import { parseMoney } from "../../../src/lib/expensePreview";
 import { centavosASoles } from "../../../src/types";
 import { Button, Card, ErrorBox, Label, Screen, palette, design } from "../../../src/components/ui/Design";
 import { Sheet } from "../../../src/components/ui/Sheet";
+import { MoneyText } from "../../../src/components/ui/MoneyText";
 
 type Categoria = "total" | "alojamiento" | "comida" | "compras" | "transporte" | "entretenimiento" | "otro";
 type Line = { categoria: Categoria; presupuesto: number | null; gastado: number; porVenir: number; proyectado: number; disponible: number | null; estado: "ok" | "cerca" | "pasado" | "sin_presupuesto" };
@@ -116,7 +117,7 @@ export default function HouseholdBudget() {
               </Pressable>}
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 6, rowGap: 2 }}>
-              <Label size={28} weight="extra">{money(b.total.proyectado)}</Label>
+              <MoneyText size={28} weight="extra">{money(b.total.proyectado)}</MoneyText>
               {b.total.presupuesto !== null && <Label size={14} color={palette.muted}>de {money(b.total.presupuesto)}</Label>}
             </View>
             <Bar line={b.total} money={money} />
